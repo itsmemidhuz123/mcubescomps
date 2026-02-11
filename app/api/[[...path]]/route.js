@@ -436,6 +436,35 @@ export async function GET(request) {
     }
   }
   
+  // GET /api/results/:id - Get result by ID
+  if (pathname.match(/\/api\/results\/[^/]+$/) && !pathname.includes('/submit')) {
+    try {
+      const user = await getUserFromSession(request);
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      
+      const resultId = pathname.split('/').pop();
+      const result = await prisma.result.findUnique({
+        where: { id: resultId }
+      });
+      
+      if (!result) {
+        return NextResponse.json({ error: 'Result not found' }, { status: 404 });
+      }
+      
+      // Verify ownership
+      if (result.userId !== user.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      }
+      
+      return NextResponse.json(result);
+    } catch (error) {
+      console.error('Get result error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+  
   // GET /api/auth/logout - Logout
   if (pathname === '/api/auth/logout') {
     try {
