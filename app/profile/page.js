@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, updateDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit2, Save, Trophy, CreditCard, Calendar, User } from 'lucide-react';
+import { ArrowLeft, Save, Trophy, CreditCard, User } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -22,9 +22,8 @@ const COUNTRIES = [
   'Russia', 'Italy', 'Spain', 'Netherlands', 'Other'
 ];
 
-// Header Component
 function Header() {
-  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
+  const { user, userProfile, signOut, isAdmin } = useAuth();
   const router = useRouter();
 
   return (
@@ -42,30 +41,18 @@ function Header() {
             <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
             <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
             <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
-            <Link href="/timer" className="text-gray-600 hover:text-gray-900 font-medium">Timer</Link>
           </nav>
 
           <div className="flex items-center gap-3">
-            {!loading && user ? (
-              <>
-                {isAdmin && (
-                  <Button variant="outline" size="sm" onClick={() => router.push('/admin')} className="border-purple-200 text-purple-600">
-                    Admin
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" className="border-blue-200 text-blue-600">
-                  {userProfile?.displayName || 'Profile'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => router.push('/auth/login')}>Sign In</Button>
-                <Button onClick={() => router.push('/auth/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-                  Get Started
-                </Button>
-              </>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={() => router.push('/admin')} className="border-purple-200 text-purple-600">
+                Admin
+              </Button>
             )}
+            <Button variant="outline" size="sm" className="border-blue-200 text-blue-600">
+              {userProfile?.displayName || 'Profile'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
           </div>
         </div>
       </div>
@@ -74,18 +61,20 @@ function Header() {
 }
 
 function ProfilePage() {
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, updateProfile } = useAuth();
   const router = useRouter();
   const [formData, setFormData] = useState({
     displayName: '',
     username: '',
-    country: ''
+    country: '',
+    wcaId: ''
   });
   const [competitions, setCompetitions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [results, setResults] = useState([]);
   const [saving, setSaving] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
     if (!loading && !user) {
@@ -98,7 +87,8 @@ function ProfilePage() {
       setFormData({
         displayName: userProfile.displayName || '',
         username: userProfile.username || '',
-        country: userProfile.country || ''
+        country: userProfile.country || '',
+        wcaId: userProfile.wcaId || ''
       });
       fetchUserData();
     }
@@ -130,7 +120,7 @@ function ProfilePage() {
       }
       setCompetitions(compData);
 
-      // Fetch payments
+      // Fetch payments (only for this user)
       const paymentsQuery = query(
         collection(db, 'payments'),
         where('userId', '==', user.uid)
@@ -157,23 +147,26 @@ function ProfilePage() {
     if (!user) return;
     
     setSaving(true);
+    setMessage({ type: '', text: '' });
+    
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateProfile({
         displayName: formData.displayName,
         username: formData.username,
-        country: formData.country
+        country: formData.country,
+        wcaId: formData.wcaId
       });
-      alert('Profile updated successfully!');
+      setMessage({ type: 'success', text: 'Profile updated successfully!' });
     } catch (error) {
       console.error('Failed to update profile:', error);
-      alert('Failed to update profile: ' + error.message);
+      setMessage({ type: 'error', text: 'Failed to update profile: ' + error.message });
     } finally {
       setSaving(false);
     }
   }
 
   const formatTime = (ms) => {
-    if (!ms || ms === Infinity) return '-';
+    if (!ms || ms === Infinity || ms === 'DNF') return 'DNF';
     return `${(ms / 1000).toFixed(2)}s`;
   };
 
@@ -186,7 +179,6 @@ function ProfilePage() {
     });
   };
 
-  // Show loading while auth is being checked
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -198,7 +190,6 @@ function ProfilePage() {
     );
   }
 
-  // Don't render if not logged in (will redirect)
   if (!user) {
     return null;
   }
@@ -223,6 +214,9 @@ function ProfilePage() {
                 <h1 className="text-2xl font-bold text-gray-900">{userProfile?.displayName || 'User'}</h1>
                 <div className="flex items-center gap-3 mt-2">
                   <Badge className="bg-blue-100 text-blue-700">{userProfile?.wcaStyleId || 'N/A'}</Badge>
+                  {userProfile?.wcaId && (
+                    <Badge variant="outline">WCA: {userProfile.wcaId}</Badge>
+                  )}
                   <span className="text-gray-500">📍 {userProfile?.country || 'Unknown'}</span>
                 </div>
                 <p className="text-sm text-gray-400 mt-1">
@@ -238,7 +232,7 @@ function ProfilePage() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="edit">Edit Profile</TabsTrigger>
             <TabsTrigger value="results">My Results</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
+            <TabsTrigger value="payments">My Payments</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -305,6 +299,12 @@ function ProfilePage() {
                 <CardTitle>Edit Profile</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {message.text && (
+                  <div className={`p-3 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {message.text}
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <Label>Display Name</Label>
                   <Input
@@ -319,6 +319,16 @@ function ProfilePage() {
                     value={formData.username}
                     onChange={(e) => setFormData({...formData, username: e.target.value})}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>WCA ID (Optional)</Label>
+                  <Input
+                    value={formData.wcaId}
+                    onChange={(e) => setFormData({...formData, wcaId: e.target.value})}
+                    placeholder="e.g., 2019JOHN01"
+                  />
+                  <p className="text-xs text-gray-500">Enter your official WCA ID if you have one</p>
                 </div>
 
                 <div className="space-y-2">
@@ -337,7 +347,7 @@ function ProfilePage() {
 
                 <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
                   <p><strong>Email:</strong> {userProfile?.email} <span className="text-gray-400">(Read-only)</span></p>
-                  <p><strong>WCA ID:</strong> {userProfile?.wcaStyleId} <span className="text-gray-400">(Read-only)</span></p>
+                  <p><strong>MCUBES ID:</strong> {userProfile?.wcaStyleId} <span className="text-gray-400">(Read-only)</span></p>
                 </div>
 
                 <Button onClick={handleSave} disabled={saving} className="w-full">
@@ -368,6 +378,15 @@ function ProfilePage() {
                           <Badge>Ao5: {formatTime(result.average)}</Badge>
                         </div>
                         <p className="text-sm text-gray-500">Best: {formatTime(result.bestSingle)}</p>
+                        {result.times && (
+                          <div className="flex gap-2 mt-2">
+                            {result.times.map((time, i) => (
+                              <span key={i} className="text-xs bg-white px-2 py-1 rounded border">
+                                {formatTime(time)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -380,7 +399,7 @@ function ProfilePage() {
           <TabsContent value="payments">
             <Card>
               <CardHeader>
-                <CardTitle><CreditCard className="inline h-5 w-5 mr-2" />Payment History</CardTitle>
+                <CardTitle><CreditCard className="inline h-5 w-5 mr-2" />My Payment History</CardTitle>
               </CardHeader>
               <CardContent>
                 {payments.length === 0 ? (
@@ -392,8 +411,12 @@ function ProfilePage() {
                         <div>
                           <p className="font-medium">Payment #{payment.paymentId?.slice(-8) || 'N/A'}</p>
                           <p className="text-sm text-gray-500">{formatDate(payment.createdAt)}</p>
+                          <p className="text-sm text-gray-500">{payment.competitionName || 'Competition'}</p>
                         </div>
-                        <Badge className="bg-green-100 text-green-700">{payment.status || 'SUCCESS'}</Badge>
+                        <div className="text-right">
+                          <p className="font-bold">{payment.currency === 'INR' ? '₹' : '$'}{payment.amount || 0}</p>
+                          <Badge className="bg-green-100 text-green-700">{payment.status || 'SUCCESS'}</Badge>
+                        </div>
                       </div>
                     ))}
                   </div>

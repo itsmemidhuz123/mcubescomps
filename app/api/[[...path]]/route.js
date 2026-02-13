@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay with error handling
+let razorpay = null;
+try {
+  if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+  }
+} catch (e) {
+  console.error('Failed to initialize Razorpay:', e);
+}
 
 export async function POST(request) {
   const { pathname } = new URL(request.url);
@@ -15,11 +21,15 @@ export async function POST(request) {
   // Create Razorpay order
   if (pathname === '/api/payment/create-order') {
     try {
+      if (!razorpay) {
+        return NextResponse.json({ error: 'Payment service not configured' }, { status: 500 });
+      }
+      
       const { amount, currency, userId, competitionId, events } = await request.json();
 
       const options = {
-        amount: amount * 100, // Convert to paise/cents
-        currency,
+        amount: Math.round(amount * 100), // Convert to paise/cents
+        currency: currency || 'INR',
         receipt: `comp_${competitionId}_${Date.now()}`,
         notes: {
           userId,
@@ -39,115 +49,79 @@ export async function POST(request) {
   // Verify payment
   if (pathname === '/api/payment/verify') {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, competitionId, events } = await request.json();
+      const body = await request.json();
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, competitionId, competitionName, events, amount, currency } = body;
 
+      // Verify signature
       const sign = razorpay_order_id + '|' + razorpay_payment_id;
       const expectedSign = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-        .update(sign.toString())
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+        .update(sign)
         .digest('hex');
 
-      if (razorpay_signature === expectedSign) {
-        // Payment verified, create registration
-        await setDoc(doc(db, 'registrations', `${userId}_${competitionId}`), {
-          userId,
-          competitionId,
-          events,
-          paymentId: razorpay_payment_id,
-          orderId: razorpay_order_id,
-          status: 'PAID',
-          registeredAt: new Date().toISOString()
-        });
-
-        // Store payment record
-        await addDoc(collection(db, 'payments'), {
-          userId,
-          competitionId,
-          paymentId: razorpay_payment_id,
-          orderId: razorpay_order_id,
-          amount: 0, // Get from order
-          currency: 'INR',
-          status: 'SUCCESS',
-          createdAt: new Date().toISOString()
-        });
-
-        return NextResponse.json({ success: true });
-      } else {
+      if (razorpay_signature !== expectedSign) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
       }
+
+      // Return success - client will save to Firestore
+      return NextResponse.json({ 
+        success: true,
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        verified: true
+      });
     } catch (error) {
       console.error('Verify payment error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
 
-  // Register for free competition
-  if (pathname === '/api/competition/register') {
-    try {
-      const { userId, competitionId, events } = await request.json();
-
-      // Check if already registered
-      const regDoc = await getDoc(doc(db, 'registrations', `${userId}_${competitionId}`));
-      if (regDoc.exists()) {
-        return NextResponse.json({ error: 'Already registered' }, { status: 400 });
-      }
-
-      await setDoc(doc(db, 'registrations', `${userId}_${competitionId}`), {
-        userId,
-        competitionId,
-        events,
-        status: 'FREE',
-        registeredAt: new Date().toISOString()
-      });
-
-      return NextResponse.json({ success: true });
-    } catch (error) {
-      console.error('Registration error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  }
-
-  // Submit solve
+  // Submit solve - just return success, client handles Firestore
   if (pathname === '/api/competition/submit-solve') {
     try {
       const { userId, competitionId, eventId, attemptNumber, time, penalty } = await request.json();
-
-      await addDoc(collection(db, 'solves'), {
-        userId,
-        competitionId,
-        eventId,
-        attemptNumber,
-        time,
-        penalty,
-        timestamp: new Date().toISOString()
+      
+      // Validate the solve
+      if (!userId || !competitionId || !eventId || attemptNumber === undefined) {
+        return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      }
+      
+      if (typeof time !== 'number' && penalty !== 'DNF') {
+        return NextResponse.json({ error: 'Invalid time' }, { status: 400 });
+      }
+      
+      // Anti-cheat: minimum solve time (500ms = 0.5 seconds)
+      if (time < 500 && penalty !== 'DNF') {
+        return NextResponse.json({ error: 'Invalid solve time - too fast' }, { status: 400 });
+      }
+      
+      // Return validated data for client to save
+      return NextResponse.json({ 
+        success: true,
+        validated: true,
+        solve: {
+          userId,
+          competitionId,
+          eventId,
+          attemptNumber,
+          time,
+          penalty,
+          timestamp: new Date().toISOString()
+        }
       });
-
-      return NextResponse.json({ success: true });
     } catch (error) {
       console.error('Submit solve error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
 
-  // Calculate and save results
+  // Calculate results
   if (pathname === '/api/competition/calculate-results') {
     try {
-      const { userId, competitionId, eventId } = await request.json();
-
-      // Get all solves for this user/competition/event
-      const solvesQuery = query(
-        collection(db, 'solves'),
-        where('userId', '==', userId),
-        where('competitionId', '==', competitionId),
-        where('eventId', '==', eventId),
-        orderBy('attemptNumber', 'asc')
-      );
-
-      const solvesSnapshot = await getDocs(solvesQuery);
-      const solves = solvesSnapshot.docs.map(doc => doc.data());
-
-      if (solves.length < 5) {
-        return NextResponse.json({ error: 'Not enough solves' }, { status: 400 });
+      const { userId, competitionId, eventId, solves } = await request.json();
+      
+      if (!solves || solves.length < 5) {
+        return NextResponse.json({ error: 'Need at least 5 solves' }, { status: 400 });
       }
 
       // Calculate times with penalties
@@ -157,30 +131,33 @@ export async function POST(request) {
         return solve.time;
       });
 
-      // Check for DNF
+      // Check for DNF count
       const dnfCount = times.filter(t => t === Infinity).length;
       let average = 'DNF';
       let bestSingle = Math.min(...times.filter(t => t !== Infinity));
+      if (bestSingle === Infinity) bestSingle = 'DNF';
 
       if (dnfCount <= 1) {
         // Calculate Ao5: remove best and worst, average the middle 3
         const sorted = [...times].sort((a, b) => a - b);
         const middle3 = sorted.slice(1, 4);
-        average = middle3.reduce((a, b) => a + b, 0) / 3;
+        if (!middle3.some(t => t === Infinity)) {
+          average = Math.round(middle3.reduce((a, b) => a + b, 0) / 3);
+        }
       }
 
-      // Save result
-      await setDoc(doc(db, 'results', `${userId}_${competitionId}_${eventId}`), {
-        userId,
-        competitionId,
-        eventId,
-        times,
-        average,
-        bestSingle,
-        calculatedAt: new Date().toISOString()
+      return NextResponse.json({ 
+        success: true,
+        result: {
+          userId,
+          competitionId,
+          eventId,
+          times,
+          average,
+          bestSingle,
+          calculatedAt: new Date().toISOString()
+        }
       });
-
-      return NextResponse.json({ average, bestSingle });
     } catch (error) {
       console.error('Calculate results error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -193,23 +170,9 @@ export async function POST(request) {
 export async function GET(request) {
   const { pathname, searchParams } = new URL(request.url);
 
-  // Get registration status
-  if (pathname === '/api/competition/registration-status') {
-    try {
-      const userId = searchParams.get('userId');
-      const competitionId = searchParams.get('competitionId');
-
-      const regDoc = await getDoc(doc(db, 'registrations', `${userId}_${competitionId}`));
-
-      if (regDoc.exists()) {
-        return NextResponse.json(regDoc.data());
-      }
-
-      return NextResponse.json({ registered: false });
-    } catch (error) {
-      console.error('Get registration error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+  // Health check
+  if (pathname === '/api/health') {
+    return NextResponse.json({ status: 'ok', timestamp: new Date().toISOString() });
   }
 
   return NextResponse.json({ error: 'Not found' }, { status: 404 });

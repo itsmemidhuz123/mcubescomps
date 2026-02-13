@@ -37,25 +37,53 @@ export function AuthProvider({ children }) {
         const cachedProfile = localStorage.getItem('mcubes_profile');
         if (cachedProfile) {
           try {
-            setUserProfile(JSON.parse(cachedProfile));
+            const parsed = JSON.parse(cachedProfile);
+            if (parsed.uid === firebaseUser.uid) {
+              setUserProfile(parsed);
+            }
           } catch (e) {
             console.error('Failed to parse cached profile');
           }
         }
         
-        // Then try to fetch from Firestore (might fail if offline)
+        // Then try to fetch from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (mounted && userDoc.exists()) {
-            const profileData = userDoc.data();
-            setUserProfile(profileData);
-            localStorage.setItem('mcubes_profile', JSON.stringify(profileData));
+          if (mounted) {
+            if (userDoc.exists()) {
+              const profileData = { ...userDoc.data(), uid: firebaseUser.uid };
+              setUserProfile(profileData);
+              localStorage.setItem('mcubes_profile', JSON.stringify(profileData));
+            } else {
+              // User doesn't exist in Firestore - create profile
+              const isAdmin = firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com';
+              const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+              const wcaStyleId = await generateWCAId(displayName.split(' ')[0] || 'User', displayName.split(' ')[1] || 'Name');
+              
+              const newProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: displayName,
+                photoURL: firebaseUser.photoURL || '',
+                role: isAdmin ? 'ADMIN' : 'USER',
+                wcaStyleId: wcaStyleId,
+                wcaId: '',
+                country: 'Unknown',
+                createdAt: new Date().toISOString(),
+                totalCompetitions: 0
+              };
+              
+              await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+              setUserProfile(newProfile);
+              localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));
+            }
           }
         } catch (firestoreError) {
-          console.warn('Could not fetch profile from Firestore:', firestoreError.message);
-          // Continue with cached profile or create minimal profile
-          if (!cachedProfile && mounted) {
+          console.warn('Could not fetch/create profile from Firestore:', firestoreError.message);
+          // Create minimal profile for offline use
+          if (mounted && !userProfile) {
             const minimalProfile = {
+              uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
               role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
@@ -80,12 +108,12 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signUp = async (email, password, firstName, lastName, country) => {
+  const signUp = async (email, password, firstName, lastName, country, wcaId = '') => {
     try {
       await setPersistence(auth, browserLocalPersistence);
       
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const firebaseUser = userCredential.user;
       
       // Generate WCA-style ID
       const wcaStyleId = await generateWCAId(firstName, lastName);
@@ -95,31 +123,26 @@ export function AuthProvider({ children }) {
       
       // Create user profile
       const userProfileData = {
-        email: user.email,
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
         role: isAdmin ? 'ADMIN' : 'USER',
         wcaStyleId,
+        wcaId: wcaId || '',
         displayName: `${firstName} ${lastName}`,
         firstName,
         lastName,
         username: wcaStyleId.toLowerCase(),
         country: country || 'Unknown',
-        photoURL: user.photoURL || '',
+        photoURL: firebaseUser.photoURL || '',
         createdAt: new Date().toISOString(),
         totalCompetitions: 0
       };
       
-      // Try to save to Firestore
-      try {
-        await setDoc(doc(db, 'users', user.uid), userProfileData);
-      } catch (e) {
-        console.warn('Could not save profile to Firestore:', e.message);
-      }
-      
-      // Always save to localStorage
+      await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
       setUserProfile(userProfileData);
       localStorage.setItem('mcubes_profile', JSON.stringify(userProfileData));
       
-      return { user, userProfile: userProfileData };
+      return { user: firebaseUser, userProfile: userProfileData };
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;
@@ -129,33 +152,8 @@ export function AuthProvider({ children }) {
   const signIn = async (email, password) => {
     try {
       await setPersistence(auth, browserLocalPersistence);
-      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const firebaseUser = userCredential.user;
-      
-      // Create a basic profile immediately
-      const basicProfile = {
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-        role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
-      };
-      
-      setUserProfile(basicProfile);
-      localStorage.setItem('mcubes_profile', JSON.stringify(basicProfile));
-      
-      // Try to get full profile from Firestore (non-blocking)
-      try {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const fullProfile = userDoc.data();
-          setUserProfile(fullProfile);
-          localStorage.setItem('mcubes_profile', JSON.stringify(fullProfile));
-        }
-      } catch (e) {
-        console.warn('Could not fetch full profile:', e.message);
-      }
-      
-      return firebaseUser;
+      return userCredential.user;
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
@@ -165,57 +163,9 @@ export function AuthProvider({ children }) {
   const signInWithGoogle = async () => {
     try {
       await setPersistence(auth, browserLocalPersistence);
-      
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
-      const firebaseUser = userCredential.user;
-      
-      // Create basic profile immediately
-      const basicProfile = {
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || 'User',
-        photoURL: firebaseUser.photoURL || '',
-        role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
-      };
-      
-      setUserProfile(basicProfile);
-      localStorage.setItem('mcubes_profile', JSON.stringify(basicProfile));
-      
-      // Try to get/create Firestore profile
-      try {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        
-        if (userDoc.exists()) {
-          const fullProfile = userDoc.data();
-          setUserProfile(fullProfile);
-          localStorage.setItem('mcubes_profile', JSON.stringify(fullProfile));
-        } else {
-          // Create new profile for Google user
-          const nameParts = (firebaseUser.displayName || 'User Name').split(' ');
-          const firstName = nameParts[0] || 'User';
-          const lastName = nameParts.slice(1).join(' ') || 'Name';
-          const wcaStyleId = await generateWCAId(firstName, lastName);
-          
-          const newProfile = {
-            ...basicProfile,
-            wcaStyleId,
-            firstName,
-            lastName,
-            username: wcaStyleId.toLowerCase(),
-            country: 'Unknown',
-            createdAt: new Date().toISOString(),
-            totalCompetitions: 0
-          };
-          
-          await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-          setUserProfile(newProfile);
-          localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));
-        }
-      } catch (e) {
-        console.warn('Firestore error during Google sign in:', e.message);
-      }
-      
-      return firebaseUser;
+      return userCredential.user;
     } catch (error) {
       console.error('Google sign in error:', error);
       throw error;
@@ -243,6 +193,43 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const updateProfile = async (updates) => {
+    if (!user) throw new Error('Not authenticated');
+    
+    try {
+      // First check if document exists
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        // Create the document first
+        const newProfile = {
+          uid: user.uid,
+          email: user.email,
+          displayName: updates.displayName || user.displayName || 'User',
+          role: user.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER',
+          createdAt: new Date().toISOString(),
+          ...updates
+        };
+        await setDoc(userRef, newProfile);
+        setUserProfile(newProfile);
+        localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));
+        return newProfile;
+      } else {
+        // Update existing document
+        const currentData = userDoc.data();
+        const updatedProfile = { ...currentData, ...updates, uid: user.uid };
+        await setDoc(userRef, updatedProfile, { merge: true });
+        setUserProfile(updatedProfile);
+        localStorage.setItem('mcubes_profile', JSON.stringify(updatedProfile));
+        return updatedProfile;
+      }
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    }
+  };
+
   const value = {
     user,
     userProfile,
@@ -253,6 +240,7 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     signOut,
     resetPassword,
+    updateProfile,
     isAdmin: userProfile?.role === 'ADMIN'
   };
 
