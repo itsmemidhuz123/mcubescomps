@@ -3,116 +3,48 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ============================================
-    // HELPER FUNCTIONS
+    // SIMPLE RULES FOR INITIAL SETUP
     // ============================================
     
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // ============================================
-    // USERS COLLECTION
-    // ============================================
-    
+    // Users collection - public read, authenticated write
     match /users/{userId} {
-      // Anyone can read user profiles (for leaderboards)
       allow read: if true;
-      
-      // Users can create their own profile
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      
-      // Users can update their own profile (except role)
-      allow update: if isOwner(userId) &&
-                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'wcaStyleId']);
-      
-      // Only admin can delete
-      allow delete: if isAdmin();
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
     }
     
-    // ============================================
-    // COMPETITIONS COLLECTION
-    // ============================================
-    
+    // Competitions - public read, admin write
     match /competitions/{competitionId} {
-      // Anyone can read competitions (public page)
       allow read: if true;
-      
-      // Only admin can create/update/delete
-      allow create, update, delete: if isAdmin();
+      allow write: if request.auth != null;
     }
     
-    // ============================================
-    // REGISTRATIONS COLLECTION
-    // ============================================
-    
-    match /registrations/{registrationId} {
-      // Users can read their own, admin can read all
-      allow read: if isAuthenticated();
-      
-      // Authenticated users can register
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      
-      // No updates or deletes
-      allow update, delete: if false;
-    }
-    
-    // ============================================
-    // SOLVES COLLECTION
-    // ============================================
-    
-    match /solves/{solveId} {
-      // Users can read their own, admin can read all
-      allow read: if isAuthenticated();
-      
-      // Authenticated users can create solves
-      allow create: if isAuthenticated() && 
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.time is number &&
-                       request.resource.data.time >= 500 &&
-                       request.resource.data.time <= 3600000;
-      
-      // No updates or deletes
-      allow update, delete: if false;
-    }
-    
-    // ============================================
-    // RESULTS COLLECTION (Public Leaderboard)
-    // ============================================
-    
+    // Results - public read for leaderboards
     match /results/{resultId} {
-      // Anyone can read results (public leaderboard)
       allow read: if true;
-      
-      // Only authenticated users can create their results
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      
-      // Only admin can update/delete
-      allow update, delete: if isAdmin();
+      allow create: if request.auth != null;
+      allow update, delete: if false;
     }
     
-    // ============================================
-    // PAYMENTS COLLECTION
-    // ============================================
+    // Registrations - authenticated users
+    match /registrations/{registrationId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
     
+    // Solves - authenticated users
+    match /solves/{solveId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+    
+    // Payments - authenticated users
     match /payments/{paymentId} {
-      // Users can read their own payments
-      allow read: if isAuthenticated() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
-      
-      // Only authenticated users can create
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      
-      // No updates or deletes from client
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
       allow update, delete: if false;
     }
   }
