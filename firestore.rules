@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles
+      allow read: if isAuthenticated();
+      
+      // Users can only create/update their own profile
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      
+      // Only admin can delete users
+      allow delete: if isAdmin();
+    }
+    
+    // User sessions
+    match /userSessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Competitions collection
+    match /competitions/{competitionId} {
+      // Anyone can read competitions
+      allow read: if true;
+      
+      // Only admin can create, update, delete competitions
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Registrations collection
+    match /registrations/{registrationId} {
+      // Users can read their own registrations
+      allow read: if isAuthenticated();
+      
+      // Users can create registrations (via server validation)
+      allow create: if isAuthenticated();
+      
+      // Cannot update or delete registrations (permanent)
+      allow update, delete: if false;
+    }
+    
+    // Solves collection
+    match /solves/{solveId} {
+      // Users can read their own solves, admin can read all
+      allow read: if isAuthenticated();
+      
+      // Users can only create their own solves
+      // Validate that userId matches auth uid
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // Cannot update or delete solves (permanent record)
+      allow update, delete: if false;
+    }
+    
+    // Results collection
+    match /results/{resultId} {
+      // Anyone can read results (public leaderboard)
+      allow read: if true;
+      
+      // Only server can write results (via API)
+      // Users cannot directly write to results
+      allow create, update: if isAuthenticated() && 
+                               request.resource.data.userId == request.auth.uid;
+      
+      // Cannot delete results
+      allow delete: if false;
+    }
+    
+    // Payments collection
+    match /payments/{paymentId} {
+      // Users can only read their own payment records
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == request.auth.uid;
+      
+      // Only server can create payment records (via API after verification)
+      allow create: if isAuthenticated();
+      
+      // Payment records are immutable
+      allow update, delete: if false;
+    }
+  }
+}
