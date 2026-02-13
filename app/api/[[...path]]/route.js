@@ -58,8 +58,8 @@ export async function POST(request) {
     }
   }
 
-  // Verify payment
-  if (pathname === '/api/payment/verify') {
+  // Verify payment - match with or without trailing slash
+  if (pathname === '/api/payment/verify' || pathname.includes('payment/verify')) {
     try {
       const body = await request.json();
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, competitionId, competitionName, events, amount, currency } = body;
