@@ -1,270 +1,74 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Timer, Trophy, Calendar, Users, LogOut } from 'lucide-react'
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Trophy, Calendar, Users, Timer, LogOut, User, Shield } from 'lucide-react';
+import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 
-function AuthCallback({ onAuthComplete }) {
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.includes('session_id=')) return;
-    
-    const sessionId = hash.split('session_id=')[1].split('&')[0];
-    
-    async function exchangeSession() {
-      try {
-        const response = await fetch('/api/auth/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId })
-        });
-        
-        if (response.ok) {
-          const userData = await response.json();
-          // Clear hash and redirect
-          window.history.replaceState(null, '', '/');
-          onAuthComplete(userData);
-        } else {
-          console.error('Session exchange failed');
-          window.location.href = '/';
-        }
-      } catch (error) {
-        console.error('Auth error:', error);
-        window.location.href = '/';
-      }
-    }
-    
-    exchangeSession();
-  }, [onAuthComplete]);
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-      <div className="text-white text-xl">Completing authentication...</div>
-    </div>
-  );
-}
-
-function LoginPage() {
-  const handleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-  };
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <Timer className="h-16 w-16 text-blue-500" />
-          </div>
-          <CardTitle className="text-3xl font-bold text-white">SpeedCube Online</CardTitle>
-          <CardDescription className="text-gray-400 text-lg">
-            Official-style online speedcubing competitions
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 text-gray-300">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-              <span>WCA-style competition format</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Timer className="h-5 w-5 text-blue-500" />
-              <span>15-second inspection timer</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-green-500" />
-              <span>Global leaderboards</span>
-            </div>
-          </div>
-          <Button 
-            onClick={handleLogin}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-6 text-lg"
-          >
-            Login with Google
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function CompetitionList({ user, onLogout }) {
-  const [competitions, setCompetitions] = useState([]);
-  const [loading, setLoading] = useState(true);
+function HomePage() {
+  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
   const router = useRouter();
-  
+  const [competitions, setCompetitions] = useState([]);
+  const [loadingComps, setLoadingComps] = useState(true);
+
   useEffect(() => {
-    fetchCompetitions();
-  }, []);
-  
+    if (!loading && !user) {
+      router.push('/auth/login');
+    }
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (user) {
+      fetchCompetitions();
+    }
+  }, [user]);
+
   async function fetchCompetitions() {
     try {
-      const response = await fetch('/api/competitions');
-      const data = await response.json();
-      setCompetitions(data);
+      const compsRef = collection(db, 'competitions');
+      const q = query(compsRef, orderBy('startDate', 'desc'));
+      const snapshot = await getDocs(q);
+      
+      const compsData = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const now = new Date();
+        const start = new Date(data.startDate);
+        const end = new Date(data.endDate);
+        
+        let status = 'UPCOMING';
+        if (now >= start && now <= end) {
+          status = 'LIVE';
+        } else if (now > end) {
+          status = 'ENDED';
+        }
+        
+        compsData.push({
+          id: doc.id,
+          ...data,
+          status
+        });
+      });
+      
+      setCompetitions(compsData);
     } catch (error) {
       console.error('Failed to fetch competitions:', error);
     } finally {
-      setLoading(false);
+      setLoadingComps(false);
     }
   }
-  
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
-  };
-  
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'upcoming': return 'bg-yellow-500';
-      case 'running': return 'bg-green-500';
-      case 'completed': return 'bg-gray-500';
-      default: return 'bg-blue-500';
-    }
-  };
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-      {/* Header */}
-      <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Timer className="h-8 w-8 text-blue-500" />
-              <h1 className="text-2xl font-bold">SpeedCube Online</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              {user.picture && (
-                <img src={user.picture} alt={user.name} className="h-10 w-10 rounded-full" />
-              )}
-              <div className="text-right">
-                <p className="font-semibold">{user.name}</p>
-                {user.isAdmin && (
-                  <Badge className="bg-purple-600 text-xs">Admin</Badge>
-                )}
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={onLogout}
-                className="border-gray-600 hover:bg-gray-700"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold">Competitions</h2>
-          {user.isAdmin && (
-            <Button 
-              onClick={() => router.push('/admin/create')}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Create Competition
-            </Button>
-          )}
-        </div>
-        
-        {loading ? (
-          <div className="text-center py-12 text-gray-400">Loading competitions...</div>
-        ) : competitions.length === 0 ? (
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="py-12 text-center text-gray-400">
-              No competitions yet. {user.isAdmin && 'Create your first competition!'}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {competitions.map(comp => (
-              <Card 
-                key={comp.id}
-                className="bg-gray-800 border-gray-700 hover:border-blue-500 transition-colors cursor-pointer"
-                onClick={() => router.push(`/competitions/${comp.slug}`)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between mb-2">
-                    <CardTitle className="text-xl text-white">{comp.name}</CardTitle>
-                    <Badge className={getStatusColor(comp.status)}>
-                      {comp.status}
-                    </Badge>
-                  </div>
-                  <CardDescription className="text-gray-400">
-                    <div className="flex items-center gap-2 mt-2">
-                      <Calendar className="h-4 w-4" />
-                      {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
-                    </div>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Users className="h-4 w-4" />
-                    <span>{comp._count?.results || 0} participants</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const pathname = usePathname();
-  
-  useEffect(() => {
-    // Check if already authenticated
-    checkAuth();
-  }, []);
-  
-  async function checkAuth() {
-    try {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-  
-  async function handleLogout() {
-    try {
-      await fetch('/api/auth/logout', { credentials: 'include' });
-      setUser(null);
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  }
-  
-  // Check for auth callback
-  if (typeof window !== 'undefined' && window.location.hash.includes('session_id=')) {
-    return <AuthCallback onAuthComplete={(userData) => setUser(userData)} />;
-  }
-  
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/auth/login');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
@@ -272,12 +76,167 @@ function App() {
       </div>
     );
   }
-  
+
   if (!user) {
-    return <LoginPage />;
+    return null;
   }
-  
-  return <CompetitionList user={user} onLogout={handleLogout} />;
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'UPCOMING': return 'bg-yellow-500';
+      case 'LIVE': return 'bg-green-500';
+      case 'ENDED': return 'bg-gray-500';
+      default: return 'bg-blue-500';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+      {/* Header */}
+      <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-8 w-8 text-blue-500" />
+              <div>
+                <h1 className="text-2xl font-bold">MCUBES</h1>
+                <p className="text-xs text-gray-400">Online Speedcubing Competitions</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {userProfile?.photoURL && (
+                <img src={userProfile.photoURL} alt={userProfile.displayName} className="h-10 w-10 rounded-full" />
+              )}
+              <div className="text-right">
+                <p className="font-semibold">{userProfile?.displayName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-400">{userProfile?.wcaStyleId}</p>
+                  {isAdmin && (
+                    <Badge className="bg-purple-600 text-xs">Admin</Badge>
+                  )}
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => router.push('/profile')}
+                className="border-gray-600 hover:bg-gray-700"
+              >
+                <User className="h-4 w-4" />
+              </Button>
+              {isAdmin && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => router.push('/admin')}
+                  className="border-purple-600 hover:bg-purple-700"
+                >
+                  <Shield className="h-4 w-4" />
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleLogout}
+                className="border-gray-600 hover:bg-gray-700"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hero Section */}
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center mb-12">
+          <h2 className="text-5xl font-bold mb-4">
+            Welcome to <span className="text-blue-500">MCUBES</span>
+          </h2>
+          <p className="text-xl text-gray-400 mb-6">
+            Compete in official-style online speedcubing competitions
+          </p>
+          <div className="flex justify-center gap-8 text-sm">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-yellow-500" />
+              <span>WCA-Style Format</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Timer className="h-5 w-5 text-blue-500" />
+              <span>Live Timer</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-green-500" />
+              <span>Global Leaderboards</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Competitions Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-3xl font-bold">Competitions</h3>
+            <Button
+              onClick={() => router.push('/competitions')}
+              variant="outline"
+              className="border-blue-600 hover:bg-blue-700"
+            >
+              View All
+            </Button>
+          </div>
+
+          {loadingComps ? (
+            <div className="text-center py-12 text-gray-400">Loading competitions...</div>
+          ) : competitions.length === 0 ? (
+            <Card className="bg-gray-800 border-gray-700">
+              <CardContent className="py-12 text-center text-gray-400">
+                No competitions yet. {isAdmin && 'Create your first competition in the admin panel!'}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {competitions.slice(0, 6).map(comp => (
+                <Card
+                  key={comp.id}
+                  className="bg-gray-800 border-gray-700 hover:border-blue-500 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/competition/${comp.id}`)}
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{getEventIcon(comp.eventType)}</span>
+                        <CardTitle className="text-xl text-white">{comp.name}</CardTitle>
+                      </div>
+                      <Badge className={getStatusColor(comp.status)}>
+                        {comp.status}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-gray-400">
+                      <div className="flex items-center gap-2 mt-2">
+                        <Calendar className="h-4 w-4" />
+                        {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
+                      </div>
+                      <div className="mt-2 text-sm">
+                        {getEventName(comp.eventType)} • {comp.solveLimit} solves
+                      </div>
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default App;
+export default HomePage;
