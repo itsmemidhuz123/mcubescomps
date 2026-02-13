@@ -188,6 +188,7 @@ export function AuthProvider({ children }) {
     user,
     userProfile,
     loading,
+    authError,
     signUp,
     signIn,
     signInWithGoogle,
