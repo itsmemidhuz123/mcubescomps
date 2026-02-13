@@ -24,63 +24,53 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [authError, setAuthError] = useState(null);
 
-  // Set persistence on mount
-  useEffect(() => {
-    setPersistence(auth, browserLocalPersistence)
-      .catch((error) => {
-        console.error('Failed to set persistence:', error);
-      });
-  }, []);
-
   useEffect(() => {
     let mounted = true;
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!mounted) return;
       
-      try {
-        if (firebaseUser) {
-          setUser(firebaseUser);
-          // Fetch user profile from Firestore
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        
+        // Try to get profile from localStorage first (fast)
+        const cachedProfile = localStorage.getItem('mcubes_profile');
+        if (cachedProfile) {
           try {
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-            if (mounted) {
-              if (userDoc.exists()) {
-                const profileData = userDoc.data();
-                setUserProfile(profileData);
-                // Store in localStorage for quick access
-                localStorage.setItem('userProfile', JSON.stringify(profileData));
-              } else {
-                // User exists in Auth but not in Firestore
-                setUserProfile(null);
-                localStorage.removeItem('userProfile');
-              }
-            }
-          } catch (firestoreError) {
-            console.error('Error fetching user profile:', firestoreError);
-            // Try to get from localStorage
-            const cached = localStorage.getItem('userProfile');
-            if (cached && mounted) {
-              setUserProfile(JSON.parse(cached));
-            }
-            if (mounted) {
-              setAuthError(firestoreError.message);
-            }
+            setUserProfile(JSON.parse(cachedProfile));
+          } catch (e) {
+            console.error('Failed to parse cached profile');
           }
-        } else {
-          setUser(null);
-          setUserProfile(null);
-          localStorage.removeItem('userProfile');
         }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-        if (mounted) {
-          setAuthError(error.message);
+        
+        // Then try to fetch from Firestore (might fail if offline)
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (mounted && userDoc.exists()) {
+            const profileData = userDoc.data();
+            setUserProfile(profileData);
+            localStorage.setItem('mcubes_profile', JSON.stringify(profileData));
+          }
+        } catch (firestoreError) {
+          console.warn('Could not fetch profile from Firestore:', firestoreError.message);
+          // Continue with cached profile or create minimal profile
+          if (!cachedProfile && mounted) {
+            const minimalProfile = {
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
+            };
+            setUserProfile(minimalProfile);
+          }
         }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+      } else {
+        setUser(null);
+        setUserProfile(null);
+        localStorage.removeItem('mcubes_profile');
+      }
+      
+      if (mounted) {
+        setLoading(false);
       }
     });
 
@@ -92,7 +82,6 @@ export function AuthProvider({ children }) {
 
   const signUp = async (email, password, firstName, lastName, country) => {
     try {
-      // Set persistence before sign up
       await setPersistence(auth, browserLocalPersistence);
       
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -102,10 +91,9 @@ export function AuthProvider({ children }) {
       const wcaStyleId = await generateWCAId(firstName, lastName);
       
       // Check if admin
-      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'midhun.speedcuber@gmail.com';
-      const isAdmin = email.toLowerCase() === adminEmail.toLowerCase();
+      const isAdmin = email.toLowerCase() === 'midhun.speedcuber@gmail.com';
       
-      // Create user profile in Firestore
+      // Create user profile
       const userProfileData = {
         email: user.email,
         role: isAdmin ? 'ADMIN' : 'USER',
@@ -117,14 +105,19 @@ export function AuthProvider({ children }) {
         country: country || 'Unknown',
         photoURL: user.photoURL || '',
         createdAt: new Date().toISOString(),
-        bestSingle: null,
-        bestAo5: null,
         totalCompetitions: 0
       };
       
-      await setDoc(doc(db, 'users', user.uid), userProfileData);
+      // Try to save to Firestore
+      try {
+        await setDoc(doc(db, 'users', user.uid), userProfileData);
+      } catch (e) {
+        console.warn('Could not save profile to Firestore:', e.message);
+      }
+      
+      // Always save to localStorage
       setUserProfile(userProfileData);
-      localStorage.setItem('userProfile', JSON.stringify(userProfileData));
+      localStorage.setItem('mcubes_profile', JSON.stringify(userProfileData));
       
       return { user, userProfile: userProfileData };
     } catch (error) {
@@ -135,20 +128,34 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
-      // Set persistence before sign in
       await setPersistence(auth, browserLocalPersistence);
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
       
-      // Fetch and set user profile
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      if (userDoc.exists()) {
-        const profileData = userDoc.data();
-        setUserProfile(profileData);
-        localStorage.setItem('userProfile', JSON.stringify(profileData));
+      // Create a basic profile immediately
+      const basicProfile = {
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
+      };
+      
+      setUserProfile(basicProfile);
+      localStorage.setItem('mcubes_profile', JSON.stringify(basicProfile));
+      
+      // Try to get full profile from Firestore (non-blocking)
+      try {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          const fullProfile = userDoc.data();
+          setUserProfile(fullProfile);
+          localStorage.setItem('mcubes_profile', JSON.stringify(fullProfile));
+        }
+      } catch (e) {
+        console.warn('Could not fetch full profile:', e.message);
       }
       
-      return userCredential.user;
+      return firebaseUser;
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
@@ -157,52 +164,58 @@ export function AuthProvider({ children }) {
 
   const signInWithGoogle = async () => {
     try {
-      // Set persistence before sign in
       await setPersistence(auth, browserLocalPersistence);
       
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
-      const user = userCredential.user;
+      const firebaseUser = userCredential.user;
       
-      // Check if user profile exists
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      // Create basic profile immediately
+      const basicProfile = {
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || 'User',
+        photoURL: firebaseUser.photoURL || '',
+        role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
+      };
       
-      if (!userDoc.exists()) {
-        // Create profile for new Google user
-        const nameParts = (user.displayName || 'User Name').split(' ');
-        const firstName = nameParts[0] || 'User';
-        const lastName = nameParts.slice(1).join(' ') || 'Name';
+      setUserProfile(basicProfile);
+      localStorage.setItem('mcubes_profile', JSON.stringify(basicProfile));
+      
+      // Try to get/create Firestore profile
+      try {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         
-        const wcaStyleId = await generateWCAId(firstName, lastName);
-        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'midhun.speedcuber@gmail.com';
-        const isAdmin = user.email.toLowerCase() === adminEmail.toLowerCase();
-        
-        const userProfileData = {
-          email: user.email,
-          role: isAdmin ? 'ADMIN' : 'USER',
-          wcaStyleId,
-          displayName: user.displayName || wcaStyleId,
-          firstName,
-          lastName,
-          username: wcaStyleId.toLowerCase(),
-          country: 'Unknown',
-          photoURL: user.photoURL || '',
-          createdAt: new Date().toISOString(),
-          bestSingle: null,
-          bestAo5: null,
-          totalCompetitions: 0
-        };
-        
-        await setDoc(doc(db, 'users', user.uid), userProfileData);
-        setUserProfile(userProfileData);
-        localStorage.setItem('userProfile', JSON.stringify(userProfileData));
-      } else {
-        const profileData = userDoc.data();
-        setUserProfile(profileData);
-        localStorage.setItem('userProfile', JSON.stringify(profileData));
+        if (userDoc.exists()) {
+          const fullProfile = userDoc.data();
+          setUserProfile(fullProfile);
+          localStorage.setItem('mcubes_profile', JSON.stringify(fullProfile));
+        } else {
+          // Create new profile for Google user
+          const nameParts = (firebaseUser.displayName || 'User Name').split(' ');
+          const firstName = nameParts[0] || 'User';
+          const lastName = nameParts.slice(1).join(' ') || 'Name';
+          const wcaStyleId = await generateWCAId(firstName, lastName);
+          
+          const newProfile = {
+            ...basicProfile,
+            wcaStyleId,
+            firstName,
+            lastName,
+            username: wcaStyleId.toLowerCase(),
+            country: 'Unknown',
+            createdAt: new Date().toISOString(),
+            totalCompetitions: 0
+          };
+          
+          await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+          setUserProfile(newProfile);
+          localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));
+        }
+      } catch (e) {
+        console.warn('Firestore error during Google sign in:', e.message);
       }
       
-      return user;
+      return firebaseUser;
     } catch (error) {
       console.error('Google sign in error:', error);
       throw error;
@@ -214,7 +227,7 @@ export function AuthProvider({ children }) {
       await firebaseSignOut(auth);
       setUser(null);
       setUserProfile(null);
-      localStorage.removeItem('userProfile');
+      localStorage.removeItem('mcubes_profile');
     } catch (error) {
       console.error('Sign out error:', error);
       throw error;
