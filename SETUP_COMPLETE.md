@@ -4,7 +4,7 @@
 
 **The platform is LIVE and WORKING!**
 
-URL: https://solve-tracker.preview.emergentagent.com
+URL: https://speedcube-payments.preview.emergentagent.com
 
 **What's Working:**
 - ✅ Login/Register pages
@@ -57,7 +57,7 @@ firebase deploy --only firestore:rules
 ## 🧪 Test the Platform Now
 
 ### Step 1: Register as Admin
-1. Go to: https://solve-tracker.preview.emergentagent.com
+1. Go to: https://speedcube-payments.preview.emergentagent.com
 2. Click "Don't have an account? Sign up"
 3. Register with email: **midhun.speedcuber@gmail.com**
 4. Use any password (min 6 characters)
@@ -210,6 +210,6 @@ Everything is built and working. Just need to:
 4. ✅ Register as admin
 5. ✅ Start testing!
 
-**Current Preview:** https://solve-tracker.preview.emergentagent.com
+**Current Preview:** https://speedcube-payments.preview.emergentagent.com
 
 **The platform is COMPLETE and PRODUCTION READY! 🎉**
