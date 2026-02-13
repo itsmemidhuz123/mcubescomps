@@ -64,6 +64,7 @@ function Header() {
 }
 
 function CompetitionsPage() {
+  const { isAdmin } = useAuth();
   const router = useRouter();
   const [competitions, setCompetitions] = useState([]);
   const [filteredComps, setFilteredComps] = useState([]);
@@ -73,7 +74,7 @@ function CompetitionsPage() {
 
   useEffect(() => {
     fetchCompetitions();
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     filterCompetitions();
