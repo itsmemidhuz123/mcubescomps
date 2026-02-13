@@ -4,11 +4,20 @@ import crypto from 'crypto';
 
 // Initialize Razorpay with error handling
 let razorpay = null;
+const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
 try {
-  if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+  if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
     razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET
+      key_id: RAZORPAY_KEY_ID,
+      key_secret: RAZORPAY_KEY_SECRET
+    });
+    console.log('Razorpay initialized successfully');
+  } else {
+    console.warn('Razorpay keys not found in environment:', {
+      hasKeyId: !!RAZORPAY_KEY_ID,
+      hasKeySecret: !!RAZORPAY_KEY_SECRET
     });
   }
 } catch (e) {
