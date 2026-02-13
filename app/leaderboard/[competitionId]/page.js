@@ -7,7 +7,8 @@ import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Trophy, Medal } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Trophy, Medal, Search, Filter } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import {
   Table,
@@ -17,13 +18,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 function LeaderboardPage() {
   const router = useRouter();
   const params = useParams();
   const [competition, setCompetition] = useState(null);
   const [leaderboards, setLeaderboards] = useState({});
+  const [registeredUsers, setRegisteredUsers] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [sortBy, setSortBy] = useState('average'); // average or single
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,13 +51,52 @@ function LeaderboardPage() {
         setCompetition({ id: compDoc.id, ...data });
         setSelectedEvent(data.events?.[0]);
         
-        // Fetch leaderboards for all events
-        await fetchLeaderboards(data.events);
+        // Fetch registrations and leaderboards
+        await Promise.all([
+          fetchRegisteredUsers(),
+          fetchLeaderboards(data.events)
+        ]);
       }
     } catch (error) {
       console.error('Failed to fetch competition:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchRegisteredUsers() {
+    try {
+      const regsQuery = query(
+        collection(db, 'registrations'),
+        where('competitionId', '==', params.competitionId)
+      );
+      const regsSnapshot = await getDocs(regsQuery);
+      
+      const users = [];
+      for (const regDoc of regsSnapshot.docs) {
+        const regData = regDoc.data();
+        // Fetch user details
+        try {
+          const userDoc = await getDoc(doc(db, 'users', regData.userId));
+          const userData = userDoc.exists() ? userDoc.data() : {};
+          users.push({
+            id: regData.userId,
+            ...regData,
+            displayName: userData.displayName || regData.userName || 'Unknown',
+            wcaStyleId: userData.wcaStyleId || regData.wcaStyleId || 'N/A',
+            country: userData.country || 'Unknown',
+            photoURL: userData.photoURL
+          });
+        } catch (e) {
+          users.push({
+            id: regData.userId,
+            ...regData
+          });
+        }
+      }
+      setRegisteredUsers(users);
+    } catch (error) {
+      console.error('Failed to fetch registered users:', error);
     }
   }
 
@@ -69,35 +119,25 @@ function LeaderboardPage() {
           const resultData = resultDoc.data();
           
           // Fetch user data
-          const userDoc = await getDoc(doc(db, 'users', resultData.userId));
-          const userData = userDoc.exists() ? userDoc.data() : {};
+          try {
+            const userDoc = await getDoc(doc(db, 'users', resultData.userId));
+            const userData = userDoc.exists() ? userDoc.data() : {};
 
-          results.push({
-            ...resultData,
-            userName: userData.displayName || 'Unknown',
-            wcaStyleId: userData.wcaStyleId || 'N/A',
-            country: userData.country || 'Unknown',
-            photoURL: userData.photoURL
-          });
+            results.push({
+              ...resultData,
+              userName: userData.displayName || resultData.userName || 'Unknown',
+              wcaStyleId: userData.wcaStyleId || resultData.wcaStyleId || 'N/A',
+              country: userData.country || resultData.country || 'Unknown',
+              photoURL: userData.photoURL,
+              hasResults: true
+            });
+          } catch (e) {
+            results.push({
+              ...resultData,
+              hasResults: true
+            });
+          }
         }
-
-        // Sort by average (DNF at bottom), then by best single
-        results.sort((a, b) => {
-          if (a.average === 'DNF' && b.average !== 'DNF') return 1;
-          if (a.average !== 'DNF' && b.average === 'DNF') return -1;
-          if (a.average === 'DNF' && b.average === 'DNF') {
-            // Both DNF, sort by best single
-            if (a.bestSingle === Infinity && b.bestSingle === Infinity) return 0;
-            if (a.bestSingle === Infinity) return 1;
-            if (b.bestSingle === Infinity) return -1;
-            return a.bestSingle - b.bestSingle;
-          }
-          // Both have averages
-          if (a.average === b.average) {
-            return a.bestSingle - b.bestSingle;
-          }
-          return a.average - b.average;
-        });
 
         leaderboardData[eventId] = results;
       }
@@ -108,19 +148,92 @@ function LeaderboardPage() {
     }
   }
 
+  // Combine registered users with their results
+  function getCombinedLeaderboard() {
+    if (!selectedEvent) return [];
+    
+    const results = leaderboards[selectedEvent] || [];
+    const resultsMap = new Map(results.map(r => [r.userId, r]));
+    
+    // Get users registered for this event
+    const eventUsers = registeredUsers.filter(u => u.events?.includes(selectedEvent));
+    
+    // Create combined list
+    const combined = eventUsers.map(user => {
+      const result = resultsMap.get(user.id);
+      if (result) {
+        return result;
+      }
+      // User registered but no results yet
+      return {
+        userId: user.id,
+        userName: user.displayName || user.userName,
+        wcaStyleId: user.wcaStyleId,
+        country: user.country,
+        photoURL: user.photoURL,
+        average: null,
+        bestSingle: null,
+        times: [],
+        hasResults: false
+      };
+    });
+
+    // Sort
+    combined.sort((a, b) => {
+      // Users with results come first
+      if (a.hasResults && !b.hasResults) return -1;
+      if (!a.hasResults && b.hasResults) return 1;
+      
+      // If neither has results, sort alphabetically
+      if (!a.hasResults && !b.hasResults) {
+        return (a.userName || '').localeCompare(b.userName || '');
+      }
+      
+      // Both have results - sort by selected metric
+      if (sortBy === 'single') {
+        const aTime = a.bestSingle === Infinity || a.bestSingle === 'DNF' ? Infinity : (a.bestSingle || Infinity);
+        const bTime = b.bestSingle === Infinity || b.bestSingle === 'DNF' ? Infinity : (b.bestSingle || Infinity);
+        return aTime - bTime;
+      } else {
+        const aAvg = a.average === Infinity || a.average === 'DNF' || a.average === null ? Infinity : a.average;
+        const bAvg = b.average === Infinity || b.average === 'DNF' || b.average === null ? Infinity : b.average;
+        if (aAvg === bAvg) {
+          // Tiebreaker: best single
+          const aTime = a.bestSingle === Infinity ? Infinity : (a.bestSingle || Infinity);
+          const bTime = b.bestSingle === Infinity ? Infinity : (b.bestSingle || Infinity);
+          return aTime - bTime;
+        }
+        return aAvg - bAvg;
+      }
+    });
+
+    // Filter by search
+    if (searchQuery) {
+      return combined.filter(entry => 
+        entry.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        entry.wcaStyleId?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return combined;
+  }
+
   const formatTime = (ms) => {
-    if (ms === Infinity || ms === 'DNF') return 'DNF';
-    if (!ms) return '-';
+    if (ms === Infinity || ms === 'DNF' || ms === null || ms === undefined) return '-';
+    if (typeof ms !== 'number') return '-';
     const seconds = (ms / 1000).toFixed(2);
     return `${seconds}s`;
   };
 
-  const getRankBadge = (index) => {
+  const getRankBadge = (index, hasResults) => {
+    if (!hasResults) return <span className="text-gray-500">-</span>;
     if (index === 0) return <Medal className="h-6 w-6 text-yellow-500" />;
     if (index === 1) return <Medal className="h-6 w-6 text-gray-400" />;
     if (index === 2) return <Medal className="h-6 w-6 text-orange-600" />;
     return <span className="text-gray-400 font-bold text-lg">{index + 1}</span>;
   };
+
+  const currentLeaderboard = getCombinedLeaderboard();
 
   if (loading) {
     return (
@@ -137,8 +250,6 @@ function LeaderboardPage() {
       </div>
     );
   }
-
-  const currentLeaderboard = leaderboards[selectedEvent] || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
@@ -157,7 +268,7 @@ function LeaderboardPage() {
             <Trophy className="h-10 w-10 text-yellow-500" />
             <div>
               <h1 className="text-4xl font-bold">{competition.name}</h1>
-              <p className="text-gray-400">Leaderboard</p>
+              <p className="text-gray-400">Leaderboard • {registeredUsers.length} Participants</p>
             </div>
           </div>
 
@@ -174,18 +285,48 @@ function LeaderboardPage() {
               </Button>
             ))}
           </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-40 bg-gray-800 border-gray-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="average">By Average</SelectItem>
+                  <SelectItem value="single">By Single</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name or ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 bg-gray-800 border-gray-700"
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
             <CardTitle className="text-white text-2xl">
               {getEventIcon(selectedEvent)} {getEventName(selectedEvent)} Results
+              <span className="text-gray-400 font-normal text-lg ml-2">
+                ({currentLeaderboard.length} participants)
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {currentLeaderboard.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
-                No results yet for this event
+                No participants registered for this event yet
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -193,16 +334,16 @@ function LeaderboardPage() {
                   <TableHeader>
                     <TableRow className="border-gray-700 hover:bg-gray-700/50">
                       <TableHead className="text-gray-300 w-20">Rank</TableHead>
-                      <TableHead className="text-gray-300">User</TableHead>
-                      <TableHead className="text-gray-300">WCA ID</TableHead>
+                      <TableHead className="text-gray-300">Participant</TableHead>
+                      <TableHead className="text-gray-300">MCUBES ID</TableHead>
                       <TableHead className="text-gray-300">Country</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solve 1</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solve 2</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solve 3</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solve 4</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solve 5</TableHead>
-                      <TableHead className="text-gray-300 text-right font-bold">Average</TableHead>
-                      <TableHead className="text-gray-300 text-right">Best</TableHead>
+                      <TableHead className="text-gray-300 text-center">Solves</TableHead>
+                      <TableHead className="text-gray-300 text-right font-bold">
+                        {sortBy === 'average' ? 'Average' : 'Best Single'}
+                      </TableHead>
+                      <TableHead className="text-gray-300 text-right">
+                        {sortBy === 'average' ? 'Best' : 'Avg'}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -210,7 +351,7 @@ function LeaderboardPage() {
                       <TableRow key={entry.userId} className="border-gray-700 hover:bg-gray-700/50">
                         <TableCell>
                           <div className="flex items-center justify-center">
-                            {getRankBadge(index)}
+                            {getRankBadge(index, entry.hasResults)}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -218,25 +359,54 @@ function LeaderboardPage() {
                             {entry.photoURL && (
                               <img src={entry.photoURL} alt={entry.userName} className="h-8 w-8 rounded-full" />
                             )}
-                            <span className="font-medium">{entry.userName}</span>
+                            <span className="font-medium">{entry.userName || 'Unknown'}</span>
+                            {!entry.hasResults && (
+                              <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
+                                No solves yet
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-400">{entry.wcaStyleId}</TableCell>
-                        <TableCell className="text-gray-400">{entry.country}</TableCell>
-                        {entry.times?.map((time, i) => (
-                          <TableCell key={i} className="text-center">
-                            {formatTime(time)}
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-right font-bold text-xl">
-                          {entry.average === 'DNF' ? (
-                            <Badge variant="destructive">DNF</Badge>
+                        <TableCell className="text-gray-400">{entry.wcaStyleId || 'N/A'}</TableCell>
+                        <TableCell className="text-gray-400">{entry.country || 'Unknown'}</TableCell>
+                        <TableCell className="text-center">
+                          {entry.times && entry.times.length > 0 ? (
+                            <div className="flex flex-wrap justify-center gap-1">
+                              {entry.times.map((time, i) => (
+                                <span key={i} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
+                                  {formatTime(time)}
+                                </span>
+                              ))}
+                            </div>
                           ) : (
-                            <span className="text-green-400">{formatTime(entry.average)}</span>
+                            <span className="text-gray-500">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-xl">
+                          {entry.hasResults ? (
+                            sortBy === 'average' ? (
+                              entry.average === Infinity || entry.average === 'DNF' ? (
+                                <Badge variant="destructive">DNF</Badge>
+                              ) : (
+                                <span className="text-green-400">{formatTime(entry.average)}</span>
+                              )
+                            ) : (
+                              entry.bestSingle === Infinity ? (
+                                <Badge variant="destructive">DNF</Badge>
+                              ) : (
+                                <span className="text-blue-400">{formatTime(entry.bestSingle)}</span>
+                              )
+                            )
+                          ) : (
+                            <span className="text-gray-500">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right text-blue-400">
-                          {formatTime(entry.bestSingle)}
+                          {entry.hasResults ? (
+                            sortBy === 'average' ? formatTime(entry.bestSingle) : formatTime(entry.average)
+                          ) : (
+                            <span className="text-gray-500">-</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

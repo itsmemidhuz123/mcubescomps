@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Shield, Users, Trophy } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Shield, Users, Trophy, Edit, Eye, CreditCard } from 'lucide-react';
 import { WCA_EVENTS } from '@/lib/wcaEvents';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -60,19 +60,23 @@ function AdminPanel() {
   const [activeTab, setActiveTab] = useState('create');
   const [competitions, setCompetitions] = useState([]);
   const [users, setUsers] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [editingComp, setEditingComp] = useState(null);
 
   // Competition form state
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    startDate: '',
-    endDate: '',
+    registrationOpenDate: '',
+    registrationCloseDate: '',
+    competitionStartDate: '',
+    competitionEndDate: '',
     type: 'FREE',
     pricingModel: 'flat',
     flatPrice: 0,
     basePrice: 0,
-    extraPrice: 0,
+    perEventPrice: 0,
     currency: 'INR',
     solveLimit: 5,
     selectedEvents: [],
@@ -114,6 +118,12 @@ function AdminPanel() {
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(usersData);
+
+      // Fetch all payments (admin can see all)
+      const paymentsSnapshot = await getDocs(collection(db, 'payments'));
+      const paymentsData = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      paymentsData.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setPayments(paymentsData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -145,6 +155,27 @@ function AdminPanel() {
     setFormData({ ...formData, scrambles: newScrambles });
   };
 
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      registrationOpenDate: '',
+      registrationCloseDate: '',
+      competitionStartDate: '',
+      competitionEndDate: '',
+      type: 'FREE',
+      pricingModel: 'flat',
+      flatPrice: 0,
+      basePrice: 0,
+      perEventPrice: 0,
+      currency: 'INR',
+      solveLimit: 5,
+      selectedEvents: [],
+      scrambles: {}
+    });
+    setEditingComp(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -162,48 +193,75 @@ function AdminPanel() {
       }
     }
 
-    try {
-      await addDoc(collection(db, 'competitions'), {
-        name: formData.name,
-        description: formData.description,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        type: formData.type,
-        pricingModel: formData.pricingModel,
-        flatPrice: parseFloat(formData.flatPrice) || 0,
-        basePrice: parseFloat(formData.basePrice) || 0,
-        extraPrice: parseFloat(formData.extraPrice) || 0,
-        currency: formData.currency,
-        solveLimit: parseInt(formData.solveLimit),
-        events: formData.selectedEvents,
-        scrambles: formData.scrambles,
-        createdAt: new Date().toISOString(),
-        participantCount: 0
-      });
-
-      alert('Competition created successfully!');
-      fetchData();
-      
-      // Reset form
-      setFormData({
-        name: '',
-        description: '',
-        startDate: '',
-        endDate: '',
-        type: 'FREE',
-        pricingModel: 'flat',
-        flatPrice: 0,
-        basePrice: 0,
-        extraPrice: 0,
-        currency: 'INR',
-        solveLimit: 5,
-        selectedEvents: [],
-        scrambles: {}
-      });
-    } catch (error) {
-      console.error('Failed to create competition:', error);
-      alert('Failed to create competition: ' + error.message);
+    // Validate dates
+    if (!formData.registrationOpenDate || !formData.registrationCloseDate || !formData.competitionStartDate || !formData.competitionEndDate) {
+      alert('Please fill all date fields');
+      return;
     }
+
+    const compData = {
+      name: formData.name,
+      description: formData.description,
+      registrationOpenDate: formData.registrationOpenDate,
+      registrationCloseDate: formData.registrationCloseDate,
+      competitionStartDate: formData.competitionStartDate,
+      competitionEndDate: formData.competitionEndDate,
+      // Keep legacy fields for backward compatibility
+      startDate: formData.competitionStartDate,
+      endDate: formData.competitionEndDate,
+      type: formData.type,
+      pricingModel: formData.pricingModel,
+      flatPrice: parseFloat(formData.flatPrice) || 0,
+      basePrice: parseFloat(formData.basePrice) || 0,
+      perEventPrice: parseFloat(formData.perEventPrice) || 0,
+      currency: formData.currency,
+      solveLimit: parseInt(formData.solveLimit),
+      events: formData.selectedEvents,
+      scrambles: formData.scrambles,
+      updatedAt: new Date().toISOString(),
+      participantCount: editingComp?.participantCount || 0
+    };
+
+    try {
+      if (editingComp) {
+        // Update existing competition
+        await updateDoc(doc(db, 'competitions', editingComp.id), compData);
+        alert('Competition updated successfully!');
+      } else {
+        // Create new competition
+        compData.createdAt = new Date().toISOString();
+        await addDoc(collection(db, 'competitions'), compData);
+        alert('Competition created successfully!');
+      }
+
+      fetchData();
+      resetForm();
+    } catch (error) {
+      console.error('Failed to save competition:', error);
+      alert('Failed to save competition: ' + error.message);
+    }
+  };
+
+  const handleEdit = (comp) => {
+    setEditingComp(comp);
+    setFormData({
+      name: comp.name || '',
+      description: comp.description || '',
+      registrationOpenDate: comp.registrationOpenDate || comp.startDate || '',
+      registrationCloseDate: comp.registrationCloseDate || comp.startDate || '',
+      competitionStartDate: comp.competitionStartDate || comp.startDate || '',
+      competitionEndDate: comp.competitionEndDate || comp.endDate || '',
+      type: comp.type || 'FREE',
+      pricingModel: comp.pricingModel || 'flat',
+      flatPrice: comp.flatPrice || 0,
+      basePrice: comp.basePrice || 0,
+      perEventPrice: comp.perEventPrice || 0,
+      currency: comp.currency || 'INR',
+      solveLimit: comp.solveLimit || 5,
+      selectedEvents: comp.events || [],
+      scrambles: comp.scrambles || {}
+    });
+    setActiveTab('create');
   };
 
   const handleDelete = async (compId) => {
@@ -220,7 +278,24 @@ function AdminPanel() {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getRegistrationStatus = (comp) => {
+    const now = new Date();
+    const regOpen = comp.registrationOpenDate ? new Date(comp.registrationOpenDate) : null;
+    const regClose = comp.registrationCloseDate ? new Date(comp.registrationCloseDate) : null;
+
+    if (!regOpen || !regClose) return { status: 'unknown', label: 'Unknown' };
+    if (now < regOpen) return { status: 'not_opened', label: 'Not Opened' };
+    if (now > regClose) return { status: 'closed', label: 'Closed' };
+    return { status: 'open', label: 'Open' };
   };
 
   // Show loading while auth is being checked
@@ -250,7 +325,7 @@ function AdminPanel() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="py-6">
               <div className="flex items-center gap-4">
@@ -281,7 +356,20 @@ function AdminPanel() {
             <CardContent className="py-6">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-green-600" />
+                  <CreditCard className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{payments.length}</p>
+                  <p className="text-gray-500 text-sm">Payments</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{users.filter(u => u.role === 'ADMIN').length}</p>
@@ -293,12 +381,12 @@ function AdminPanel() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           <Button
             variant={activeTab === 'create' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('create')}
+            onClick={() => { setActiveTab('create'); resetForm(); }}
           >
-            Create Competition
+            {editingComp ? 'Edit Competition' : 'Create Competition'}
           </Button>
           <Button
             variant={activeTab === 'manage' ? 'default' : 'outline'}
@@ -312,12 +400,18 @@ function AdminPanel() {
           >
             Users
           </Button>
+          <Button
+            variant={activeTab === 'payments' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('payments')}
+          >
+            Payments
+          </Button>
         </div>
 
         {activeTab === 'create' && (
           <Card>
             <CardHeader>
-              <CardTitle>Create New Competition</CardTitle>
+              <CardTitle>{editingComp ? `Edit: ${editingComp.name}` : 'Create New Competition'}</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -342,24 +436,54 @@ function AdminPanel() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Start Date & Time *</Label>
-                    <Input
-                      type="datetime-local"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      required
-                    />
+                  {/* Registration Dates */}
+                  <div className="col-span-2 bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h3 className="font-semibold text-blue-900">Registration Window</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Registration Opens *</Label>
+                        <Input
+                          type="datetime-local"
+                          value={formData.registrationOpenDate}
+                          onChange={(e) => setFormData({ ...formData, registrationOpenDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Registration Closes *</Label>
+                        <Input
+                          type="datetime-local"
+                          value={formData.registrationCloseDate}
+                          onChange={(e) => setFormData({ ...formData, registrationCloseDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>End Date & Time *</Label>
-                    <Input
-                      type="datetime-local"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      required
-                    />
+                  {/* Competition Dates */}
+                  <div className="col-span-2 bg-green-50 p-4 rounded-lg space-y-4">
+                    <h3 className="font-semibold text-green-900">Competition Window</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Competition Starts *</Label>
+                        <Input
+                          type="datetime-local"
+                          value={formData.competitionStartDate}
+                          onChange={(e) => setFormData({ ...formData, competitionStartDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Competition Ends *</Label>
+                        <Input
+                          type="datetime-local"
+                          value={formData.competitionEndDate}
+                          onChange={(e) => setFormData({ ...formData, competitionEndDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -376,7 +500,7 @@ function AdminPanel() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Solve Limit</Label>
+                    <Label>Format: Ao{formData.solveLimit} (Average of {formData.solveLimit})</Label>
                     <Input
                       type="number"
                       value={formData.solveLimit}
@@ -386,6 +510,79 @@ function AdminPanel() {
                     />
                   </div>
                 </div>
+
+                {/* Pricing Section - Only show for PAID competitions */}
+                {formData.type === 'PAID' && (
+                  <div className="bg-yellow-50 p-4 rounded-lg space-y-4">
+                    <h3 className="font-semibold text-yellow-900">Pricing Configuration</h3>
+                    
+                    <div className="space-y-2">
+                      <Label>Pricing Model</Label>
+                      <Select value={formData.pricingModel} onValueChange={(value) => setFormData({ ...formData, pricingModel: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="flat">Flat Fee (Same price regardless of events)</SelectItem>
+                          <SelectItem value="base_plus_extra">Base + Per Event (Base fee + extra per additional event)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {formData.pricingModel === 'flat' && (
+                        <div className="space-y-2">
+                          <Label>Flat Price ({formData.currency})</Label>
+                          <Input
+                            type="number"
+                            value={formData.flatPrice}
+                            onChange={(e) => setFormData({ ...formData, flatPrice: e.target.value })}
+                            min="0"
+                            placeholder="e.g., 99"
+                          />
+                        </div>
+                      )}
+
+                      {formData.pricingModel === 'base_plus_extra' && (
+                        <>
+                          <div className="space-y-2">
+                            <Label>Base Price ({formData.currency})</Label>
+                            <Input
+                              type="number"
+                              value={formData.basePrice}
+                              onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
+                              min="0"
+                              placeholder="e.g., 50"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Per Additional Event ({formData.currency})</Label>
+                            <Input
+                              type="number"
+                              value={formData.perEventPrice}
+                              onChange={(e) => setFormData({ ...formData, perEventPrice: e.target.value })}
+                              min="0"
+                              placeholder="e.g., 20"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label>Currency</Label>
+                        <Select value={formData.currency} onValueChange={(value) => setFormData({ ...formData, currency: value })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INR">INR (₹)</SelectItem>
+                            <SelectItem value="USD">USD ($)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <Label className="text-lg">Select Events *</Label>
@@ -407,13 +604,13 @@ function AdminPanel() {
 
                 {formData.selectedEvents.length > 0 && (
                   <div className="space-y-6">
-                    <Label className="text-lg">Enter Scrambles (5 per event) *</Label>
+                    <Label className="text-lg">Enter Scrambles ({formData.solveLimit} per event) *</Label>
                     {formData.selectedEvents.map(eventId => {
                       const event = WCA_EVENTS.find(e => e.id === eventId);
                       return (
                         <div key={eventId} className="space-y-3 p-4 bg-gray-50 rounded-lg">
                           <h3 className="font-semibold">{event?.icon} {event?.name}</h3>
-                          {[0, 1, 2, 3, 4].map(i => (
+                          {Array.from({ length: formData.solveLimit }, (_, i) => (
                             <div key={i} className="space-y-1">
                               <Label className="text-gray-500 text-sm">Scramble {i + 1}</Label>
                               <Textarea
@@ -431,10 +628,17 @@ function AdminPanel() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full py-6 text-lg">
-                  <Plus className="h-5 w-5 mr-2" />
-                  Create Competition
-                </Button>
+                <div className="flex gap-4">
+                  <Button type="submit" className="flex-1 py-6 text-lg">
+                    <Plus className="h-5 w-5 mr-2" />
+                    {editingComp ? 'Update Competition' : 'Create Competition'}
+                  </Button>
+                  {editingComp && (
+                    <Button type="button" variant="outline" onClick={resetForm} className="py-6">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -451,33 +655,55 @@ function AdminPanel() {
                 </CardContent>
               </Card>
             ) : (
-              competitions.map(comp => (
-                <Card key={comp.id}>
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold mb-2">{comp.name}</h3>
-                        <div className="flex flex-wrap gap-2 text-sm text-gray-500">
-                          <span>{formatDate(comp.startDate)} - {formatDate(comp.endDate)}</span>
-                          <span>•</span>
-                          <span>{comp.events?.length || 0} events</span>
-                          <span>•</span>
-                          <Badge className={comp.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
-                            {comp.type}
-                          </Badge>
+              competitions.map(comp => {
+                const regStatus = getRegistrationStatus(comp);
+                return (
+                  <Card key={comp.id}>
+                    <CardContent className="py-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold mb-2">{comp.name}</h3>
+                          <div className="flex flex-wrap gap-2 text-sm text-gray-500 mb-2">
+                            <span>Reg: {formatDate(comp.registrationOpenDate)} - {formatDate(comp.registrationCloseDate)}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-sm text-gray-500 mb-2">
+                            <span>Comp: {formatDate(comp.competitionStartDate || comp.startDate)} - {formatDate(comp.competitionEndDate || comp.endDate)}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className={comp.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                              {comp.type}
+                            </Badge>
+                            <Badge className={
+                              regStatus.status === 'open' ? 'bg-blue-100 text-blue-700' :
+                              regStatus.status === 'closed' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-700'
+                            }>
+                              Reg: {regStatus.label}
+                            </Badge>
+                            <Badge variant="outline">{comp.events?.length || 0} events</Badge>
+                            <Badge variant="outline">{comp.participantCount || 0} participants</Badge>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(comp)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => router.push(`/competition/${comp.id}`)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(comp.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(comp.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         )}
@@ -499,10 +725,46 @@ function AdminPanel() {
                       <div>
                         <p className="font-medium">{user.displayName || 'Unknown'}</p>
                         <p className="text-sm text-gray-500">{user.email} • {user.wcaStyleId}</p>
+                        <p className="text-xs text-gray-400">Joined: {formatDate(user.createdAt)}</p>
                       </div>
                       <Badge className={user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}>
                         {user.role || 'USER'}
                       </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'payments' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Payments ({payments.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingData ? (
+                <p className="text-center py-8 text-gray-500">Loading...</p>
+              ) : payments.length === 0 ? (
+                <p className="text-center py-8 text-gray-500">No payments yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {payments.map(payment => (
+                    <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium">{payment.userName || 'Unknown User'}</p>
+                        <p className="text-sm text-gray-500">{payment.competitionName || 'Competition'}</p>
+                        <p className="text-xs text-gray-400">
+                          Payment ID: {payment.paymentId?.slice(-12) || 'N/A'} • {formatDate(payment.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg">{payment.currency === 'INR' ? '₹' : '$'}{payment.amount || 0}</p>
+                        <Badge className={payment.status === 'SUCCESS' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                          {payment.status || 'PENDING'}
+                        </Badge>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -60,18 +60,7 @@ function CompetitionDetail() {
       const compDoc = await getDoc(doc(db, 'competitions', params.competitionId));
       if (compDoc.exists()) {
         const data = compDoc.data();
-        const now = new Date();
-        const start = data.startDate ? new Date(data.startDate) : new Date();
-        const end = data.endDate ? new Date(data.endDate) : new Date();
-        
-        let status = 'UPCOMING';
-        if (now >= start && now <= end) {
-          status = 'LIVE';
-        } else if (now > end) {
-          status = 'ENDED';
-        }
-        
-        setCompetition({ id: compDoc.id, ...data, status });
+        setCompetition({ id: compDoc.id, ...data });
       }
     } catch (error) {
       console.error('Failed to fetch competition:', error);
@@ -125,15 +114,78 @@ function CompetitionDetail() {
 
     if (competition.pricingModel === 'flat') {
       price = competition.flatPrice || 0;
-    } else if (competition.pricingModel === 'per_event') {
-      price = (competition.flatPrice || 0) * eventCount;
     } else if (competition.pricingModel === 'base_plus_extra') {
       if (eventCount > 0) {
-        price = (competition.basePrice || 0) + ((competition.extraPrice || 0) * (eventCount - 1));
+        price = (competition.basePrice || 0) + ((competition.perEventPrice || 0) * Math.max(0, eventCount - 1));
       }
     }
 
     setTotalPrice(price);
+  }
+
+  // Get registration status
+  function getRegistrationStatus() {
+    if (!competition) return { canRegister: false, message: 'Loading...' };
+
+    const now = new Date();
+    const regOpen = competition.registrationOpenDate ? new Date(competition.registrationOpenDate) : null;
+    const regClose = competition.registrationCloseDate ? new Date(competition.registrationCloseDate) : null;
+
+    if (!regOpen || !regClose) {
+      // Fallback to legacy dates
+      return { canRegister: true, message: '', status: 'open' };
+    }
+
+    if (now < regOpen) {
+      return {
+        canRegister: false,
+        message: `Registration opens on ${formatDate(competition.registrationOpenDate)}`,
+        status: 'not_opened'
+      };
+    }
+
+    if (now > regClose) {
+      return {
+        canRegister: false,
+        message: 'Registration has closed',
+        status: 'closed'
+      };
+    }
+
+    return { canRegister: true, message: '', status: 'open' };
+  }
+
+  // Get competition status
+  function getCompetitionStatus() {
+    if (!competition) return { canCompete: false, message: 'Loading...' };
+
+    const now = new Date();
+    const compStart = competition.competitionStartDate ? new Date(competition.competitionStartDate) : 
+                      (competition.startDate ? new Date(competition.startDate) : null);
+    const compEnd = competition.competitionEndDate ? new Date(competition.competitionEndDate) :
+                    (competition.endDate ? new Date(competition.endDate) : null);
+
+    if (!compStart || !compEnd) {
+      return { canCompete: true, message: '', status: 'live' };
+    }
+
+    if (now < compStart) {
+      return {
+        canCompete: false,
+        message: `Competition starts on ${formatDate(competition.competitionStartDate || competition.startDate)}`,
+        status: 'upcoming'
+      };
+    }
+
+    if (now > compEnd) {
+      return {
+        canCompete: false,
+        message: 'Competition has ended',
+        status: 'ended'
+      };
+    }
+
+    return { canCompete: true, message: '', status: 'live' };
   }
 
   const handleEventToggle = (eventId) => {
@@ -157,6 +209,7 @@ function CompetitionDetail() {
 
     setProcessing(true);
     try {
+      // Create registration
       await addDoc(collection(db, 'registrations'), {
         userId: user.uid,
         userEmail: user.email,
@@ -169,6 +222,15 @@ function CompetitionDetail() {
         status: 'CONFIRMED',
         createdAt: new Date().toISOString()
       });
+
+      // Update competition participant count
+      try {
+        await updateDoc(doc(db, 'competitions', params.competitionId), {
+          participantCount: increment(1)
+        });
+      } catch (e) {
+        console.log('Could not update participant count');
+      }
 
       alert('Registration successful!');
       checkRegistration();
@@ -238,6 +300,45 @@ function CompetitionDetail() {
           });
 
           if (verifyResponse.ok) {
+            // Save registration after successful payment
+            await addDoc(collection(db, 'registrations'), {
+              userId: user.uid,
+              userEmail: user.email,
+              userName: userProfile?.displayName || 'Unknown',
+              wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+              competitionId: params.competitionId,
+              competitionName: competition.name,
+              events: selectedEvents,
+              type: 'PAID',
+              status: 'CONFIRMED',
+              paymentId: response.razorpay_payment_id,
+              createdAt: new Date().toISOString()
+            });
+
+            // Save payment record
+            await addDoc(collection(db, 'payments'), {
+              userId: user.uid,
+              userEmail: user.email,
+              userName: userProfile?.displayName || 'Unknown',
+              competitionId: params.competitionId,
+              competitionName: competition.name,
+              amount: totalPrice,
+              currency: competition.currency || 'INR',
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              status: 'SUCCESS',
+              createdAt: new Date().toISOString()
+            });
+
+            // Update participant count
+            try {
+              await updateDoc(doc(db, 'competitions', params.competitionId), {
+                participantCount: increment(1)
+              });
+            } catch (e) {
+              console.log('Could not update participant count');
+            }
+
             alert('Payment successful! Registration complete.');
             checkRegistration();
             fetchParticipantCount();
@@ -288,6 +389,9 @@ function CompetitionDetail() {
   const getCurrencySymbol = (currency) => {
     return currency === 'INR' ? '₹' : '$';
   };
+
+  const regStatus = getRegistrationStatus();
+  const compStatus = getCompetitionStatus();
 
   if (loading || authLoading) {
     return (
@@ -360,20 +464,27 @@ function CompetitionDetail() {
                 <div className="flex items-center gap-3 mb-2">
                   <Badge variant="outline">ONLINE</Badge>
                   <Badge className={
-                    competition.status === 'LIVE' ? 'bg-green-100 text-green-700' :
-                    competition.status === 'UPCOMING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                    compStatus.status === 'live' ? 'bg-green-100 text-green-700' :
+                    compStatus.status === 'upcoming' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
                   }>
-                    {competition.status}
+                    {compStatus.status?.toUpperCase()}
                   </Badge>
-                  <Badge className={competition.type === 'FREE' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}>
-                    {competition.type === 'FREE' ? 'FREE' : `${getCurrencySymbol(competition.currency)}${competition.flatPrice || competition.basePrice || 0}`}
+                  <Badge className={
+                    regStatus.status === 'open' ? 'bg-blue-100 text-blue-700' :
+                    regStatus.status === 'closed' ? 'bg-red-100 text-red-700' :
+                    'bg-orange-100 text-orange-700'
+                  }>
+                    REG: {regStatus.status === 'open' ? 'OPEN' : regStatus.status === 'closed' ? 'CLOSED' : 'NOT YET'}
+                  </Badge>
+                  <Badge className={competition.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}>
+                    {competition.type === 'FREE' ? 'FREE' : 'PAID'}
                   </Badge>
                 </div>
                 <CardTitle className="text-3xl text-gray-900 mb-2">{competition.name}</CardTitle>
                 <CardDescription className="text-gray-600 text-lg">
                   <div className="flex items-center gap-2 mt-2">
                     <Calendar className="h-4 w-4" />
-                    {formatDate(competition.startDate)} - {formatDate(competition.endDate)}
+                    {formatDate(competition.competitionStartDate || competition.startDate)} - {formatDate(competition.competitionEndDate || competition.endDate)}
                   </div>
                 </CardDescription>
               </div>
@@ -392,8 +503,8 @@ function CompetitionDetail() {
               </div>
               <div className="bg-gray-50 p-4 rounded-lg text-center">
                 <Clock className="h-6 w-6 mx-auto mb-2 text-purple-500" />
-                <p className="text-2xl font-bold text-gray-900">{competition.solveLimit || 5}</p>
-                <p className="text-gray-500 text-sm">Solve Limit</p>
+                <p className="text-2xl font-bold text-gray-900">Ao{competition.solveLimit || 5}</p>
+                <p className="text-gray-500 text-sm">Format</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg text-center">
                 <Users className="h-6 w-6 mx-auto mb-2 text-green-500" />
@@ -403,20 +514,28 @@ function CompetitionDetail() {
               <div className="bg-gray-50 p-4 rounded-lg text-center">
                 <DollarSign className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
                 <p className="text-2xl font-bold text-gray-900">
-                  {competition.type === 'FREE' ? 'FREE' : `${getCurrencySymbol(competition.currency)}${competition.flatPrice || 0}`}
+                  {competition.type === 'FREE' ? 'FREE' : `${getCurrencySymbol(competition.currency)}${competition.flatPrice || competition.basePrice || 0}+`}
                 </p>
                 <p className="text-gray-500 text-sm">Entry Fee</p>
               </div>
             </div>
 
-            {/* Status Messages */}
-            {competition.status === 'UPCOMING' && (
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-4">
-                <strong>Upcoming:</strong> Competition starts on {formatDate(competition.startDate)}
+            {/* Registration Status Messages */}
+            {!registration && regStatus.status === 'not_opened' && (
+              <div className="bg-orange-50 border border-orange-200 text-orange-800 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                <span><strong>Registration Not Open Yet:</strong> {regStatus.message}</span>
               </div>
             )}
 
-            {competition.status === 'ENDED' && (
+            {!registration && regStatus.status === 'closed' && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                <span><strong>Registration Closed:</strong> {regStatus.message}</span>
+              </div>
+            )}
+
+            {compStatus.status === 'ended' && (
               <div className="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-3 rounded-lg mb-4">
                 This competition has ended. View the leaderboard to see results.
               </div>
@@ -424,8 +543,8 @@ function CompetitionDetail() {
           </CardContent>
         </Card>
 
-        {/* Event Selection - Only show if not registered and competition is active */}
-        {!registration && competition.status !== 'ENDED' && (
+        {/* Event Selection - Only show if can register and not registered */}
+        {!registration && regStatus.canRegister && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Select Events to Register</CardTitle>
@@ -466,32 +585,34 @@ function CompetitionDetail() {
                     ))}
                   </div>
 
+                  {/* Pricing Display */}
                   {competition.type === 'PAID' && selectedEvents.length > 0 && (
                     <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4">
-                      <p className="font-bold text-lg">Total: {getCurrencySymbol(competition.currency)}{totalPrice}</p>
+                      <p className="text-sm mb-1">
+                        {competition.pricingModel === 'flat' ? 'Flat fee' : `Base fee + ${getCurrencySymbol(competition.currency)}${competition.perEventPrice || 0} per additional event`}
+                      </p>
+                      <p className="font-bold text-xl">Total: {getCurrencySymbol(competition.currency)}{totalPrice}</p>
                     </div>
                   )}
 
-                  {competition.status === 'LIVE' || competition.status === 'UPCOMING' ? (
-                    competition.type === 'FREE' ? (
-                      <Button
-                        onClick={handleRegisterFree}
-                        disabled={processing || selectedEvents.length === 0}
-                        className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg"
-                      >
-                        {processing ? 'Registering...' : 'Register (Free)'}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handlePayment}
-                        disabled={processing || selectedEvents.length === 0}
-                        className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg"
-                      >
-                        <DollarSign className="h-5 w-5 mr-2" />
-                        {processing ? 'Processing...' : `Pay ${getCurrencySymbol(competition.currency)}${totalPrice} & Register`}
-                      </Button>
-                    )
-                  ) : null}
+                  {competition.type === 'FREE' ? (
+                    <Button
+                      onClick={handleRegisterFree}
+                      disabled={processing || selectedEvents.length === 0}
+                      className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg"
+                    >
+                      {processing ? 'Registering...' : 'Register (Free)'}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handlePayment}
+                      disabled={processing || selectedEvents.length === 0}
+                      className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg"
+                    >
+                      <DollarSign className="h-5 w-5 mr-2" />
+                      {processing ? 'Processing...' : `Pay ${getCurrencySymbol(competition.currency)}${totalPrice} & Register`}
+                    </Button>
+                  )}
                 </>
               )}
             </CardContent>
@@ -499,7 +620,7 @@ function CompetitionDetail() {
         )}
 
         {/* Registered - Start Competition */}
-        {registration && (competition.status === 'LIVE' || competition.status === 'UPCOMING') && (
+        {registration && (
           <Card className="mb-6 border-green-200 bg-green-50">
             <CardContent className="py-6">
               <div className="text-center space-y-4">
@@ -512,7 +633,8 @@ function CompetitionDetail() {
                     </Badge>
                   ))}
                 </div>
-                {competition.status === 'LIVE' ? (
+                
+                {compStatus.canCompete ? (
                   <Button
                     onClick={handleStartCompetition}
                     className="bg-blue-600 hover:bg-blue-700 py-6 px-8 text-lg"
@@ -520,10 +642,13 @@ function CompetitionDetail() {
                     <Play className="h-5 w-5 mr-2" />
                     Start Competition
                   </Button>
+                ) : compStatus.status === 'upcoming' ? (
+                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg inline-flex items-center gap-2">
+                    <Lock className="h-5 w-5" />
+                    <span>{compStatus.message}</span>
+                  </div>
                 ) : (
-                  <p className="text-yellow-700 font-medium">
-                    Competition starts on {formatDate(competition.startDate)}
-                  </p>
+                  <p className="text-gray-600">{compStatus.message}</p>
                 )}
               </div>
             </CardContent>
