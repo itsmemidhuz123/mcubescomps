@@ -1,24 +1,75 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { useAuth } from '@/contexts/AuthContext';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Calendar, Users, Search, Trophy } from 'lucide-react';
-import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+import { Trophy, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+
+// Header Component
+function Header() {
+  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
+  const router = useRouter();
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">MCUBES</span>
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
+            <Link href="/competitions" className="text-blue-600 font-semibold">Competitions</Link>
+            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
+            <Link href="/timer" className="text-gray-600 hover:text-gray-900 font-medium">Timer</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            {!loading && user ? (
+              <>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={() => router.push('/admin')} className="border-purple-200 text-purple-600">
+                    Admin
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
+                  {userProfile?.displayName || 'Profile'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => router.push('/auth/login')}>Sign In</Button>
+                <Button onClick={() => router.push('/auth/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                  Get Started
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function CompetitionsPage() {
   const router = useRouter();
   const [competitions, setCompetitions] = useState([]);
   const [filteredComps, setFilteredComps] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
     fetchCompetitions();
@@ -26,37 +77,34 @@ function CompetitionsPage() {
 
   useEffect(() => {
     filterCompetitions();
-  }, [competitions, searchTerm, statusFilter]);
+  }, [competitions, filter, searchQuery]);
 
   async function fetchCompetitions() {
     try {
       const compsRef = collection(db, 'competitions');
-      const q = query(compsRef, orderBy('startDate', 'desc'));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(compsRef);
       
       const compsData = [];
       snapshot.forEach(doc => {
         const data = doc.data();
         const now = new Date();
-        const start = new Date(data.startDate);
-        const end = new Date(data.endDate);
+        const start = data.startDate ? new Date(data.startDate) : new Date();
+        const end = data.endDate ? new Date(data.endDate) : new Date();
         
         let status = 'UPCOMING';
-        if (now >= start && now <= end) {
-          status = 'LIVE';
-        } else if (now > end) {
-          status = 'ENDED';
-        }
+        if (now >= start && now <= end) status = 'LIVE';
+        else if (now > end) status = 'PAST';
         
-        compsData.push({
-          id: doc.id,
-          ...data,
-          status
-        });
+        compsData.push({ id: doc.id, ...data, status });
+      });
+      
+      compsData.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate) : new Date(0);
+        const dateB = b.startDate ? new Date(b.startDate) : new Date(0);
+        return dateB - dateA;
       });
       
       setCompetitions(compsData);
-      setFilteredComps(compsData);
     } catch (error) {
       console.error('Failed to fetch competitions:', error);
     } finally {
@@ -65,233 +113,220 @@ function CompetitionsPage() {
   }
 
   function filterCompetitions() {
-    let filtered = competitions;
-
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(comp => comp.status === statusFilter.toUpperCase());
+    let filtered = [...competitions];
+    
+    if (filter === 'upcoming') {
+      filtered = filtered.filter(c => c.status === 'UPCOMING' || c.status === 'LIVE');
+    } else if (filter === 'completed') {
+      filtered = filtered.filter(c => c.status === 'PAST');
     }
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(comp => 
-        comp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        comp.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    if (searchQuery) {
+      filtered = filtered.filter(c => 
+        c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.events || []).some(e => e.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
-
+    
     setFilteredComps(filtered);
   }
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
     return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
     });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'UPCOMING': return 'bg-yellow-500';
-      case 'LIVE': return 'bg-green-500';
-      case 'ENDED': return 'bg-gray-500';
-      default: return 'bg-blue-500';
-    }
-  };
+  const upcomingComps = filteredComps.filter(c => c.status === 'UPCOMING' || c.status === 'LIVE');
+  const pastComps = filteredComps.filter(c => c.status === 'PAST');
 
-  const getCurrencySymbol = (currency) => {
-    return currency === 'INR' ? '₹' : '$';
-  };
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
 
-  const upcomingComps = filteredComps.filter(c => c.status === 'UPCOMING');
-  const liveComps = filteredComps.filter(c => c.status === 'LIVE');
-  const endedComps = filteredComps.filter(c => c.status === 'ENDED');
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading competitions...</div>
-      </div>
-    );
-  }
-
-  const CompetitionCard = ({ comp }) => (
-    <Card
-      className="bg-gray-800 border-gray-700 hover:border-blue-500 transition-colors cursor-pointer"
-      onClick={() => router.push(`/competition/${comp.id}`)}
-    >
-      <CardHeader>
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <CardTitle className="text-xl text-white mb-2">{comp.name}</CardTitle>
-            <CardDescription className="text-gray-400">
-              {comp.description && <p className="mb-2">{comp.description.substring(0, 100)}{comp.description.length > 100 && '...'}</p>}
-              <div className="flex items-center gap-2 mt-2">
-                <Calendar className="h-4 w-4" />
-                {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
-              </div>
-            </CardDescription>
-          </div>
-          <Badge className={getStatusColor(comp.status)}>
-            {comp.status}
-          </Badge>
+      <div className="container mx-auto px-4 py-8">
+        {/* Page Title */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">All Competitions</h1>
+          <p className="text-gray-500">Swipe/scroll to explore — filter by upcoming or completed.</p>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {comp.events?.slice(0, 5).map(eventId => (
-            <Badge key={eventId} variant="outline" className="border-gray-600">
-              {getEventIcon(eventId)} {getEventName(eventId)}
-            </Badge>
-          ))}
-          {comp.events?.length > 5 && (
-            <Badge variant="outline" className="border-gray-600">+{comp.events.length - 5} more</Badge>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-4 mb-8">
+          <div className="flex bg-white rounded-full p-1 shadow-sm border border-gray-100">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+                filter === 'all' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilter('upcoming')}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+                filter === 'upcoming' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Upcoming
+            </button>
+            <button
+              onClick={() => setFilter('completed')}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+                filter === 'completed' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Completed
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative max-w-md mb-8">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Input
+            placeholder="Search by name / ID / events / mode..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-12 py-6 bg-white border-gray-200 rounded-xl"
+          />
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12 text-gray-400">Loading competitions...</div>
+        ) : filteredComps.length === 0 ? (
+          <Card className="bg-white border-dashed">
+            <CardContent className="py-16 text-center">
+              <div className="text-6xl mb-4">🧊</div>
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">No competitions found</h3>
+              <p className="text-gray-500">Try adjusting your filters or check back later.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Upcoming Competitions */}
+            {upcomingComps.length > 0 && (
+              <section className="mb-12">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Upcoming Competitions</h2>
+                    <p className="text-gray-500 text-sm">Nearest first</p>
+                  </div>
+                </div>
+                
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {upcomingComps.map(comp => (
+                    <CompetitionCard key={comp.id} comp={comp} router={router} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Past Competitions */}
+            {pastComps.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Past Competitions</h2>
+                    <p className="text-gray-500 text-sm">Latest → Oldest</p>
+                  </div>
+                </div>
+                
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {pastComps.map(comp => (
+                    <CompetitionCard key={comp.id} comp={comp} router={router} isPast />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* CTA Section */}
+      <section className="py-16 mt-8">
+        <div className="container mx-auto px-4">
+          <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 rounded-3xl p-12">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+              <div>
+                <h2 className="text-3xl font-bold text-white mb-2">Ready to compete?</h2>
+                <p className="text-blue-100">Register early and lock your slots before they fill.</p>
+              </div>
+              <Button 
+                size="lg"
+                onClick={() => router.push('/auth/register')}
+                className="bg-white text-blue-600 hover:bg-blue-50 px-8"
+              >
+                Get Started
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CompetitionCard({ comp, router, isPast = false }) {
+  const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    });
+  };
+
+  return (
+    <Card className="bg-white border border-gray-100 hover:border-blue-200 hover:shadow-lg transition-all duration-300">
+      <CardContent className="p-6">
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Badge variant="outline" className="bg-gray-50">ONLINE</Badge>
+          {isPast ? (
+            <Badge className="bg-gray-100 text-gray-600">PAST</Badge>
+          ) : (
+            <>
+              {comp.status === 'LIVE' && <Badge className="bg-green-100 text-green-700">LIVE</Badge>}
+              {comp.status === 'UPCOMING' && <Badge className="bg-yellow-100 text-yellow-700">UPCOMING</Badge>}
+              <Badge className="bg-blue-100 text-blue-700">REG OPEN</Badge>
+            </>
           )}
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4 text-gray-400">
-            <span>{comp.events?.length || 0} events</span>
-            <span>•</span>
-            <span>{comp.solveLimit} solves</span>
-          </div>
-          <Badge className={comp.type === 'FREE' ? 'bg-green-600' : 'bg-yellow-600'}>
-            {comp.type === 'FREE' ? 'FREE' : `${getCurrencySymbol(comp.currency)}${comp.flatPrice || comp.basePrice}`}
-          </Badge>
+        
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{comp.name}</h3>
+        
+        <p className="text-blue-600 font-medium mb-3">
+          {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
+        </p>
+        
+        <p className="text-gray-500 text-sm mb-4">
+          Events: {(comp.events || []).join(', ') || 'TBD'}
+        </p>
+        
+        <div className="flex gap-3 pt-4 border-t border-gray-100">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1"
+            onClick={() => router.push(`/competition/${comp.id}`)}
+          >
+            View details
+          </Button>
+          {isPast ? (
+            <Button size="sm" className="flex-1 bg-purple-600 hover:bg-purple-700">
+              View Results
+            </Button>
+          ) : (
+            <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
+              Register Now
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
-  );
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-      <div className="container mx-auto px-4 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/')}
-          className="mb-6 text-gray-400 hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
-        </Button>
-
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Trophy className="h-10 w-10 text-blue-500" />
-            <div>
-              <h1 className="text-4xl font-bold">All Competitions</h1>
-              <p className="text-gray-400">Browse and join speedcubing competitions</p>
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="relative mb-6">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search competitions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-800 border-gray-700 text-white"
-            />
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="py-4 text-center">
-                <p className="text-2xl font-bold text-green-500">{liveComps.length}</p>
-                <p className="text-gray-400 text-sm">Live Now</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="py-4 text-center">
-                <p className="text-2xl font-bold text-yellow-500">{upcomingComps.length}</p>
-                <p className="text-gray-400 text-sm">Upcoming</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="py-4 text-center">
-                <p className="text-2xl font-bold text-gray-500">{endedComps.length}</p>
-                <p className="text-gray-400 text-sm">Ended</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="py-4 text-center">
-                <p className="text-2xl font-bold text-blue-500">{competitions.length}</p>
-                <p className="text-gray-400 text-sm">Total</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <Tabs defaultValue="all" className="space-y-6" onValueChange={setStatusFilter}>
-          <TabsList className="bg-gray-800 border-gray-700">
-            <TabsTrigger value="all">All ({competitions.length})</TabsTrigger>
-            <TabsTrigger value="live">Live ({liveComps.length})</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming ({upcomingComps.length})</TabsTrigger>
-            <TabsTrigger value="ended">Ended ({endedComps.length})</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all">
-            {filteredComps.length === 0 ? (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-12 text-center text-gray-400">
-                  No competitions found
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {filteredComps.map(comp => <CompetitionCard key={comp.id} comp={comp} />)}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="live">
-            {liveComps.length === 0 ? (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-12 text-center text-gray-400">
-                  No live competitions right now
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {liveComps.map(comp => <CompetitionCard key={comp.id} comp={comp} />)}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="upcoming">
-            {upcomingComps.length === 0 ? (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-12 text-center text-gray-400">
-                  No upcoming competitions
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {upcomingComps.map(comp => <CompetitionCard key={comp.id} comp={comp} />)}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="ended">
-            {endedComps.length === 0 ? (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-12 text-center text-gray-400">
-                  No ended competitions
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {endedComps.map(comp => <CompetitionCard key={comp.id} comp={comp} />)}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
   );
 }
 

@@ -20,44 +20,23 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    function isBanned() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == true;
-    }
-    
     // ============================================
     // USERS COLLECTION
     // ============================================
     
     match /users/{userId} {
-      // Public profile read allowed
+      // Anyone can read user profiles (for leaderboards)
       allow read: if true;
       
-      // Users can create their own profile (registration)
-      allow create: if isAuthenticated() && 
-                       request.auth.uid == userId &&
-                       request.resource.data.keys().hasAll(['email', 'wcaStyleId', 'displayName', 'role']) &&
-                       request.resource.data.role == 'USER' && // Cannot self-assign admin
-                       request.resource.data.wcaStyleId is string &&
-                       request.resource.data.email == request.auth.token.email;
+      // Users can create their own profile
+      allow create: if isAuthenticated() && request.auth.uid == userId;
       
-      // Users can update only specific fields (not role, wcaStyleId, createdAt)
+      // Users can update their own profile (except role)
       allow update: if isOwner(userId) &&
-                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'wcaStyleId', 'createdAt', 'email']) &&
-                       request.resource.data.keys().hasAll(resource.data.keys()); // Cannot remove fields
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'wcaStyleId']);
       
-      // Only admin can delete users
+      // Only admin can delete
       allow delete: if isAdmin();
-    }
-    
-    // ============================================
-    // USER SESSIONS (for custom auth)
-    // ============================================
-    
-    match /userSessions/{sessionId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
     }
     
     // ============================================
@@ -65,21 +44,11 @@ service cloud.firestore {
     // ============================================
     
     match /competitions/{competitionId} {
-      // Public read allowed
+      // Anyone can read competitions (public page)
       allow read: if true;
       
-      // Only admin can create competitions
-      allow create: if isAdmin() &&
-                       request.resource.data.keys().hasAll(['name', 'startDate', 'endDate', 'events', 'scrambles', 'type', 'solveLimit']) &&
-                       request.resource.data.solveLimit is int &&
-                       request.resource.data.solveLimit > 0 &&
-                       request.resource.data.solveLimit <= 100;
-      
-      // Only admin can update competitions
-      allow update: if isAdmin();
-      
-      // Only admin can delete competitions
-      allow delete: if isAdmin();
+      // Only admin can create/update/delete
+      allow create, update, delete: if isAdmin();
     }
     
     // ============================================
@@ -87,112 +56,63 @@ service cloud.firestore {
     // ============================================
     
     match /registrations/{registrationId} {
-      // Users can read their own registrations, admin can read all
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Users can read their own, admin can read all
+      allow read: if isAuthenticated();
       
-      // Users can create registrations (must match userId_competitionId format)
-      allow create: if isAuthenticated() &&
-                       !isBanned() &&
-                       request.resource.data.userId == request.auth.uid &&
-                       registrationId == request.auth.uid + '_' + request.resource.data.competitionId &&
-                       request.resource.data.keys().hasAll(['userId', 'competitionId', 'events', 'registeredAt']);
+      // Authenticated users can register
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       
-      // Registrations are permanent - no updates or deletes
+      // No updates or deletes
       allow update, delete: if false;
     }
     
     // ============================================
-    // SOLVES COLLECTION (CRITICAL - NO CLIENT WRITES)
+    // SOLVES COLLECTION
     // ============================================
     
     match /solves/{solveId} {
-      // Users can read their own solves, admin can read all
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Users can read their own, admin can read all
+      allow read: if isAuthenticated();
       
-      // Users can create solves with strict validation
-      allow create: if isAuthenticated() &&
-                       !isBanned() &&
+      // Authenticated users can create solves
+      allow create: if isAuthenticated() && 
                        request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'competitionId', 'eventId', 'attemptNumber', 'time', 'penalty', 'timestamp']) &&
                        request.resource.data.time is number &&
-                       request.resource.data.time >= 500 && // Minimum 0.5 seconds (anti-cheat)
-                       request.resource.data.time <= 3600000 && // Maximum 1 hour
-                       request.resource.data.penalty in ['none', '+2', 'DNF'] &&
-                       request.resource.data.attemptNumber is int &&
-                       request.resource.data.attemptNumber >= 1 &&
-                       request.resource.data.attemptNumber <= 100;
+                       request.resource.data.time >= 500 &&
+                       request.resource.data.time <= 3600000;
       
-      // Solves are immutable - no updates or deletes
+      // No updates or deletes
       allow update, delete: if false;
     }
     
     // ============================================
-    // RESULTS COLLECTION (SERVER-SIDE ONLY)
+    // RESULTS COLLECTION (Public Leaderboard)
     // ============================================
     
     match /results/{resultId} {
-      // Public read allowed (for leaderboards)
+      // Anyone can read results (public leaderboard)
       allow read: if true;
       
-      // IMPORTANT: Results can ONLY be written by server (authenticated admin or server SDK)
-      // Users cannot write results directly
-      allow create, update: if isAuthenticated() &&
-                               request.resource.data.userId == request.auth.uid &&
-                               request.resource.data.keys().hasAll(['userId', 'competitionId', 'eventId', 'times', 'average', 'bestSingle']) &&
-                               request.resource.data.times is list &&
-                               request.resource.data.times.size() == 5;
+      // Only authenticated users can create their results
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       
-      // Results are permanent - no deletes
-      allow delete: if false;
+      // Only admin can update/delete
+      allow update, delete: if isAdmin();
     }
     
     // ============================================
-    // PAYMENTS COLLECTION (SERVER-SIDE ONLY)
+    // PAYMENTS COLLECTION
     // ============================================
     
     match /payments/{paymentId} {
-      // Users can only read their own payment records
+      // Users can read their own payments
       allow read: if isAuthenticated() && 
                      (resource.data.userId == request.auth.uid || isAdmin());
       
-      // Only server can create payment records (after Razorpay verification)
-      allow create: if isAuthenticated() &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'competitionId', 'paymentId', 'orderId', 'status', 'createdAt']);
+      // Only authenticated users can create
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       
-      // Payment records are immutable
-      allow update, delete: if false;
-    }
-    
-    // ============================================
-    // ADMIN LOGS COLLECTION
-    // ============================================
-    
-    match /adminLogs/{logId} {
-      // Only admin can read logs
-      allow read: if isAdmin();
-      
-      // Server creates logs
-      allow create: if isAdmin();
-      
-      // Logs are immutable
-      allow update, delete: if false;
-    }
-    
-    // ============================================
-    // SCRAMBLE REVEAL STATE (Anti-Cheat)
-    // ============================================
-    
-    match /scrambleReveals/{revealId} {
-      // Users can read their own reveal state
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      
-      // Users can create reveal state (format: userId_competitionId_eventId_attemptNumber)
-      allow create: if isAuthenticated() &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'competitionId', 'eventId', 'attemptNumber', 'revealedAt']);
-      
-      // Reveal state is immutable
+      // No updates or deletes from client
       allow update, delete: if false;
     }
   }

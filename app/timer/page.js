@@ -1,0 +1,304 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { RotateCcw, Settings, Clock } from 'lucide-react';
+import Link from 'next/link';
+
+// Header Component
+function Header() {
+  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
+  const router = useRouter();
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">MCUBES</span>
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
+            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
+            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
+            <Link href="/timer" className="text-blue-600 font-semibold">Timer</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            {!loading && user ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
+                  {userProfile?.displayName || 'Profile'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => router.push('/auth/login')}>Sign In</Button>
+                <Button onClick={() => router.push('/auth/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                  Get Started
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function TimerPage() {
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isInspecting, setIsInspecting] = useState(false);
+  const [inspectionTime, setInspectionTime] = useState(15);
+  const [solves, setSolves] = useState([]);
+  const [isHolding, setIsHolding] = useState(false);
+  const [canStart, setCanStart] = useState(false);
+  const holdTimerRef = useRef(null);
+  const intervalRef = useRef(null);
+
+  const formatTime = (ms) => {
+    if (ms < 0) return '0.00';
+    const seconds = Math.floor(ms / 1000);
+    const centiseconds = Math.floor((ms % 1000) / 10);
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    
+    if (minutes > 0) {
+      return `${minutes}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+    }
+    return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
+  };
+
+  const startTimer = useCallback(() => {
+    setIsRunning(true);
+    setIsInspecting(false);
+    const startTime = Date.now();
+    intervalRef.current = setInterval(() => {
+      setTime(Date.now() - startTime);
+    }, 10);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    setIsRunning(false);
+    setSolves(prev => [time, ...prev].slice(0, 12));
+  }, [time]);
+
+  const startInspection = useCallback(() => {
+    setIsInspecting(true);
+    setInspectionTime(15);
+    intervalRef.current = setInterval(() => {
+      setInspectionTime(prev => {
+        if (prev <= 1) {
+          clearInterval(intervalRef.current);
+          startTimer();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [startTimer]);
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.code === 'Space' && !isHolding) {
+      e.preventDefault();
+      if (isRunning) {
+        stopTimer();
+      } else if (!isInspecting) {
+        setIsHolding(true);
+        holdTimerRef.current = setTimeout(() => {
+          setCanStart(true);
+        }, 300);
+      }
+    }
+  }, [isRunning, isInspecting, isHolding, stopTimer]);
+
+  const handleKeyUp = useCallback((e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+      if (canStart && !isRunning) {
+        startTimer();
+      }
+      setIsHolding(false);
+      setCanStart(false);
+    }
+  }, [canStart, isRunning, startTimer]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, [handleKeyDown, handleKeyUp]);
+
+  const reset = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setTime(0);
+    setIsRunning(false);
+    setIsInspecting(false);
+    setInspectionTime(15);
+  };
+
+  const calculateAo5 = () => {
+    if (solves.length < 5) return null;
+    const last5 = solves.slice(0, 5);
+    const sorted = [...last5].sort((a, b) => a - b);
+    const middle3 = sorted.slice(1, 4);
+    return middle3.reduce((a, b) => a + b, 0) / 3;
+  };
+
+  const ao5 = calculateAo5();
+  const best = solves.length > 0 ? Math.min(...solves) : null;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black">
+      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">M</span>
+              </div>
+              <span className="text-xl font-bold text-white">MCUBES</span>
+            </Link>
+            
+            <nav className="hidden md:flex items-center gap-8">
+              <Link href="/" className="text-gray-400 hover:text-white font-medium">Home</Link>
+              <Link href="/competitions" className="text-gray-400 hover:text-white font-medium">Competitions</Link>
+              <Link href="/rankings" className="text-gray-400 hover:text-white font-medium">Rankings</Link>
+              <Link href="/timer" className="text-blue-400 font-semibold">Timer</Link>
+            </nav>
+
+            <div className="flex items-center gap-3">
+              <Link href="/auth/login">
+                <Button variant="ghost" className="text-gray-400 hover:text-white">Sign In</Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Timer Display */}
+          <div className="text-center mb-8">
+            <div 
+              className={`text-9xl font-mono font-bold mb-4 transition-colors ${
+                isHolding && !canStart ? 'text-red-500' : 
+                canStart ? 'text-green-500' : 
+                isRunning ? 'text-white' : 
+                isInspecting ? 'text-yellow-500' : 'text-white'
+              }`}
+            >
+              {isInspecting ? inspectionTime : formatTime(time)}
+            </div>
+            
+            <p className="text-gray-400 mb-6">
+              {isRunning ? 'Press SPACE to stop' : 
+               isInspecting ? 'Inspection...' :
+               isHolding ? (canStart ? 'Release to start!' : 'Hold...') :
+               'Hold SPACE to start'}
+            </p>
+
+            <div className="flex justify-center gap-4">
+              <Button 
+                variant="outline" 
+                onClick={reset}
+                className="border-gray-700 text-gray-300 hover:bg-gray-800"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Reset
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={startInspection}
+                disabled={isRunning || isInspecting}
+                className="border-gray-700 text-gray-300 hover:bg-gray-800"
+              >
+                <Clock className="w-4 h-4 mr-2" />
+                Start Inspection
+              </Button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <Card className="bg-gray-800 border-gray-700">
+              <CardContent className="p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Best</div>
+                <div className="text-2xl font-bold text-green-400">
+                  {best ? formatTime(best) : '-'}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700">
+              <CardContent className="p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Ao5</div>
+                <div className="text-2xl font-bold text-blue-400">
+                  {ao5 ? formatTime(ao5) : '-'}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700">
+              <CardContent className="p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Solves</div>
+                <div className="text-2xl font-bold text-purple-400">
+                  {solves.length}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Solves List */}
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Recent Solves</h3>
+              {solves.length === 0 ? (
+                <p className="text-gray-400 text-center py-8">No solves yet. Press SPACE to start!</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {solves.map((solve, index) => (
+                    <div 
+                      key={index}
+                      className={`p-3 rounded-lg text-center ${
+                        solve === best ? 'bg-green-900/50 border border-green-700' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div className="text-xs text-gray-400 mb-1">#{solves.length - index}</div>
+                      <div className={`font-mono font-bold ${
+                        solve === best ? 'text-green-400' : 'text-white'
+                      }`}>
+                        {formatTime(solve)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default TimerPage;
