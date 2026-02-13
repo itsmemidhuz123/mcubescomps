@@ -24,7 +24,8 @@ function RegisterPage() {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    country: ''
+    country: '',
+    wcaId: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,8 @@ function RegisterPage() {
         formData.password,
         formData.firstName,
         formData.lastName,
-        formData.country
+        formData.country,
+        formData.wcaId
       );
       router.push('/');
     } catch (error) {
