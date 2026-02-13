@@ -115,17 +115,45 @@ function RankingsPage() {
       const resultsRef = collection(db, 'results');
       const snapshot = await getDocs(resultsRef);
       
-      const rankingsData = [];
+      // Group results by user and keep only their best result for this event
+      const userBestResults = new Map();
+      
       snapshot.forEach(doc => {
         const data = doc.data();
         if (data.eventId === selectedEvent) {
-          rankingsData.push({
+          const userId = data.userId;
+          const currentResult = {
             id: doc.id,
             ...data
-          });
+          };
+          
+          // Get the relevant time for comparison based on mode
+          const currentTime = mode === 'single' 
+            ? (currentResult.bestSingle || Infinity) 
+            : (currentResult.average || Infinity);
+          
+          // Check if we already have a result for this user
+          const existingResult = userBestResults.get(userId);
+          
+          if (!existingResult) {
+            // First result for this user
+            userBestResults.set(userId, currentResult);
+          } else {
+            // Compare with existing result and keep the better one
+            const existingTime = mode === 'single'
+              ? (existingResult.bestSingle || Infinity)
+              : (existingResult.average || Infinity);
+            
+            if (currentTime < existingTime) {
+              userBestResults.set(userId, currentResult);
+            }
+          }
         }
       });
 
+      // Convert map to array and sort
+      const rankingsData = Array.from(userBestResults.values());
+      
       // Sort by best single or average
       rankingsData.sort((a, b) => {
         if (mode === 'single') {
