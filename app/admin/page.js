@@ -55,12 +55,18 @@ function AdminPanel() {
   async function fetchCompetitions() {
     try {
       const compsRef = collection(db, 'competitions');
-      const q = query(compsRef, orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(compsRef);
       const compsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort client-side
+      compsData.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateB - dateA;
+      });
       setCompetitions(compsData);
     } catch (error) {
       console.error('Failed to fetch competitions:', error);
+      setCompetitions([]);
     } finally {
       setLoadingData(false);
     }
