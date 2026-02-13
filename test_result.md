@@ -101,3 +101,174 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Build MCUBES - Online Speedcubing Competition Platform with:
+  1. Registration Date Control (registrationOpenDate, registrationCloseDate, competitionStartDate, competitionEndDate)
+  2. Competition Timer System with WCA inspection rules (15s inspection, +2 at 15-17s, DNF at 17s+)
+  3. Scramble reveal tracking with DNF on refresh
+  4. Leaderboard showing registered users even without solves
+  5. Advanced Pricing Model (Flat fee OR Base + per-event fee)
+  6. Profile Update functionality
+  7. Payment Tab Privacy (user sees only their payments, admin sees all)
+  8. WCA ID field optional and editable during registration
+
+backend:
+  - task: "API Health Check"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "API returns healthy status"
+
+  - task: "Solve Submission API"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented validation and response. Needs testing with actual Firestore writes"
+
+  - task: "Payment API (Razorpay)"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Payment API structure exists. Requires Razorpay keys to test"
+
+frontend:
+  - task: "Admin Panel with Registration Dates"
+    implemented: true
+    working: true
+    file: "/app/app/admin/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added registrationOpenDate, registrationCloseDate, competitionStartDate, competitionEndDate fields. Added advanced pricing model (flat/base+extra). Added payments tab for admin."
+
+  - task: "Competition Detail with Registration Status"
+    implemented: true
+    working: true
+    file: "/app/app/competition/[competitionId]/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Shows registration status (Not Opened/Open/Closed). Blocks registration if dates don't allow. Shows competition status. Dynamic pricing based on model."
+
+  - task: "Competition Timer with WCA Inspection"
+    implemented: true
+    working: "NA"
+    file: "/app/app/compete/[competitionId]/[eventId]/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented intro/rules screen, scramble reveal with Firestore tracking, DNF on refresh, 15s inspection with beeps at 8s and 5s, +2 penalty at 15-17s, DNF at 17s+, solve submission to Firestore"
+
+  - task: "Leaderboard with Registered Users"
+    implemented: true
+    working: true
+    file: "/app/app/leaderboard/[competitionId]/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Shows all registered users even without solves. Users with results appear first, sorted by average/single. Users without results appear at bottom alphabetically."
+
+  - task: "Registration with Optional WCA ID"
+    implemented: true
+    working: true
+    file: "/app/app/auth/register/page.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added optional WCA ID field during registration"
+
+  - task: "Profile Update"
+    implemented: true
+    working: "NA"
+    file: "/app/app/profile/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Profile update creates document if missing. AuthContext handles profile creation on login. Needs testing."
+
+  - task: "Competitions List with Registration Status"
+    implemented: true
+    working: true
+    file: "/app/app/competitions/page.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Competition cards show REG OPEN/REG SOON/REG CLOSED based on dates"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Competition Timer with WCA Inspection"
+    - "Solve Submission API"
+    - "Profile Update"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implemented comprehensive updates for MCUBES speedcubing platform:
+      
+      1. Admin Panel: Added 4 date fields (registration open/close, competition start/end), 
+         advanced pricing model (flat OR base+per-event), payments tab
+      
+      2. Competition Detail: Registration status checks based on dates, blocks access appropriately,
+         dynamic pricing display
+      
+      3. Timer Page: Full WCA inspection system with intro screen, rules, scramble reveal tracking
+         in Firestore, DNF on refresh, 15s inspection with beeps, penalties
+      
+      4. Leaderboard: Shows ALL registered users even without solves, proper sorting
+      
+      5. Registration: Added optional WCA ID field
+      
+      6. Firestore Rules: Updated to handle scrambleReveals collection and payment privacy
+      
+      Files updated: admin/page.js, competition/[id]/page.js, compete/[id]/[eventId]/page.js,
+      leaderboard/[id]/page.js, auth/register/page.js, competitions/page.js, firestore.rules
