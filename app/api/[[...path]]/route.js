@@ -26,9 +26,12 @@ try {
 
 export async function POST(request) {
   const { pathname } = new URL(request.url);
+  
+  // Debug logging
+  console.log('POST request to:', pathname);
 
-  // Create Razorpay order
-  if (pathname === '/api/payment/create-order') {
+  // Create Razorpay order - match with or without trailing slash
+  if (pathname === '/api/payment/create-order' || pathname.includes('payment/create-order')) {
     try {
       if (!razorpay) {
         return NextResponse.json({ error: 'Payment service not configured' }, { status: 500 });
