@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword,
@@ -20,24 +20,55 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
+    let mounted = true;
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        // Fetch user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data());
+      if (!mounted) return;
+      
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          // Fetch user profile from Firestore
+          try {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (mounted) {
+              if (userDoc.exists()) {
+                setUserProfile(userDoc.data());
+              } else {
+                // User exists in Auth but not in Firestore - might be new Google user
+                setUserProfile(null);
+              }
+            }
+          } catch (firestoreError) {
+            console.error('Error fetching user profile:', firestoreError);
+            // Set user anyway - they're authenticated even if profile fetch fails
+            if (mounted) {
+              setAuthError(firestoreError.message);
+            }
+          }
+        } else {
+          setUser(null);
+          setUserProfile(null);
         }
-      } else {
-        setUser(null);
-        setUserProfile(null);
+      } catch (error) {
+        console.error('Auth state change error:', error);
+        if (mounted) {
+          setAuthError(error.message);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password, firstName, lastName, country) => {
