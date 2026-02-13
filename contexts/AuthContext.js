@@ -8,7 +8,9 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  browserLocalPersistence,
+  setPersistence
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -21,6 +23,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   const [authError, setAuthError] = useState(null);
+
+  // Set persistence on mount
+  useEffect(() => {
+    setPersistence(auth, browserLocalPersistence)
+      .catch((error) => {
+        console.error('Failed to set persistence:', error);
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -36,15 +46,23 @@ export function AuthProvider({ children }) {
             const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
             if (mounted) {
               if (userDoc.exists()) {
-                setUserProfile(userDoc.data());
+                const profileData = userDoc.data();
+                setUserProfile(profileData);
+                // Store in localStorage for quick access
+                localStorage.setItem('userProfile', JSON.stringify(profileData));
               } else {
-                // User exists in Auth but not in Firestore - might be new Google user
+                // User exists in Auth but not in Firestore
                 setUserProfile(null);
+                localStorage.removeItem('userProfile');
               }
             }
           } catch (firestoreError) {
             console.error('Error fetching user profile:', firestoreError);
-            // Set user anyway - they're authenticated even if profile fetch fails
+            // Try to get from localStorage
+            const cached = localStorage.getItem('userProfile');
+            if (cached && mounted) {
+              setUserProfile(JSON.parse(cached));
+            }
             if (mounted) {
               setAuthError(firestoreError.message);
             }
@@ -52,6 +70,7 @@ export function AuthProvider({ children }) {
         } else {
           setUser(null);
           setUserProfile(null);
+          localStorage.removeItem('userProfile');
         }
       } catch (error) {
         console.error('Auth state change error:', error);
@@ -73,6 +92,9 @@ export function AuthProvider({ children }) {
 
   const signUp = async (email, password, firstName, lastName, country) => {
     try {
+      // Set persistence before sign up
+      await setPersistence(auth, browserLocalPersistence);
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -80,10 +102,11 @@ export function AuthProvider({ children }) {
       const wcaStyleId = await generateWCAId(firstName, lastName);
       
       // Check if admin
-      const isAdmin = email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'midhun.speedcuber@gmail.com';
+      const isAdmin = email.toLowerCase() === adminEmail.toLowerCase();
       
       // Create user profile in Firestore
-      const userProfile = {
+      const userProfileData = {
         email: user.email,
         role: isAdmin ? 'ADMIN' : 'USER',
         wcaStyleId,
@@ -99,10 +122,11 @@ export function AuthProvider({ children }) {
         totalCompetitions: 0
       };
       
-      await setDoc(doc(db, 'users', user.uid), userProfile);
-      setUserProfile(userProfile);
+      await setDoc(doc(db, 'users', user.uid), userProfileData);
+      setUserProfile(userProfileData);
+      localStorage.setItem('userProfile', JSON.stringify(userProfileData));
       
-      return { user, userProfile };
+      return { user, userProfile: userProfileData };
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;
@@ -111,7 +135,19 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
+      // Set persistence before sign in
+      await setPersistence(auth, browserLocalPersistence);
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Fetch and set user profile
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      if (userDoc.exists()) {
+        const profileData = userDoc.data();
+        setUserProfile(profileData);
+        localStorage.setItem('userProfile', JSON.stringify(profileData));
+      }
+      
       return userCredential.user;
     } catch (error) {
       console.error('Sign in error:', error);
@@ -121,6 +157,9 @@ export function AuthProvider({ children }) {
 
   const signInWithGoogle = async () => {
     try {
+      // Set persistence before sign in
+      await setPersistence(auth, browserLocalPersistence);
+      
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
       const user = userCredential.user;
@@ -135,9 +174,10 @@ export function AuthProvider({ children }) {
         const lastName = nameParts.slice(1).join(' ') || 'Name';
         
         const wcaStyleId = await generateWCAId(firstName, lastName);
-        const isAdmin = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'midhun.speedcuber@gmail.com';
+        const isAdmin = user.email.toLowerCase() === adminEmail.toLowerCase();
         
-        const userProfile = {
+        const userProfileData = {
           email: user.email,
           role: isAdmin ? 'ADMIN' : 'USER',
           wcaStyleId,
@@ -153,8 +193,13 @@ export function AuthProvider({ children }) {
           totalCompetitions: 0
         };
         
-        await setDoc(doc(db, 'users', user.uid), userProfile);
-        setUserProfile(userProfile);
+        await setDoc(doc(db, 'users', user.uid), userProfileData);
+        setUserProfile(userProfileData);
+        localStorage.setItem('userProfile', JSON.stringify(userProfileData));
+      } else {
+        const profileData = userDoc.data();
+        setUserProfile(profileData);
+        localStorage.setItem('userProfile', JSON.stringify(profileData));
       }
       
       return user;
@@ -169,6 +214,7 @@ export function AuthProvider({ children }) {
       await firebaseSignOut(auth);
       setUser(null);
       setUserProfile(null);
+      localStorage.removeItem('userProfile');
     } catch (error) {
       console.error('Sign out error:', error);
       throw error;
