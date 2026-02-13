@@ -280,6 +280,30 @@ function CompetitionCard({ comp, router, isPast = false }) {
     });
   };
 
+  // Get registration status
+  const getRegStatus = () => {
+    const now = new Date();
+    const regOpen = comp.registrationOpenDate ? new Date(comp.registrationOpenDate) : null;
+    const regClose = comp.registrationCloseDate ? new Date(comp.registrationCloseDate) : null;
+
+    if (!regOpen || !regClose) {
+      // Legacy: no registration dates set
+      return { status: 'open', label: 'REG OPEN', className: 'bg-blue-100 text-blue-700' };
+    }
+    
+    if (now < regOpen) {
+      return { status: 'not_opened', label: 'REG SOON', className: 'bg-orange-100 text-orange-700' };
+    }
+    
+    if (now > regClose) {
+      return { status: 'closed', label: 'REG CLOSED', className: 'bg-red-100 text-red-700' };
+    }
+    
+    return { status: 'open', label: 'REG OPEN', className: 'bg-blue-100 text-blue-700' };
+  };
+
+  const regStatus = getRegStatus();
+
   return (
     <Card className="bg-white border border-gray-100 hover:border-blue-200 hover:shadow-lg transition-all duration-300">
       <CardContent className="p-6">
@@ -291,15 +315,21 @@ function CompetitionCard({ comp, router, isPast = false }) {
             <>
               {comp.status === 'LIVE' && <Badge className="bg-green-100 text-green-700">LIVE</Badge>}
               {comp.status === 'UPCOMING' && <Badge className="bg-yellow-100 text-yellow-700">UPCOMING</Badge>}
-              <Badge className="bg-blue-100 text-blue-700">REG OPEN</Badge>
+              <Badge className={regStatus.className}>{regStatus.label}</Badge>
             </>
+          )}
+          {comp.type === 'PAID' && (
+            <Badge className="bg-purple-100 text-purple-700">PAID</Badge>
+          )}
+          {comp.type === 'FREE' && (
+            <Badge className="bg-green-100 text-green-700">FREE</Badge>
           )}
         </div>
         
         <h3 className="text-xl font-bold text-gray-900 mb-2">{comp.name}</h3>
         
         <p className="text-blue-600 font-medium mb-3">
-          {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
+          {formatDate(comp.competitionStartDate || comp.startDate)} - {formatDate(comp.competitionEndDate || comp.endDate)}
         </p>
         
         <p className="text-gray-500 text-sm mb-4">
@@ -316,12 +346,22 @@ function CompetitionCard({ comp, router, isPast = false }) {
             View details
           </Button>
           {isPast ? (
-            <Button size="sm" className="flex-1 bg-purple-600 hover:bg-purple-700">
+            <Button 
+              size="sm" 
+              className="flex-1 bg-purple-600 hover:bg-purple-700"
+              onClick={() => router.push(`/leaderboard/${comp.id}`)}
+            >
               View Results
             </Button>
           ) : (
-            <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
-              Register Now
+            <Button 
+              size="sm" 
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              onClick={() => router.push(`/competition/${comp.id}`)}
+              disabled={regStatus.status === 'closed'}
+            >
+              {regStatus.status === 'not_opened' ? 'Coming Soon' : 
+               regStatus.status === 'closed' ? 'Closed' : 'Register Now'}
             </Button>
           )}
         </div>
