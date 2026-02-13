@@ -170,6 +170,19 @@ function RegisterPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="wcaId" className="text-white">WCA ID (Optional)</Label>
+              <Input
+                id="wcaId"
+                name="wcaId"
+                value={formData.wcaId}
+                onChange={handleChange}
+                placeholder="e.g., 2019JOHN01"
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+              <p className="text-xs text-gray-400">Enter your official WCA ID if you have one</p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="password" className="text-white">Password *</Label>
               <Input
                 id="password"
