@@ -12,15 +12,54 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Shield, Users, Trophy } from 'lucide-react';
 import { WCA_EVENTS } from '@/lib/wcaEvents';
 import { Checkbox } from '@/components/ui/checkbox';
+import Link from 'next/link';
+
+// Header Component
+function Header() {
+  const { user, userProfile, signOut, isAdmin } = useAuth();
+  const router = useRouter();
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">MCUBES</span>
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
+            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
+            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Badge className="bg-purple-100 text-purple-700">
+              <Shield className="w-3 h-3 mr-1" /> Admin
+            </Badge>
+            <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
+              {userProfile?.displayName || 'Profile'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function AdminPanel() {
-  const { isAdmin, loading } = useAuth();
+  const { user, userProfile, isAdmin, loading } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('create');
   const [competitions, setCompetitions] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
   // Competition form state
@@ -29,44 +68,54 @@ function AdminPanel() {
     description: '',
     startDate: '',
     endDate: '',
-    type: 'FREE', // FREE or PAID
-    pricingModel: 'flat', // flat, per_event, base_plus_extra
+    type: 'FREE',
+    pricingModel: 'flat',
     flatPrice: 0,
     basePrice: 0,
     extraPrice: 0,
     currency: 'INR',
     solveLimit: 5,
     selectedEvents: [],
-    scrambles: {} // { eventId: [scr1, scr2, scr3, scr4, scr5] }
+    scrambles: {}
   });
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      router.push('/');
+    if (!loading && !user) {
+      router.push('/auth/login');
+      return;
     }
-  }, [isAdmin, loading, router]);
+    
+    if (!loading && user && !isAdmin) {
+      alert('Access denied. Admin only.');
+      router.push('/');
+      return;
+    }
+  }, [user, isAdmin, loading, router]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchCompetitions();
+    if (user && isAdmin) {
+      fetchData();
     }
-  }, [isAdmin]);
+  }, [user, isAdmin]);
 
-  async function fetchCompetitions() {
+  async function fetchData() {
     try {
-      const compsRef = collection(db, 'competitions');
-      const snapshot = await getDocs(compsRef);
-      const compsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort client-side
+      // Fetch competitions
+      const compsSnapshot = await getDocs(collection(db, 'competitions'));
+      const compsData = compsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       compsData.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
         const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
         return dateB - dateA;
       });
       setCompetitions(compsData);
+
+      // Fetch users
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(usersData);
     } catch (error) {
-      console.error('Failed to fetch competitions:', error);
-      setCompetitions([]);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoadingData(false);
     }
@@ -91,6 +140,7 @@ function AdminPanel() {
 
   const handleScrambleChange = (eventId, index, value) => {
     const newScrambles = { ...formData.scrambles };
+    if (!newScrambles[eventId]) newScrambles[eventId] = ['', '', '', '', ''];
     newScrambles[eventId][index] = value;
     setFormData({ ...formData, scrambles: newScrambles });
   };
@@ -98,7 +148,6 @@ function AdminPanel() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validation
     if (formData.selectedEvents.length === 0) {
       alert('Please select at least one event');
       return;
@@ -133,7 +182,8 @@ function AdminPanel() {
       });
 
       alert('Competition created successfully!');
-      fetchCompetitions();
+      fetchData();
+      
       // Reset form
       setFormData({
         name: '',
@@ -152,7 +202,7 @@ function AdminPanel() {
       });
     } catch (error) {
       console.error('Failed to create competition:', error);
-      alert('Failed to create competition');
+      alert('Failed to create competition: ' + error.message);
     }
   };
 
@@ -161,110 +211,161 @@ function AdminPanel() {
 
     try {
       await deleteDoc(doc(db, 'competitions', compId));
-      fetchCompetitions();
+      fetchData();
     } catch (error) {
       console.error('Failed to delete competition:', error);
-      alert('Failed to delete competition');
+      alert('Failed to delete: ' + error.message);
     }
   };
 
-  if (loading || loadingData) {
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Show loading while auth is being checked
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-gray-50">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500 text-xl">Loading...</div>
+        </div>
       </div>
     );
   }
 
-  if (!isAdmin) {
+  // Don't render if not admin
+  if (!user || !isAdmin) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+
       <div className="container mx-auto px-4 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/')}
-          className="mb-6 text-gray-400 hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
-        </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Panel</h1>
+          <p className="text-gray-500">Manage competitions, users, and platform settings</p>
+        </div>
 
-        <h1 className="text-4xl font-bold mb-8">Admin Panel</h1>
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Trophy className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{competitions.length}</p>
+                  <p className="text-gray-500 text-sm">Competitions</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{users.length}</p>
+                  <p className="text-gray-500 text-sm">Users</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{users.filter(u => u.role === 'ADMIN').length}</p>
+                  <p className="text-gray-500 text-sm">Admins</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-        <div className="flex gap-4 mb-6">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
           <Button
             variant={activeTab === 'create' ? 'default' : 'outline'}
             onClick={() => setActiveTab('create')}
-            className={activeTab === 'create' ? 'bg-blue-600' : 'border-gray-600'}
           >
             Create Competition
           </Button>
           <Button
             variant={activeTab === 'manage' ? 'default' : 'outline'}
             onClick={() => setActiveTab('manage')}
-            className={activeTab === 'manage' ? 'bg-blue-600' : 'border-gray-600'}
           >
             Manage Competitions
+          </Button>
+          <Button
+            variant={activeTab === 'users' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('users')}
+          >
+            Users
           </Button>
         </div>
 
         {activeTab === 'create' && (
-          <Card className="bg-gray-800 border-gray-700">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-white">Create New Competition</CardTitle>
+              <CardTitle>Create New Competition</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 col-span-2">
-                    <Label className="text-white">Competition Name *</Label>
+                    <Label>Competition Name *</Label>
                     <Input
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
-                      className="bg-gray-700 border-gray-600 text-white"
+                      placeholder="e.g., Cubing Clash 3.0"
                     />
                   </div>
 
                   <div className="space-y-2 col-span-2">
-                    <Label className="text-white">Description</Label>
+                    <Label>Description</Label>
                     <Textarea
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="bg-gray-700 border-gray-600 text-white"
                       rows={3}
+                      placeholder="Competition description..."
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-white">Start Date & Time *</Label>
+                    <Label>Start Date & Time *</Label>
                     <Input
                       type="datetime-local"
                       value={formData.startDate}
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                       required
-                      className="bg-gray-700 border-gray-600 text-white"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-white">End Date & Time *</Label>
+                    <Label>End Date & Time *</Label>
                     <Input
                       type="datetime-local"
                       value={formData.endDate}
                       onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                       required
-                      className="bg-gray-700 border-gray-600 text-white"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-white">Competition Type</Label>
+                    <Label>Competition Type</Label>
                     <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
-                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -274,99 +375,20 @@ function AdminPanel() {
                     </Select>
                   </div>
 
-                  {formData.type === 'PAID' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label className="text-white">Pricing Model</Label>
-                        <Select value={formData.pricingModel} onValueChange={(value) => setFormData({ ...formData, pricingModel: value })}>
-                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="flat">Flat Price (Entire Competition)</SelectItem>
-                            <SelectItem value="per_event">Per Event</SelectItem>
-                            <SelectItem value="base_plus_extra">Base + Extra Per Event</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-white">Currency</Label>
-                        <Select value={formData.currency} onValueChange={(value) => setFormData({ ...formData, currency: value })}>
-                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="INR">INR (₹)</SelectItem>
-                            <SelectItem value="USD">USD ($)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {formData.pricingModel === 'flat' && (
-                        <div className="space-y-2">
-                          <Label className="text-white">Price</Label>
-                          <Input
-                            type="number"
-                            value={formData.flatPrice}
-                            onChange={(e) => setFormData({ ...formData, flatPrice: e.target.value })}
-                            className="bg-gray-700 border-gray-600 text-white"
-                          />
-                        </div>
-                      )}
-
-                      {formData.pricingModel === 'per_event' && (
-                        <div className="space-y-2">
-                          <Label className="text-white">Price Per Event</Label>
-                          <Input
-                            type="number"
-                            value={formData.flatPrice}
-                            onChange={(e) => setFormData({ ...formData, flatPrice: e.target.value })}
-                            className="bg-gray-700 border-gray-600 text-white"
-                          />
-                        </div>
-                      )}
-
-                      {formData.pricingModel === 'base_plus_extra' && (
-                        <>
-                          <div className="space-y-2">
-                            <Label className="text-white">Base Price (First Event)</Label>
-                            <Input
-                              type="number"
-                              value={formData.basePrice}
-                              onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                              className="bg-gray-700 border-gray-600 text-white"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-white">Extra Per Additional Event</Label>
-                            <Input
-                              type="number"
-                              value={formData.extraPrice}
-                              onChange={(e) => setFormData({ ...formData, extraPrice: e.target.value })}
-                              className="bg-gray-700 border-gray-600 text-white"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
                   <div className="space-y-2">
-                    <Label className="text-white">Solve Limit (Ao5 = 5)</Label>
+                    <Label>Solve Limit</Label>
                     <Input
                       type="number"
                       value={formData.solveLimit}
                       onChange={(e) => setFormData({ ...formData, solveLimit: e.target.value })}
                       min="1"
                       max="100"
-                      className="bg-gray-700 border-gray-600 text-white"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <Label className="text-white text-lg">Select Events *</Label>
+                  <Label className="text-lg">Select Events *</Label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {WCA_EVENTS.map(event => (
                       <div key={event.id} className="flex items-center space-x-2">
@@ -385,20 +407,20 @@ function AdminPanel() {
 
                 {formData.selectedEvents.length > 0 && (
                   <div className="space-y-6">
-                    <Label className="text-white text-lg">Enter Scrambles (5 per event) *</Label>
+                    <Label className="text-lg">Enter Scrambles (5 per event) *</Label>
                     {formData.selectedEvents.map(eventId => {
                       const event = WCA_EVENTS.find(e => e.id === eventId);
                       return (
-                        <div key={eventId} className="space-y-3 p-4 bg-gray-700/50 rounded-lg">
+                        <div key={eventId} className="space-y-3 p-4 bg-gray-50 rounded-lg">
                           <h3 className="font-semibold">{event?.icon} {event?.name}</h3>
                           {[0, 1, 2, 3, 4].map(i => (
                             <div key={i} className="space-y-1">
-                              <Label className="text-gray-400 text-sm">Scramble {i + 1}</Label>
+                              <Label className="text-gray-500 text-sm">Scramble {i + 1}</Label>
                               <Textarea
                                 value={formData.scrambles[eventId]?.[i] || ''}
                                 onChange={(e) => handleScrambleChange(eventId, i, e.target.value)}
                                 placeholder="Enter scramble..."
-                                className="bg-gray-700 border-gray-600 text-white font-mono text-sm"
+                                className="font-mono text-sm"
                                 rows={2}
                               />
                             </div>
@@ -409,7 +431,7 @@ function AdminPanel() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg">
+                <Button type="submit" className="w-full py-6 text-lg">
                   <Plus className="h-5 w-5 mr-2" />
                   Create Competition
                 </Button>
@@ -420,26 +442,27 @@ function AdminPanel() {
 
         {activeTab === 'manage' && (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold mb-4">All Competitions</h2>
-            {competitions.length === 0 ? (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-12 text-center text-gray-400">
+            {loadingData ? (
+              <p className="text-center py-8 text-gray-500">Loading...</p>
+            ) : competitions.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-gray-500">
                   No competitions created yet
                 </CardContent>
               </Card>
             ) : (
               competitions.map(comp => (
-                <Card key={comp.id} className="bg-gray-800 border-gray-700">
+                <Card key={comp.id}>
                   <CardContent className="py-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="text-xl font-bold mb-2">{comp.name}</h3>
-                        <div className="flex gap-4 text-sm text-gray-400">
-                          <span>{new Date(comp.startDate).toLocaleDateString()}</span>
+                        <div className="flex flex-wrap gap-2 text-sm text-gray-500">
+                          <span>{formatDate(comp.startDate)} - {formatDate(comp.endDate)}</span>
                           <span>•</span>
                           <span>{comp.events?.length || 0} events</span>
                           <span>•</span>
-                          <Badge className={comp.type === 'FREE' ? 'bg-green-600' : 'bg-yellow-600'}>
+                          <Badge className={comp.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
                             {comp.type}
                           </Badge>
                         </div>
@@ -457,6 +480,35 @@ function AdminPanel() {
               ))
             )}
           </div>
+        )}
+
+        {activeTab === 'users' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Users ({users.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingData ? (
+                <p className="text-center py-8 text-gray-500">Loading...</p>
+              ) : users.length === 0 ? (
+                <p className="text-center py-8 text-gray-500">No users yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {users.map(user => (
+                    <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium">{user.displayName || 'Unknown'}</p>
+                        <p className="text-sm text-gray-500">{user.email} • {user.wcaStyleId}</p>
+                      </div>
+                      <Badge className={user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}>
+                        {user.role || 'USER'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

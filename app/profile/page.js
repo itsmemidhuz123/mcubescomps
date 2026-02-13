@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit2, Save, Trophy, CreditCard, Calendar } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, Trophy, CreditCard, Calendar, User } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+import Link from 'next/link';
 
 const COUNTRIES = [
   'India', 'United States', 'China', 'United Kingdom', 'Australia',
@@ -21,11 +22,60 @@ const COUNTRIES = [
   'Russia', 'Italy', 'Spain', 'Netherlands', 'Other'
 ];
 
-function ProfilePage() {
-  const { user, userProfile } = useAuth();
+// Header Component
+function Header() {
+  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">MCUBES</span>
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
+            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
+            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
+            <Link href="/timer" className="text-gray-600 hover:text-gray-900 font-medium">Timer</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            {!loading && user ? (
+              <>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={() => router.push('/admin')} className="border-purple-200 text-purple-600">
+                    Admin
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="border-blue-200 text-blue-600">
+                  {userProfile?.displayName || 'Profile'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => router.push('/auth/login')}>Sign In</Button>
+                <Button onClick={() => router.push('/auth/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                  Get Started
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function ProfilePage() {
+  const { user, userProfile, loading } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     displayName: '',
     username: '',
@@ -34,19 +84,16 @@ function ProfilePage() {
   const [competitions, setCompetitions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [results, setResults] = useState([]);
-  const [stats, setStats] = useState({
-    totalCompetitions: 0,
-    totalEvents: 0,
-    bestSingles: {},
-    bestAverages: {}
-  });
+  const [saving, setSaving] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       router.push('/auth/login');
-      return;
     }
-    
+  }, [user, loading, router]);
+
+  useEffect(() => {
     if (userProfile) {
       setFormData({
         displayName: userProfile.displayName || '',
@@ -55,11 +102,13 @@ function ProfilePage() {
       });
       fetchUserData();
     }
-  }, [user, userProfile]);
+  }, [userProfile]);
 
   async function fetchUserData() {
+    if (!user) return;
+    
     try {
-      // Fetch competitions user participated in
+      // Fetch registrations
       const registrationsQuery = query(
         collection(db, 'registrations'),
         where('userId', '==', user.uid)
@@ -67,11 +116,16 @@ function ProfilePage() {
       const regSnapshot = await getDocs(registrationsQuery);
       const compIds = regSnapshot.docs.map(doc => doc.data().competitionId);
       
+      // Fetch competition details
       const compData = [];
       for (const compId of compIds) {
-        const compDoc = await getDoc(doc(db, 'competitions', compId));
-        if (compDoc.exists()) {
-          compData.push({ id: compDoc.id, ...compDoc.data() });
+        try {
+          const compDoc = await getDoc(doc(db, 'competitions', compId));
+          if (compDoc.exists()) {
+            compData.push({ id: compDoc.id, ...compDoc.data() });
+          }
+        } catch (e) {
+          console.error('Error fetching competition:', e);
         }
       }
       setCompetitions(compData);
@@ -82,8 +136,7 @@ function ProfilePage() {
         where('userId', '==', user.uid)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
-      const paymentsData = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPayments(paymentsData);
+      setPayments(paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
       // Fetch results
       const resultsQuery = query(
@@ -91,64 +144,31 @@ function ProfilePage() {
         where('userId', '==', user.uid)
       );
       const resultsSnapshot = await getDocs(resultsQuery);
-      const resultsData = resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setResults(resultsData);
+      setResults(resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-      // Calculate stats
-      calculateStats(resultsData);
     } catch (error) {
       console.error('Failed to fetch user data:', error);
+    } finally {
+      setDataLoading(false);
     }
   }
 
-  function calculateStats(resultsData) {
-    const bestSingles = {};
-    const bestAverages = {};
-    const eventSet = new Set();
-
-    resultsData.forEach(result => {
-      eventSet.add(result.eventId);
-      
-      // Best single
-      if (result.bestSingle !== Infinity && result.bestSingle) {
-        if (!bestSingles[result.eventId] || result.bestSingle < bestSingles[result.eventId]) {
-          bestSingles[result.eventId] = result.bestSingle;
-        }
-      }
-
-      // Best average
-      if (result.average !== 'DNF' && result.average) {
-        if (!bestAverages[result.eventId] || result.average < bestAverages[result.eventId]) {
-          bestAverages[result.eventId] = result.average;
-        }
-      }
-    });
-
-    setStats({
-      totalCompetitions: competitions.length,
-      totalEvents: eventSet.size,
-      bestSingles,
-      bestAverages
-    });
-  }
-
   async function handleSave() {
-    setLoading(true);
+    if (!user) return;
+    
+    setSaving(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: formData.displayName,
         username: formData.username,
         country: formData.country
       });
-      
       alert('Profile updated successfully!');
-      setEditing(false);
-      window.location.reload();
     } catch (error) {
       console.error('Failed to update profile:', error);
-      alert('Failed to update profile');
+      alert('Failed to update profile: ' + error.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -158,6 +178,7 @@ function ProfilePage() {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -165,157 +186,109 @@ function ProfilePage() {
     });
   };
 
-  if (!userProfile) {
+  // Show loading while auth is being checked
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500 text-xl">Loading...</div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/')}
-          className="mb-6 text-gray-400 hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
-        </Button>
+  // Don't render if not logged in (will redirect)
+  if (!user) {
+    return null;
+  }
 
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Profile Header */}
-        <Card className="bg-gray-800 border-gray-700 mb-6">
+        <Card className="mb-6">
           <CardContent className="py-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-6">
-                {userProfile.photoURL && (
-                  <img src={userProfile.photoURL} alt={userProfile.displayName} className="h-24 w-24 rounded-full" />
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                {userProfile?.photoURL ? (
+                  <img src={userProfile.photoURL} alt="" className="w-full h-full rounded-full" />
+                ) : (
+                  <User className="w-10 h-10 text-white" />
                 )}
-                <div>
-                  <h1 className="text-3xl font-bold mb-2">{userProfile.displayName}</h1>
-                  <div className="space-y-1">
-                    <Badge className="bg-blue-600 text-lg px-3 py-1">{userProfile.wcaStyleId}</Badge>
-                    <p className="text-gray-400">📍 {userProfile.country}</p>
-                    <p className="text-gray-400 text-sm">Member since {formatDate(userProfile.createdAt)}</p>
-                  </div>
-                </div>
               </div>
-              {!editing && (
-                <Button onClick={() => setEditing(true)} variant="outline" className="border-blue-600">
-                  <Edit2 className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
-              )}
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-gray-900">{userProfile?.displayName || 'User'}</h1>
+                <div className="flex items-center gap-3 mt-2">
+                  <Badge className="bg-blue-100 text-blue-700">{userProfile?.wcaStyleId || 'N/A'}</Badge>
+                  <span className="text-gray-500">📍 {userProfile?.country || 'Unknown'}</span>
+                </div>
+                <p className="text-sm text-gray-400 mt-1">
+                  Member since {formatDate(userProfile?.createdAt)}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-gray-800 border-gray-700">
+          <TabsList className="bg-white border">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="edit">Edit Profile</TabsTrigger>
-            <TabsTrigger value="results">Results</TabsTrigger>
+            <TabsTrigger value="results">My Results</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="bg-gray-800 border-gray-700">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
                 <CardContent className="py-6 text-center">
                   <Trophy className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-                  <p className="text-3xl font-bold">{stats.totalCompetitions}</p>
-                  <p className="text-gray-400 text-sm">Competitions</p>
+                  <p className="text-3xl font-bold text-gray-900">{competitions.length}</p>
+                  <p className="text-gray-500 text-sm">Competitions</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gray-800 border-gray-700">
+              <Card>
                 <CardContent className="py-6 text-center">
-                  <p className="text-3xl font-bold">{stats.totalEvents}</p>
-                  <p className="text-gray-400 text-sm">Events Competed</p>
+                  <p className="text-3xl font-bold text-gray-900">{results.length}</p>
+                  <p className="text-gray-500 text-sm">Results</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gray-800 border-gray-700">
+              <Card>
                 <CardContent className="py-6 text-center">
-                  <p className="text-3xl font-bold">{Object.keys(stats.bestSingles).length}</p>
-                  <p className="text-gray-400 text-sm">Personal Records</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="py-6 text-center">
-                  <p className="text-3xl font-bold">{payments.length}</p>
-                  <p className="text-gray-400 text-sm">Paid Competitions</p>
+                  <p className="text-3xl font-bold text-gray-900">{payments.length}</p>
+                  <p className="text-gray-500 text-sm">Payments</p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Best Singles */}
-            {Object.keys(stats.bestSingles).length > 0 && (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle>Best Singles</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {Object.entries(stats.bestSingles).map(([eventId, time]) => (
-                      <div key={eventId} className="bg-gray-700/50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-400 mb-1">
-                          {getEventIcon(eventId)} {getEventName(eventId)}
-                        </p>
-                        <p className="text-2xl font-bold text-blue-400">{formatTime(time)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Best Averages */}
-            {Object.keys(stats.bestAverages).length > 0 && (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle>Best Averages (Ao5)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {Object.entries(stats.bestAverages).map(([eventId, average]) => (
-                      <div key={eventId} className="bg-gray-700/50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-400 mb-1">
-                          {getEventIcon(eventId)} {getEventName(eventId)}
-                        </p>
-                        <p className="text-2xl font-bold text-green-400">{formatTime(average)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Recent Competitions */}
-            <Card className="bg-gray-800 border-gray-700">
+            <Card>
               <CardHeader>
-                <CardTitle>Competition History</CardTitle>
+                <CardTitle>Recent Competitions</CardTitle>
               </CardHeader>
               <CardContent>
-                {competitions.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No competitions yet</p>
+                {dataLoading ? (
+                  <p className="text-gray-400 text-center py-4">Loading...</p>
+                ) : competitions.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No competitions yet</p>
+                    <Button className="mt-4" onClick={() => router.push('/competitions')}>
+                      Browse Competitions
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {competitions.map(comp => (
-                      <div key={comp.id} className="bg-gray-700/50 p-4 rounded-lg flex items-center justify-between">
+                    {competitions.slice(0, 5).map(comp => (
+                      <div key={comp.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
-                          <p className="font-semibold">{comp.name}</p>
-                          <p className="text-sm text-gray-400">{formatDate(comp.startDate)}</p>
+                          <p className="font-medium">{comp.name}</p>
+                          <p className="text-sm text-gray-500">{formatDate(comp.startDate)}</p>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/leaderboard/${comp.id}`)}
-                          className="border-blue-600"
-                        >
-                          View Results
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/competition/${comp.id}`)}>
+                          View
                         </Button>
                       </div>
                     ))}
@@ -327,58 +300,49 @@ function ProfilePage() {
 
           {/* Edit Profile Tab */}
           <TabsContent value="edit">
-            <Card className="bg-gray-800 border-gray-700">
+            <Card>
               <CardHeader>
                 <CardTitle>Edit Profile</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-white">Display Name</Label>
-                    <Input
-                      value={formData.displayName}
-                      onChange={(e) => setFormData({...formData, displayName: e.target.value})}
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-white">Username</Label>
-                    <Input
-                      value={formData.username}
-                      onChange={(e) => setFormData({...formData, username: e.target.value})}
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-white">Country</Label>
-                    <Select value={formData.country} onValueChange={(value) => setFormData({...formData, country: value})}>
-                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRIES.map(country => (
-                          <SelectItem key={country} value={country}>{country}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="bg-gray-700/50 p-4 rounded-lg space-y-2">
-                    <p className="text-sm text-gray-400"><strong>Email:</strong> {userProfile.email} (Read-only)</p>
-                    <p className="text-sm text-gray-400"><strong>WCA ID:</strong> {userProfile.wcaStyleId} (Read-only)</p>
-                    <p className="text-sm text-gray-400"><strong>Registration Date:</strong> {formatDate(userProfile.createdAt)} (Read-only)</p>
-                  </div>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Display Name</Label>
+                  <Input
+                    value={formData.displayName}
+                    onChange={(e) => setFormData({...formData, displayName: e.target.value})}
+                  />
                 </div>
 
-                <Button
-                  onClick={handleSave}
-                  disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 py-6"
-                >
+                <div className="space-y-2">
+                  <Label>Username</Label>
+                  <Input
+                    value={formData.username}
+                    onChange={(e) => setFormData({...formData, username: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Country</Label>
+                  <Select value={formData.country} onValueChange={(value) => setFormData({...formData, country: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map(country => (
+                        <SelectItem key={country} value={country}>{country}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
+                  <p><strong>Email:</strong> {userProfile?.email} <span className="text-gray-400">(Read-only)</span></p>
+                  <p><strong>WCA ID:</strong> {userProfile?.wcaStyleId} <span className="text-gray-400">(Read-only)</span></p>
+                </div>
+
+                <Button onClick={handleSave} disabled={saving} className="w-full">
                   <Save className="h-4 w-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Changes'}
+                  {saving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </CardContent>
             </Card>
@@ -386,31 +350,24 @@ function ProfilePage() {
 
           {/* Results Tab */}
           <TabsContent value="results">
-            <Card className="bg-gray-800 border-gray-700">
+            <Card>
               <CardHeader>
-                <CardTitle>All Results</CardTitle>
+                <CardTitle>My Results</CardTitle>
               </CardHeader>
               <CardContent>
                 {results.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No results yet</p>
+                  <p className="text-gray-400 text-center py-8">No results yet. Compete in a competition to see your results!</p>
                 ) : (
                   <div className="space-y-4">
                     {results.map(result => (
-                      <div key={result.id} className="bg-gray-700/50 p-4 rounded-lg">
+                      <div key={result.id} className="p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-semibold">
                             {getEventIcon(result.eventId)} {getEventName(result.eventId)}
                           </p>
-                          <Badge className="bg-blue-600">Ao5: {formatTime(result.average)}</Badge>
+                          <Badge>Ao5: {formatTime(result.average)}</Badge>
                         </div>
-                        <div className="grid grid-cols-5 gap-2 text-sm">
-                          {result.times?.map((time, i) => (
-                            <div key={i} className="text-center">
-                              <p className="text-gray-400">#{i + 1}</p>
-                              <p className="font-mono">{formatTime(time)}</p>
-                            </div>
-                          ))}
-                        </div>
+                        <p className="text-sm text-gray-500">Best: {formatTime(result.bestSingle)}</p>
                       </div>
                     ))}
                   </div>
@@ -421,25 +378,22 @@ function ProfilePage() {
 
           {/* Payments Tab */}
           <TabsContent value="payments">
-            <Card className="bg-gray-800 border-gray-700">
+            <Card>
               <CardHeader>
                 <CardTitle><CreditCard className="inline h-5 w-5 mr-2" />Payment History</CardTitle>
               </CardHeader>
               <CardContent>
                 {payments.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No payments yet</p>
+                  <p className="text-gray-400 text-center py-8">No payment history</p>
                 ) : (
                   <div className="space-y-3">
                     {payments.map(payment => (
-                      <div key={payment.id} className="bg-gray-700/50 p-4 rounded-lg flex items-center justify-between">
+                      <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
-                          <p className="font-semibold">Payment ID: {payment.paymentId}</p>
-                          <p className="text-sm text-gray-400">
-                            <Calendar className="inline h-3 w-3 mr-1" />
-                            {formatDate(payment.createdAt)}
-                          </p>
+                          <p className="font-medium">Payment #{payment.paymentId?.slice(-8) || 'N/A'}</p>
+                          <p className="text-sm text-gray-500">{formatDate(payment.createdAt)}</p>
                         </div>
-                        <Badge className="bg-green-600">SUCCESS</Badge>
+                        <Badge className="bg-green-100 text-green-700">{payment.status || 'SUCCESS'}</Badge>
                       </div>
                     ))}
                   </div>
