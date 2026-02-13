@@ -32,15 +32,15 @@ function HomePage() {
   async function fetchCompetitions() {
     try {
       const compsRef = collection(db, 'competitions');
-      const q = query(compsRef, orderBy('startDate', 'desc'));
-      const snapshot = await getDocs(q);
+      // Simple query first - no ordering to avoid index requirements
+      const snapshot = await getDocs(compsRef);
       
       const compsData = [];
       snapshot.forEach(doc => {
         const data = doc.data();
         const now = new Date();
-        const start = new Date(data.startDate);
-        const end = new Date(data.endDate);
+        const start = data.startDate ? new Date(data.startDate) : new Date();
+        const end = data.endDate ? new Date(data.endDate) : new Date();
         
         let status = 'UPCOMING';
         if (now >= start && now <= end) {
@@ -56,9 +56,18 @@ function HomePage() {
         });
       });
       
+      // Sort client-side to avoid index requirements
+      compsData.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate) : new Date(0);
+        const dateB = b.startDate ? new Date(b.startDate) : new Date(0);
+        return dateB - dateA;
+      });
+      
       setCompetitions(compsData);
     } catch (error) {
       console.error('Failed to fetch competitions:', error);
+      // Show empty state on error instead of crashing
+      setCompetitions([]);
     } finally {
       setLoadingComps(false);
     }
