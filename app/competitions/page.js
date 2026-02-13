@@ -87,20 +87,28 @@ function CompetitionsPage() {
       const compsData = [];
       snapshot.forEach(doc => {
         const data = doc.data();
+        
+        // Filter out unpublished competitions for non-admin users
+        if (data.published === false && !isAdmin) {
+          return;
+        }
+        
         const now = new Date();
-        const start = data.startDate ? new Date(data.startDate) : new Date();
-        const end = data.endDate ? new Date(data.endDate) : new Date();
+        const start = data.competitionStartDate || data.startDate;
+        const end = data.competitionEndDate || data.endDate;
+        const startDate = start ? new Date(start) : new Date();
+        const endDate = end ? new Date(end) : new Date();
         
         let status = 'UPCOMING';
-        if (now >= start && now <= end) status = 'LIVE';
-        else if (now > end) status = 'PAST';
+        if (now >= startDate && now <= endDate) status = 'LIVE';
+        else if (now > endDate) status = 'PAST';
         
         compsData.push({ id: doc.id, ...data, status });
       });
       
       compsData.sort((a, b) => {
-        const dateA = a.startDate ? new Date(a.startDate) : new Date(0);
-        const dateB = b.startDate ? new Date(b.startDate) : new Date(0);
+        const dateA = a.competitionStartDate || a.startDate ? new Date(a.competitionStartDate || a.startDate) : new Date(0);
+        const dateB = b.competitionStartDate || b.startDate ? new Date(b.competitionStartDate || b.startDate) : new Date(0);
         return dateB - dateA;
       });
       
