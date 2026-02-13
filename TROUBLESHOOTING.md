@@ -162,7 +162,7 @@ firebase deploy --only firestore:rules
 **Test if Firebase is working:**
 
 1. Open browser console (F12)
-2. Go to: https://speedcube-compete.preview.emergentagent.com
+2. Go to: https://solve-tracker.preview.emergentagent.com
 3. Type in console:
 ```javascript
 // Check if Firebase initialized

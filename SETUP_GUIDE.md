@@ -3,7 +3,7 @@
 ## Current Status: ✅ Frontend & Backend Ready
 
 Your speedcubing competition platform is **almost ready**! The application is fully built and running at:
-**https://speedcube-compete.preview.emergentagent.com**
+**https://solve-tracker.preview.emergentagent.com**
 
 ## ⚠️ Required: Database Configuration
 
@@ -66,7 +66,7 @@ This will:
 
 ### Step 4: Verify Setup
 
-Visit: https://speedcube-compete.preview.emergentagent.com
+Visit: https://solve-tracker.preview.emergentagent.com
 
 You should see the login page. Click "Login with Google" to authenticate.
 
