@@ -270,6 +270,13 @@ function CompetitionDetail() {
         })
       });
 
+      // Check if response is OK
+      if (!orderResponse.ok) {
+        const errorText = await orderResponse.text();
+        console.error('Payment API error:', errorText);
+        throw new Error('Payment service unavailable. Please try again.');
+      }
+
       const order = await orderResponse.json();
       
       if (!order.id) {
