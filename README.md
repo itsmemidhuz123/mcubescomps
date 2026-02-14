@@ -10,7 +10,7 @@ A complete full-stack platform for hosting official-style online speedcubing com
 - Email/Password + Google OAuth via Firebase
 - Auto WCA-style ID generation (Format: 2026RAHK1)
 - Role-based access (Admin/User)
-- Admin: midhun.speedcuber@gmail.com
+- Admin email added
 
 **Admin Panel** (`/admin`)
 - Create competitions with multiple events (17 WCA events)
@@ -150,7 +150,7 @@ RAZORPAY_KEY_SECRET=28uEFtbhWrRp7RhPiS2uyuvY
 
 ### 3. Admin Setup
 
-First user to register with `midhun.speedcuber@gmail.com` becomes admin automatically.
+First user to register with mail becomes admin automatically.
 
 ---
 
