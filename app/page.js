@@ -12,83 +12,6 @@ import { Trophy, Calendar, Users, Timer, Zap, Target, Award, ChevronRight, Cube 
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
-// Public Header Component
-function Header() {
-  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
-  const router = useRouter();
-
-  return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">MCUBES</span>
-          </Link>
-          
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
-            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
-            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
-            <Link href="/timer" className="text-gray-600 hover:text-gray-900 font-medium">Timer</Link>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            {!loading && user ? (
-              <>
-                {isAdmin && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => router.push('/admin')}
-                    className="border-purple-200 text-purple-600 hover:bg-purple-50"
-                  >
-                    Admin
-                  </Button>
-                )}
-                <Button 
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push('/profile')}
-                  className="border-gray-200"
-                >
-                  {userProfile?.displayName || 'Profile'}
-                </Button>
-                <Button 
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => signOut()}
-                  className="text-gray-500"
-                >
-                  Logout
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button 
-                  variant="ghost"
-                  onClick={() => router.push('/auth/login')}
-                  className="text-gray-600"
-                >
-                  Sign In
-                </Button>
-                <Button 
-                  onClick={() => router.push('/auth/register')}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:opacity-90"
-                >
-                  Get Started
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
 function HomePage() {
   const router = useRouter();
   const [competitions, setCompetitions] = useState([]);
@@ -191,41 +114,32 @@ function HomePage() {
   const featuredCompetitions = competitions.filter(c => c.status !== 'ENDED').slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <Header />
-
+    <div className="min-h-screen bg-gray-50/50">
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50"></div>
-        <div className="absolute top-20 right-20 w-96 h-96 bg-gradient-to-br from-blue-200/40 to-purple-200/40 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 left-20 w-64 h-64 bg-gradient-to-br from-purple-200/40 to-pink-200/40 rounded-full blur-3xl"></div>
+      <section className="relative overflow-hidden bg-white border-b border-gray-200">
+        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-25"></div>
         
-        <div className="container mx-auto px-4 py-20 relative">
-          <div className="max-w-4xl">
-            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-full mb-6 shadow-sm">
-              <span className="text-sm font-medium text-gray-700">Online Competitions</span>
-              <span className="text-gray-400">•</span>
-              <span className="text-sm font-medium text-gray-700">Rankings</span>
-              <span className="text-gray-400">•</span>
-              <span className="text-sm font-medium text-gray-700">Results</span>
+        <div className="container mx-auto px-4 py-20 relative max-w-6xl">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 bg-blue-50 px-4 py-1.5 rounded-full mb-8 border border-blue-100">
+              <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
+              <span className="text-sm font-medium text-blue-700">Official Style Online Competitions</span>
             </div>
             
-            <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 leading-tight">
-              Master the Cube,<br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                Compete Worldwide
-              </span>
+            <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 tracking-tight">
+              Master the Cube.<br/>
+              <span className="text-blue-600">Compete Globally.</span>
             </h1>
             
-            <p className="text-xl text-gray-600 mb-8 max-w-2xl">
-              Discover competitions, track rankings, and showcase your skills in our online speedcubing platform.
+            <p className="text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Join a thriving community of speedcubers. Participate in live events, track your official-style PRs, and climb the global leaderboards.
             </p>
             
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button 
                 size="lg"
                 onClick={() => router.push('/competitions')}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:opacity-90 px-8 py-6 text-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 h-12 text-base shadow-lg shadow-blue-600/20 w-full sm:w-auto"
               >
                 Browse Competitions
               </Button>
@@ -233,197 +147,161 @@ function HomePage() {
                 size="lg"
                 variant="outline"
                 onClick={() => router.push('/rankings')}
-                className="border-gray-300 px-8 py-6 text-lg"
+                className="bg-white border-gray-200 hover:bg-gray-50 text-gray-700 px-8 h-12 text-base w-full sm:w-auto"
               >
-                View Rankings
+                View Leaderboards
               </Button>
-            </div>
-          </div>
-          
-          {/* 3D Cube Illustration */}
-          <div className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:block">
-            <div className="w-80 h-80 relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-purple-100 rounded-3xl transform rotate-12 shadow-2xl"></div>
-              <div className="absolute inset-4 bg-gradient-to-br from-blue-200/50 to-purple-200/50 rounded-2xl transform rotate-6"></div>
-              <div className="absolute inset-8 bg-white/80 rounded-xl flex items-center justify-center shadow-inner">
-                <span className="text-8xl">🧊</span>
-              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="py-8 border-y border-gray-100 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="flex items-center gap-4 p-4">
-              <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-red-500" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{stats.upcomingEvents}</div>
-                <div className="text-sm text-gray-500">Upcoming Events</div>
-              </div>
+      <section className="py-12 bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="text-4xl font-bold text-gray-900 mb-1">{stats.upcomingEvents}</div>
+              <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Upcoming Events</div>
             </div>
-            <div className="flex items-center gap-4 p-4">
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-                <Trophy className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{stats.totalCompetitions}</div>
-                <div className="text-sm text-gray-500">Total Competitions</div>
-              </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-gray-900 mb-1">{stats.totalCompetitions}</div>
+              <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Competitions</div>
             </div>
-            <div className="flex items-center gap-4 p-4">
-              <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-500" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{stats.totalCompetitors}</div>
-                <div className="text-sm text-gray-500">Total Competitors</div>
-              </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-gray-900 mb-1">{stats.totalCompetitors}</div>
+              <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Competitors</div>
             </div>
-            <div className="flex items-center gap-4 p-4">
-              <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
-                <Timer className="w-6 h-6 text-green-500" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{stats.totalSolves}</div>
-                <div className="text-sm text-gray-500">Total Solves</div>
-              </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-gray-900 mb-1">{stats.totalSolves}</div>
+              <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Solves</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Featured Competitions */}
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
+      <section className="py-20">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="flex items-center justify-between mb-10">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">Featured Competitions</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Featured Competitions</h2>
               <p className="text-gray-500 mt-1">Don't miss these upcoming events</p>
             </div>
             <Button 
               variant="outline"
               onClick={() => router.push('/competitions')}
-              className="hidden md:flex"
+              className="hidden md:flex gap-2"
             >
-              View all competitions
-              <ChevronRight className="w-4 h-4 ml-1" />
+              View all
+              <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
 
           {loadingComps ? (
-            <div className="text-center py-12 text-gray-400">Loading competitions...</div>
+            <div className="grid gap-6 md:grid-cols-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-64 bg-gray-100 rounded-xl animate-pulse"></div>
+              ))}
+            </div>
           ) : featuredCompetitions.length === 0 ? (
-            <Card className="bg-gray-50 border-dashed">
-              <CardContent className="py-16 text-center">
-                <div className="text-6xl mb-4">🧊</div>
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">No competitions yet</h3>
-                <p className="text-gray-500">Check back soon for upcoming events!</p>
-              </CardContent>
-            </Card>
+            <div className="text-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-50 mb-4">
+                <Cube className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-1">No active competitions</h3>
+              <p className="text-gray-500">Check back later for new events.</p>
+            </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {featuredCompetitions.map(comp => (
                 <Card
                   key={comp.id}
-                  className="bg-white border border-gray-100 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+                  className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer group rounded-xl overflow-hidden"
                   onClick={() => router.push(`/competition/${comp.id}`)}
                 >
-                  <CardContent className="p-6">
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="outline" className="bg-gray-50">ONLINE</Badge>
-                      {comp.status === 'LIVE' && <Badge className="bg-green-100 text-green-700">LIVE</Badge>}
-                      {comp.status === 'UPCOMING' && <Badge className="bg-yellow-100 text-yellow-700">UPCOMING</Badge>}
-                      {comp.type === 'FREE' && <Badge className="bg-blue-100 text-blue-700">FREE</Badge>}
+                  <CardContent className="p-0">
+                    <div className="p-6">
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {comp.status === 'LIVE' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-none shadow-none">LIVE</Badge>}
+                        {comp.status === 'UPCOMING' && <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-none shadow-none">UPCOMING</Badge>}
+                        {comp.type === 'FREE' && <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-none shadow-none">FREE</Badge>}
+                      </div>
+                      
+                      <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-1">
+                        {comp.name}
+                      </h3>
+                      
+                      <p className="text-sm text-gray-500 font-medium mb-4 flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(comp.startDate)}
+                      </p>
+                      
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {(comp.events || []).slice(0, 4).map(eventId => (
+                          <span key={eventId} className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 text-xs font-medium" title={eventId}>
+                            {getEventIcon(eventId) || eventId}
+                          </span>
+                        ))}
+                        {(comp.events || []).length > 4 && (
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-500 text-xs font-medium">
+                            +{comp.events.length - 4}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
-                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                      {comp.name}
-                    </h3>
-                    
-                    <p className="text-blue-600 font-medium mb-3">
-                      {formatDate(comp.startDate)} - {formatDate(comp.endDate)}
-                    </p>
-                    
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {(comp.events || []).slice(0, 4).map(eventId => (
-                        <span key={eventId} className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-600">
-                          {eventId}
-                        </span>
-                      ))}
-                      {(comp.events || []).length > 4 && (
-                        <span className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-600">
-                          +{comp.events.length - 4}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-3 pt-4 border-t border-gray-100">
-                      <Button variant="outline" size="sm" className="flex-1">
-                        View Details
-                      </Button>
-                      {comp.status !== 'ENDED' && (
-                        <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
-                          Register Now
-                        </Button>
-                      )}
+                    <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-600">
+                         {comp.status === 'LIVE' ? 'Compete now' : 'Registration open'}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
           )}
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 rounded-3xl p-12 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-            
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-              <div>
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
-                  Ready to compete?
-                </h2>
-                <p className="text-blue-100 text-lg">
-                  Register early and lock your slots before they fill.
-                </p>
-              </div>
-              <Button 
-                size="lg"
-                onClick={() => router.push('/auth/register')}
-                className="bg-white text-blue-600 hover:bg-blue-50 px-8 py-6 text-lg font-semibold"
-              >
-                Get Started
-              </Button>
-            </div>
+          
+          <div className="mt-8 md:hidden">
+             <Button variant="outline" className="w-full" onClick={() => router.push('/competitions')}>View all competitions</Button>
           </div>
         </div>
       </section>
 
+      {/* CTA Section */}
+      <section className="py-20 bg-gray-900 text-white">
+        <div className="container mx-auto px-4 max-w-6xl text-center">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to set your new PR?</h2>
+            <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
+              Join thousands of cubers competing in our daily and weekly events. Free registration, official WCA events, and instant rankings.
+            </p>
+            <Button 
+              size="lg"
+              onClick={() => router.push('/auth/register')}
+              className="bg-white text-gray-900 hover:bg-gray-100 px-8 h-12 text-base font-semibold"
+            >
+              Get Started for Free
+            </Button>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="container mx-auto px-4">
+      <footer className="bg-white border-t border-gray-200 py-12">
+        <div className="container mx-auto px-4 max-w-6xl">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-violet-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                M
               </div>
-              <span className="text-xl font-bold">MCUBES</span>
+              <span className="text-lg font-bold text-gray-900">MCUBES</span>
             </div>
-            <div className="flex gap-8 text-gray-400">
-              <Link href="/competitions" className="hover:text-white">Competitions</Link>
-              <Link href="/rankings" className="hover:text-white">Rankings</Link>
-              <Link href="/timer" className="hover:text-white">Timer</Link>
+            <div className="flex gap-8 text-sm font-medium text-gray-500">
+              <Link href="/competitions" className="hover:text-gray-900 transition-colors">Competitions</Link>
+              <Link href="/rankings" className="hover:text-gray-900 transition-colors">Rankings</Link>
+              <Link href="/timer" className="hover:text-gray-900 transition-colors">Timer</Link>
             </div>
-            <p className="text-gray-500 text-sm">
+            <p className="text-gray-400 text-sm">
               © 2026 MCUBES. All rights reserved.
             </p>
           </div>
