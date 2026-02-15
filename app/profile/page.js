@@ -6,13 +6,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Save, Trophy, CreditCard, User, Award, TrendingUp } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -27,36 +28,52 @@ function Header() {
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/10">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <span className="text-white font-bold text-lg">M</span>
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">MCUBES</span>
-          </Link>
-          
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-gray-400 hover:text-white font-medium transition-colors">Home</Link>
-            <Link href="/competitions" className="text-gray-400 hover:text-white font-medium transition-colors">Competitions</Link>
-            <Link href="/rankings" className="text-gray-400 hover:text-white font-medium transition-colors">Rankings</Link>
-          </nav>
+    <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/80 backdrop-blur-xl">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2 group">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-600 group-hover:scale-105 transition-transform duration-300">
+             <span className="font-bold text-white text-sm">M</span>
+          </div>
+          <span className="font-bold text-lg tracking-tight text-white group-hover:text-blue-400 transition-colors">MCUBES</span>
+        </Link>
+        
+        <nav className="hidden md:flex items-center gap-6">
+          <Link href="/" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Home</Link>
+          <Link href="/competitions" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Competitions</Link>
+          <Link href="/rankings" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Rankings</Link>
+        </nav>
 
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
             {isAdmin && (
-              <Button variant="outline" size="sm" onClick={() => router.push('/admin')} className="border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20">
+              <Button variant="ghost" size="sm" onClick={() => router.push('/admin')} className="text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 h-8 text-xs uppercase tracking-wider font-semibold">
+                <Shield className="w-3 h-3 mr-1.5" />
                 Admin
               </Button>
             )}
-            <Button variant="outline" size="sm" className="border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
-              {userProfile?.displayName || 'Profile'}
+            <div className="h-4 w-[1px] bg-white/10 mx-1 hidden sm:block" />
+            <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 text-xs uppercase tracking-wider font-semibold">
+              <LogOut className="w-3 h-3 mr-1.5" />
+              Logout
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-gray-400 hover:text-white hover:bg-white/5">Logout</Button>
-          </div>
         </div>
       </div>
     </header>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, colorClass }) {
+  return (
+    <Card className="bg-zinc-900/50 border-white/5 hover:border-white/10 transition-colors">
+      <CardContent className="p-6 flex items-center gap-4">
+        <div className={`p-3 rounded-xl bg-opacity-10 ${colorClass.bg}`}>
+          <Icon className={`w-6 h-6 ${colorClass.text}`} />
+        </div>
+        <div>
+          <p className="text-2xl font-bold text-white">{value}</p>
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{label}</p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -177,304 +194,345 @@ function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950">
-        <Header />
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-400 text-xl">Loading...</div>
-        </div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500 border-r-2 border-r-transparent"></div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950">
+    <div className="min-h-screen bg-black text-zinc-100 selection:bg-blue-500/30">
       <Header />
       
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Profile Header - Hero Section */}
-        <div className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 backdrop-blur-xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10" />
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
-          
-          <div className="relative py-8 px-6 md:px-8">
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity" />
-                <div className="relative w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-2xl">
-                  {userProfile?.photoURL ? (
-                    <img src={userProfile.photoURL} alt="" className="w-full h-full rounded-2xl object-cover" />
-                  ) : (
-                    <User className="w-12 h-12 md:w-14 md:h-14 text-white" />
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex-1 text-center md:text-left">
-                <h1 className="text-3xl md:text-4xl font-bold text-white mb-3 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {userProfile?.displayName || 'User'}
-                </h1>
-                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-3">
-                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-3 py-1">
-                    {userProfile?.wcaStyleId || 'N/A'}
+      <main className="container mx-auto px-4 py-8 max-w-5xl space-y-8">
+        
+        {/* Modern Profile Header */}
+        <div className="relative group rounded-3xl bg-zinc-900/50 border border-white/5 p-6 md:p-8 overflow-hidden">
+           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-purple-600/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+           <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+           
+           <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start md:items-center">
+              <Avatar className="w-24 h-24 border-4 border-black shadow-2xl ring-2 ring-white/10">
+                <AvatarImage src={userProfile?.photoURL} />
+                <AvatarFallback className="bg-zinc-800 text-2xl font-bold text-zinc-400">
+                  {userProfile?.displayName?.[0] || 'U'}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="flex-1 space-y-3">
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <h1 className="text-3xl font-bold text-white tracking-tight">{userProfile?.displayName || 'User'}</h1>
+                  <Badge className="w-fit bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 transition-colors">
+                    {userProfile?.wcaStyleId || 'MEMBER'}
                   </Badge>
-                  {userProfile?.wcaId && (
-                    <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1">
-                      WCA: {userProfile.wcaId}
-                    </Badge>
-                  )}
-                  <span className="text-gray-400 flex items-center gap-1">
-                    📍 {userProfile?.country || 'Unknown'}
-                  </span>
                 </div>
-                <p className="text-sm text-gray-500">
-                  Member since {formatDate(userProfile?.createdAt)}
-                </p>
+                
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-400">
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-zinc-500" />
+                    @{userProfile?.username || 'username'}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-zinc-500" />
+                    {userProfile?.country || 'Unknown Location'}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-zinc-500" />
+                    Joined {formatDate(userProfile?.createdAt)}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+
+              {userProfile?.wcaId && (
+                <div className="hidden md:block text-right">
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">WCA ID</p>
+                  <a href={`https://www.worldcubeassociation.org/persons/${userProfile.wcaId}`} target="_blank" rel="noopener noreferrer" className="text-2xl font-mono font-bold text-white hover:text-blue-400 transition-colors">
+                    {userProfile.wcaId}
+                  </a>
+                </div>
+              )}
+           </div>
         </div>
 
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard 
+            icon={Trophy} 
+            value={competitions.length} 
+            label="Competitions" 
+            colorClass={{bg: 'bg-yellow-500', text: 'text-yellow-500'}} 
+          />
+          <StatCard 
+            icon={Crown} 
+            value={results.length} 
+            label="Total Results" 
+            colorClass={{bg: 'bg-purple-500', text: 'text-purple-500'}} 
+          />
+          <StatCard 
+            icon={CreditCard} 
+            value={payments.length} 
+            label="Payments" 
+            colorClass={{bg: 'bg-green-500', text: 'text-green-500'}} 
+          />
+        </div>
+
+        {/* Content Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-white/5 border border-white/10 backdrop-blur-xl p-1 w-full md:w-auto">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white text-gray-400">
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="edit" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white text-gray-400">
-              Edit Profile
-            </TabsTrigger>
-            <TabsTrigger value="results" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white text-gray-400">
-              Results
-            </TabsTrigger>
-            <TabsTrigger value="payments" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white text-gray-400">
-              Payments
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between">
+            <TabsList className="bg-zinc-900/50 border border-white/5 p-1 h-auto">
+              {['overview', 'edit', 'results', 'payments'].map((tab) => (
+                <TabsTrigger 
+                  key={tab}
+                  value={tab} 
+                  className="capitalize px-6 py-2 rounded-lg data-[state=active]:bg-zinc-800 data-[state=active]:text-white text-zinc-400 hover:text-zinc-200 transition-all"
+                >
+                  {tab}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 backdrop-blur-xl p-6 group hover:from-yellow-500/20 hover:to-orange-500/20 transition-all duration-300">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/20 rounded-full blur-2xl group-hover:bg-yellow-500/30 transition-all" />
-                <Trophy className="h-10 w-10 mb-3 text-yellow-400 relative z-10" />
-                <p className="text-4xl font-bold text-white mb-1 relative z-10">{competitions.length}</p>
-                <p className="text-gray-400 text-sm relative z-10">Competitions</p>
-              </div>
-              
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 backdrop-blur-xl p-6 group hover:from-blue-500/20 hover:to-cyan-500/20 transition-all duration-300">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl group-hover:bg-blue-500/30 transition-all" />
-                <Award className="h-10 w-10 mb-3 text-blue-400 relative z-10" />
-                <p className="text-4xl font-bold text-white mb-1 relative z-10">{results.length}</p>
-                <p className="text-gray-400 text-sm relative z-10">Results</p>
-              </div>
-              
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 backdrop-blur-xl p-6 group hover:from-purple-500/20 hover:to-pink-500/20 transition-all duration-300">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl group-hover:bg-purple-500/30 transition-all" />
-                <CreditCard className="h-10 w-10 mb-3 text-purple-400 relative z-10" />
-                <p className="text-4xl font-bold text-white mb-1 relative z-10">{payments.length}</p>
-                <p className="text-gray-400 text-sm relative z-10">Payments</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-blue-400" />
-                  Recent Competitions
-                </h3>
-              </div>
-              <div className="p-6">
-                {dataLoading ? (
-                  <p className="text-gray-400 text-center py-4">Loading...</p>
+          <TabsContent value="overview" className="space-y-6 focus-visible:outline-none">
+            <Card className="bg-zinc-900/50 border-white/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrendingUp className="w-5 h-5 text-blue-500" />
+                  Recent Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                 {dataLoading ? (
+                  <div className="py-8 text-center text-zinc-500">Loading activity...</div>
                 ) : competitions.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-400 mb-4">No competitions yet</p>
-                    <Button 
-                      onClick={() => router.push('/competitions')}
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg shadow-blue-500/30"
-                    >
-                      Browse Competitions
-                    </Button>
+                  <div className="py-12 text-center">
+                    <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
+                      <Trophy className="w-6 h-6 text-zinc-500" />
+                    </div>
+                    <h3 className="text-lg font-medium text-white mb-1">No competitions yet</h3>
+                    <p className="text-zinc-500 text-sm mb-4">Join a competition to start your journey!</p>
+                    <Link href="/competitions">
+                      <Button variant="outline" className="border-white/10 hover:bg-white/5 hover:text-white">
+                        Browse Competitions
+                      </Button>
+                    </Link>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {competitions.slice(0, 5).map(comp => (
-                      <div key={comp.id} className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-lg border border-white/5 transition-all group">
-                        <div>
-                          <p className="font-medium text-white group-hover:text-blue-400 transition-colors">{comp.name}</p>
-                          <p className="text-sm text-gray-500">{formatDate(comp.startDate)}</p>
+                      <div key={comp.id} className="group flex items-center justify-between p-4 rounded-xl bg-black/20 border border-white/5 hover:border-white/10 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-lg">
+                            🏆
+                          </div>
+                          <div>
+                            <p className="font-medium text-white group-hover:text-blue-400 transition-colors">{comp.name}</p>
+                            <p className="text-sm text-zinc-500">{formatDate(comp.startDate)} • {comp.city || 'Online'}</p>
+                          </div>
                         </div>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={() => router.push(`/competition/${comp.id}`)}
-                          className="border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => router.push(`/competition/${comp.id}`)} className="text-zinc-400 hover:text-white">
                           View
                         </Button>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Edit Profile Tab */}
-          <TabsContent value="edit">
-            <div className="rounded-xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-blue-500/10 to-purple-500/10">
-                <h3 className="text-xl font-bold text-white">Edit Profile</h3>
-              </div>
-              <div className="p-6 space-y-5">
-                {message.text && (
-                  <div className={`p-4 rounded-lg border ${message.type === 'success' ? 'bg-green-500/10 text-green-300 border-green-500/30' : 'bg-red-500/10 text-red-300 border-red-500/30'}`}>
+          <TabsContent value="edit" className="focus-visible:outline-none">
+            <Card className="bg-zinc-900/50 border-white/5 max-w-2xl">
+              <CardHeader>
+                <CardTitle>Edit Profile</CardTitle>
+                <CardDescription>Update your personal information</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                 {message.text && (
+                  <div className={`p-4 rounded-lg border text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
                     {message.text}
                   </div>
                 )}
                 
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Display Name</Label>
-                  <Input
-                    value={formData.displayName}
-                    onChange={(e) => setFormData({...formData, displayName: e.target.value})}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:ring-blue-500/20"
-                  />
+                <div className="grid gap-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="displayName">Display Name</Label>
+                    <Input
+                      id="displayName"
+                      value={formData.displayName}
+                      onChange={(e) => setFormData({...formData, displayName: e.target.value})}
+                      className="bg-black/20 border-white/10 focus:border-blue-500/50"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid gap-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        value={formData.username}
+                        onChange={(e) => setFormData({...formData, username: e.target.value})}
+                        className="bg-black/20 border-white/10 focus:border-blue-500/50"
+                      />
+                    </div>
+                    
+                    <div className="grid gap-2">
+                      <Label htmlFor="wcaId">WCA ID</Label>
+                      <Input
+                        id="wcaId"
+                        value={formData.wcaId}
+                        onChange={(e) => setFormData({...formData, wcaId: e.target.value})}
+                        placeholder="2024ABCD01"
+                        className="bg-black/20 border-white/10 focus:border-blue-500/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="country">Country</Label>
+                    <Select value={formData.country} onValueChange={(value) => setFormData({...formData, country: value})}>
+                      <SelectTrigger className="bg-black/20 border-white/10 focus:border-blue-500/50">
+                        <SelectValue placeholder="Select country" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-white/10">
+                        {COUNTRIES.map(country => (
+                          <SelectItem key={country} value={country} className="focus:bg-zinc-800 text-zinc-300">
+                            {country}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-500">Email Address</span>
+                      <span className="text-zinc-300 font-mono">{userProfile?.email}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-500">System ID</span>
+                      <span className="text-zinc-300 font-mono">{userProfile?.wcaStyleId}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Username</Label>
-                  <Input
-                    value={formData.username}
-                    onChange={(e) => setFormData({...formData, username: e.target.value})}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:ring-blue-500/20"
-                  />
+                <div className="flex justify-end pt-4">
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={saving}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-8"
+                  >
+                    {saving ? (
+                      <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Saving...</span>
+                    ) : (
+                      <span className="flex items-center gap-2"><Save className="w-4 h-4" /> Save Changes</span>
+                    )}
+                  </Button>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-gray-300">WCA ID (Optional)</Label>
-                  <Input
-                    value={formData.wcaId}
-                    onChange={(e) => setFormData({...formData, wcaId: e.target.value})}
-                    placeholder="e.g., 2019JOHN01"
-                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:ring-blue-500/20"
-                  />
-                  <p className="text-xs text-gray-500">Enter your official WCA ID if you have one</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Country</Label>
-                  <Select value={formData.country} onValueChange={(value) => setFormData({...formData, country: value})}>
-                    <SelectTrigger className="bg-white/5 border-white/10 text-white focus:border-blue-500/50 focus:ring-blue-500/20">
-                      <SelectValue placeholder="Select country" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-white/10">
-                      {COUNTRIES.map(country => (
-                        <SelectItem key={country} value={country} className="text-white focus:bg-white/10">{country}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="bg-white/5 border border-white/10 p-4 rounded-lg space-y-2 text-sm">
-                  <p className="text-gray-300"><strong>Email:</strong> {userProfile?.email} <span className="text-gray-500">(Read-only)</span></p>
-                  <p className="text-gray-300"><strong>MCUBES ID:</strong> {userProfile?.wcaStyleId} <span className="text-gray-500">(Read-only)</span></p>
-                </div>
-
-                <Button 
-                  onClick={handleSave} 
-                  disabled={saving} 
-                  className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg shadow-blue-500/30"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Results Tab */}
-          <TabsContent value="results">
-            <div className="rounded-xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Award className="h-5 w-5 text-blue-400" />
-                  My Results
-                </h3>
-              </div>
-              <div className="p-6">
-                {results.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No results yet. Compete in a competition to see your results!</p>
+          <TabsContent value="results" className="focus-visible:outline-none">
+            <Card className="bg-zinc-900/50 border-white/5">
+              <CardHeader>
+                <CardTitle>My Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!results.length ? (
+                  <div className="text-center py-12 text-zinc-500">
+                    No results found. Compete to earn your first result!
+                  </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {results.map(result => (
-                      <div key={result.id} className="p-4 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-all">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="font-semibold text-white flex items-center gap-2">
-                            {getEventIcon(result.eventId)} {getEventName(result.eventId)}
-                          </p>
-                          <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
-                            Ao5: {formatTime(result.average)}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-gray-400 mb-2">Best: {formatTime(result.bestSingle)}</p>
-                        {result.times && (
-                          <div className="flex flex-wrap gap-2">
-                            {result.times.map((time, i) => (
-                              <span key={i} className="text-xs bg-white/10 px-3 py-1 rounded border border-white/20 text-gray-300">
-                                {formatTime(time)}
-                              </span>
-                            ))}
+                      <div key={result.id} className="p-5 rounded-xl bg-black/20 border border-white/5 hover:border-blue-500/30 transition-all group relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl">{getEventIcon(result.eventId)}</span>
+                              <div>
+                                <h4 className="font-semibold text-zinc-200 text-sm">{getEventName(result.eventId)}</h4>
+                                <p className="text-xs text-zinc-500 font-mono">ID: {result.eventId}</p>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="border-blue-500/20 text-blue-400 bg-blue-500/5">
+                              Ao5
+                            </Badge>
                           </div>
-                        )}
+                          
+                          <div className="space-y-1 mb-4">
+                            <div className="flex justify-between items-end">
+                              <span className="text-sm text-zinc-500">Average</span>
+                              <span className="text-xl font-bold text-white font-mono">{formatTime(result.average)}</span>
+                            </div>
+                            <div className="flex justify-between items-end">
+                              <span className="text-xs text-zinc-600">Best Single</span>
+                              <span className="text-sm text-zinc-400 font-mono">{formatTime(result.bestSingle)}</span>
+                            </div>
+                          </div>
+
+                          {result.times && (
+                            <div className="flex gap-1 pt-3 border-t border-white/5">
+                              {result.times.map((time, i) => (
+                                <div key={i} className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                                  <div 
+                                    className="h-full bg-blue-500/50" 
+                                    style={{ width: time === Math.min(...result.times.filter(t => typeof t === 'number')) ? '100%' : '60%', opacity: time === Math.max(...result.times.filter(t => typeof t === 'number')) ? 0.3 : 1 }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Payments Tab */}
-          <TabsContent value="payments">
-            <div className="rounded-xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-purple-400" />
-                  My Payment History
-                </h3>
-              </div>
-              <div className="p-6">
-                {payments.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No payment history</p>
+          <TabsContent value="payments" className="focus-visible:outline-none">
+            <Card className="bg-zinc-900/50 border-white/5">
+              <CardHeader>
+                <CardTitle>Payment History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!payments.length ? (
+                  <div className="text-center py-12 text-zinc-500">
+                    No payment history available.
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {payments.map(payment => (
-                      <div key={payment.id} className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-all">
-                        <div>
-                          <p className="font-medium text-white">Payment #{payment.paymentId?.slice(-8) || 'N/A'}</p>
-                          <p className="text-sm text-gray-500">{formatDate(payment.createdAt)}</p>
-                          <p className="text-sm text-gray-400">{payment.competitionName || 'Competition'}</p>
+                      <div key={payment.id} className="flex items-center justify-between p-4 rounded-lg bg-black/20 border border-white/5">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${payment.status === 'SUCCESS' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                             {payment.status === 'SUCCESS' ? <Shield className="w-5 h-5" /> : <Award className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-white">{payment.competitionName || 'Competition Registration'}</p>
+                            <p className="text-xs text-zinc-500 font-mono">{payment.paymentId || payment.id}</p>
+                          </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-white text-lg">{payment.currency === 'INR' ? '₹' : '$'}{payment.amount || 0}</p>
-                          <Badge className="bg-green-500/20 text-green-300 border-green-500/30 mt-1">
-                            {payment.status || 'SUCCESS'}
-                          </Badge>
+                          <p className="text-lg font-bold text-white">{payment.currency === 'INR' ? '₹' : '$'}{payment.amount}</p>
+                          <p className="text-xs text-zinc-500">{formatDate(payment.createdAt)}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
+
         </Tabs>
-      </div>
+      </main>
     </div>
   );
 }
