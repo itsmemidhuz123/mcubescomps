@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, Shield, Users, Trophy, Edit, Eye, CreditCard, Download, EyeOff, Search, FileDown, AlertTriangle, Gavel, RefreshCw, X } from 'lucide-react';
+import { Plus, Trash2, Shield, Users, Trophy, Edit, Eye, CreditCard, Download, EyeOff, Search, FileDown, AlertTriangle, Gavel, RefreshCw, X, DollarSign, Activity, FileText } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import { toast } from "sonner"; // Assuming sonner or use-toast is available, fallback to alert if not
 
@@ -30,6 +30,13 @@ function AdminPanel() {
   const [users, setUsers] = useState([]);
   const [payments, setPayments] = useState([]);
   const [solves, setSolves] = useState([]); // For Solve Management
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalSolves: 0,
+    totalRevenue: 0,
+    activeCompetitions: 0
+  });
   const [loadingData, setLoadingData] = useState(true);
 
   // Filter States
@@ -86,9 +93,36 @@ function AdminPanel() {
       const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(usersData);
 
-      // Fetch Payments (Optional for now, but good for summary)
-      // const paymentsSnapshot = await getDocs(collection(db, 'payments'));
-      // setPayments(paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // Fetch Payments
+      const paymentsSnapshot = await getDocs(collection(db, 'payments'));
+      const paymentsData = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPayments(paymentsData);
+
+      // Fetch Audit Logs (Limit 50)
+      const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
+      const auditSnapshot = await getDocs(auditQuery);
+      setAuditLogs(auditSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+      // Calculate Stats
+      const totalRevenue = paymentsData
+        .filter(p => p.status === 'SUCCESS')
+        .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+      // Fetch total solves count (approximate or separate query)
+      // For accurate "Total Solves", we might need a separate aggregation or count query
+      // For now, we'll estimate or leave if too expensive. Let's do a simple count query.
+      const solvesCountSnapshot = await getDocs(query(collection(db, 'solves'), limit(1))); // Just checking existence? No, need count. 
+      // Firestore count is cheaper but requires server module or full read. 
+      // Let's assume we can display "N/A" or fetch all solves if not too many. 
+      // Better approach: Admin usually manages solves per competition. Global count might be heavy.
+      // Let's rely on competition participant counts or similar if available.
+      
+      setStats({
+        totalUsers: usersData.length,
+        totalRevenue,
+        activeCompetitions: compsData.filter(c => c.status === 'UPCOMING' || c.status === 'LIVE').length,
+        totalSolves: 'See Details' // Placeholder to avoid massive read
+      });
       
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -96,6 +130,21 @@ function AdminPanel() {
       setLoadingData(false);
     }
   }
+
+  // --- LOGGING ---
+  const logAction = async (action, details) => {
+    try {
+      await addDoc(collection(db, 'auditLogs'), {
+        action,
+        adminId: user.uid,
+        adminName: user.email,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('Audit log failed', e);
+    }
+  };
 
   // --- COMPETITION MANAGEMENT ---
 
@@ -124,10 +173,12 @@ function AdminPanel() {
     try {
       if (editingComp) {
         await updateDoc(doc(db, 'competitions', editingComp.id), compData);
+        logAction('UPDATE_COMPETITION', { compId: editingComp.id, name: compData.name });
       } else {
         compData.createdAt = new Date().toISOString();
         compData.participantCount = 0;
-        await addDoc(collection(db, 'competitions'), compData);
+        const docRef = await addDoc(collection(db, 'competitions'), compData);
+        logAction('CREATE_COMPETITION', { compId: docRef.id, name: compData.name });
       }
       fetchData();
       resetForm();
@@ -264,6 +315,12 @@ function AdminPanel() {
         status: editingUser.status,
         wcaStyleId: editingUser.wcaStyleId
       });
+      
+      logAction('UPDATE_USER', { 
+        userId: editingUser.id, 
+        updates: { role: editingUser.role, status: editingUser.status } 
+      });
+
       fetchData();
       setEditingUser(null);
       alert('User updated successfully');
@@ -276,6 +333,7 @@ function AdminPanel() {
     if (!confirm('Are you sure? This action cannot be undone.')) return;
     try {
       await deleteDoc(doc(db, 'users', userId));
+      logAction('DELETE_USER', { userId });
       fetchData();
     } catch (e) {
       alert('Failed to delete user: ' + e.message);
@@ -327,20 +385,10 @@ function AdminPanel() {
         updatedAt: new Date().toISOString()
       };
       
-      // If DNF, reset time to 0 or keep it? Usually DNF implies time is invalid but we keep it for reference
-      // If +2, we might need to adjust the stored time if it wasn't already adjusted. 
-      // Simplified: We update the status. Leaderboard calculation logic needs to handle 'penalty' field.
-      
       await updateDoc(doc(db, 'results', editingSolve.id), updateData);
       
-      // Log audit
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE_SOLVE',
-        adminId: user.uid,
-        solveId: editingSolve.id,
-        changes: updateData,
-        timestamp: new Date().toISOString()
-      });
+      // Log audit (using helper)
+      logAction('UPDATE_SOLVE', { solveId: editingSolve.id, changes: updateData });
 
       setEditingSolve(null);
       fetchSolves(); // Refresh
@@ -354,10 +402,33 @@ function AdminPanel() {
     if (!confirm('Delete this solve?')) return;
     try {
       await deleteDoc(doc(db, 'results', solveId));
+      logAction('DELETE_SOLVE', { solveId });
       fetchSolves();
     } catch (e) {
       alert('Delete failed: ' + e.message);
     }
+  };
+
+  const downloadPaymentsCSV = () => {
+    const csv = [
+      ['Date', 'User', 'Competition', 'Amount', 'Currency', 'Status', 'Transaction ID'].join(','),
+      ...payments.map(p => [
+        `"${new Date(p.createdAt).toLocaleDateString()}"`,
+        `"${users.find(u => u.id === p.userId)?.displayName || 'Unknown'}"`,
+        `"${competitions.find(c => c.id === p.competitionId)?.name || 'Unknown'}"`,
+        p.amount,
+        p.currency,
+        p.status,
+        `"${p.id}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payments_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
 
@@ -375,13 +446,115 @@ function AdminPanel() {
           <Button variant="outline" onClick={() => router.push('/')}>Exit Admin</Button>
         </div>
 
-        <Tabs defaultValue="manage" className="space-y-6">
-          <TabsList className="bg-white p-1 border shadow-sm">
+        <Tabs defaultValue="dashboard" className="space-y-6">
+          <TabsList className="bg-white p-1 border shadow-sm flex-wrap h-auto">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="create" onClick={() => { setEditingComp(null); resetForm(); }}>Create Comp</TabsTrigger>
             <TabsTrigger value="manage">Manage Comps</TabsTrigger>
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="solves">Solve Management</TabsTrigger>
+            <TabsTrigger value="payments">Payments</TabsTrigger>
           </TabsList>
+
+          {/* DASHBOARD TAB */}
+          <TabsContent value="dashboard" className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₹{stats.totalRevenue.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">+{stats.totalUsers}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Active Events</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.activeCompetitions}</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Audit Log Preview */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Audit Logs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                   {auditLogs.length === 0 ? <p className="text-sm text-gray-500">No logs found</p> : 
+                    auditLogs.map(log => (
+                      <div key={log.id} className="flex items-center justify-between border-b pb-2 last:border-0">
+                         <div>
+                            <p className="font-medium text-sm">{log.action}</p>
+                            <p className="text-xs text-gray-500">{log.adminName}</p>
+                         </div>
+                         <div className="text-xs text-gray-400">
+                            {new Date(log.timestamp).toLocaleString()}
+                         </div>
+                      </div>
+                    ))
+                   }
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* PAYMENTS TAB */}
+          <TabsContent value="payments">
+            <Card>
+               <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Payment Reconciliation</CardTitle>
+                    <CardDescription>View and export all transactions</CardDescription>
+                  </div>
+                  <Button variant="outline" onClick={downloadPaymentsCSV}>
+                     <Download className="w-4 h-4 mr-2" /> Export CSV
+                  </Button>
+               </CardHeader>
+               <CardContent>
+                  <Table>
+                     <TableHeader>
+                        <TableRow>
+                           <TableHead>Date</TableHead>
+                           <TableHead>User</TableHead>
+                           <TableHead>Amount</TableHead>
+                           <TableHead>Competition</TableHead>
+                           <TableHead>Status</TableHead>
+                        </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                        {payments.length === 0 ? (
+                           <TableRow><TableCell colSpan={5} className="text-center">No payments found</TableCell></TableRow>
+                        ) : payments.map(p => (
+                           <TableRow key={p.id}>
+                              <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
+                              <TableCell>{users.find(u => u.id === p.userId)?.displayName || 'Unknown'}</TableCell>
+                              <TableCell>{p.currency} {p.amount}</TableCell>
+                              <TableCell>{competitions.find(c => c.id === p.competitionId)?.name || 'Unknown'}</TableCell>
+                              <TableCell>
+                                 <Badge variant={p.status === 'SUCCESS' ? 'default' : 'secondary'}>{p.status}</Badge>
+                              </TableCell>
+                           </TableRow>
+                        ))}
+                     </TableBody>
+                  </Table>
+               </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* CREATE / EDIT COMP */}
           <TabsContent value="create">

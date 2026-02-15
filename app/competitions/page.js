@@ -33,29 +33,14 @@ function CompetitionsPage() {
     try {
       const compsRef = collection(db, 'competitions');
       const snapshot = await getDocs(compsRef);
-      
-      const compsData = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        
-        // Filter out unpublished competitions for non-admin users
-        if (data.published === false && !isAdmin) {
-          return;
-        }
-        
-        const now = new Date();
-        const start = data.competitionStartDate || data.startDate;
-        const end = data.competitionEndDate || data.endDate;
-        const startDate = start ? new Date(start) : new Date();
-        const endDate = end ? new Date(end) : new Date();
-        
-        let status = 'UPCOMING';
-        if (now >= startDate && now <= endDate) status = 'LIVE';
-        else if (now > endDate) status = 'PAST';
-        
-        compsData.push({ id: doc.id, ...data, status });
-      });
-      
+      let compsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter out unpublished competitions for non-admin users
+      if (!isAdmin) {
+        compsData = compsData.filter(comp => comp.published !== false);
+      }
+
+      // Sort by date (newest first)
       compsData.sort((a, b) => {
         const dateA = a.competitionStartDate || a.startDate ? new Date(a.competitionStartDate || a.startDate) : new Date(0);
         const dateB = b.competitionStartDate || b.startDate ? new Date(b.competitionStartDate || b.startDate) : new Date(0);

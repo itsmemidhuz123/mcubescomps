@@ -29,11 +29,46 @@ function TimerPage() {
   const [scrambleRevealedId, setScrambleRevealedId] = useState(null);
   const [loading, setLoading] = useState(true);
   
+  // Anti-cheat state
+  const [flagged, setFlagged] = useState(false);
+  const [flagReason, setFlagReason] = useState('');
+  
   const inspectionStartRef = useRef(null);
   const solveStartRef = useRef(null);
   const animationFrameRef = useRef(null);
   const audioContextRef = useRef(null);
   const beepPlayedRef = useRef({ eight: false, five: false });
+
+  // Anti-cheat Listeners
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && (phase === 'inspection' || phase === 'solving')) {
+        setFlagged(true);
+        setFlagReason(prev => {
+          if (prev.includes('Tab switch')) return prev;
+          return prev ? `${prev}, Tab switch detected` : 'Tab switch detected';
+        });
+      }
+    };
+
+    const handleBlur = () => {
+      if (phase === 'inspection' || phase === 'solving') {
+        setFlagged(true);
+        setFlagReason(prev => {
+          if (prev.includes('Focus lost')) return prev;
+          return prev ? `${prev}, Focus lost` : 'Focus lost';
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [phase]);
 
   // Initialize and fetch data
   useEffect(() => {
@@ -306,7 +341,7 @@ function TimerPage() {
         finalTime = Infinity;
       }
 
-      // Save solve to Firestore
+      // Save solve to Firestore with Anti-cheat flags
       await addDoc(collection(db, 'solves'), {
         userId: user.uid,
         userEmail: user.email,
@@ -320,6 +355,8 @@ function TimerPage() {
         penalty: appliedPenalty,
         scramble: currentScramble,
         isRefreshDNF: isRefreshDNF,
+        flagged: flagged || isRefreshDNF, // Auto flag refresh DNFs
+        flagReason: isRefreshDNF ? 'Page refreshed during solve' : flagReason,
         createdAt: new Date().toISOString()
       });
 
@@ -348,6 +385,9 @@ function TimerPage() {
           setSolveTime(0);
           setInspectionTime(15000);
           setPenalty('none');
+          // Reset flags for next solve
+          setFlagged(false);
+          setFlagReason('');
           
           // Load next scramble
           const scrambles = competition?.scrambles?.[params.eventId];

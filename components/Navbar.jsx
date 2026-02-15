@@ -9,6 +9,10 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+// Logo URLs
+const LOGO_LIGHT = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/logo.png";
+const LOGO_DARK = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/MCUBES+logo+footer-01+(1).png";
+
 export function Navbar() {
   const { user, userProfile, signOut, isAdmin, loading } = useAuth();
   const router = useRouter();
@@ -37,10 +41,13 @@ export function Navbar() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 text-white font-bold text-sm shadow-md group-hover:shadow-lg transition-all">
-            M
+          <div className="relative h-10 w-40">
+            <img 
+              src={LOGO_LIGHT} 
+              alt="MCUBES" 
+              className="h-full w-full object-contain object-left"
+            />
           </div>
-          <span className="font-bold text-xl tracking-tight text-gray-900">MCUBES</span>
         </Link>
         
         {/* Desktop Nav */}
@@ -117,8 +124,13 @@ export function Navbar() {
             <SheetContent side="right" className="w-[300px] sm:w-[400px]">
               <div className="flex flex-col gap-6 py-6">
                 <Link href="/" onClick={() => setIsOpen(false)} className="flex items-center gap-2">
-                   <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600 text-white font-bold text-sm">M</div>
-                   <span className="font-bold text-lg text-gray-900">MCUBES</span>
+                   <div className="relative h-10 w-32">
+                      <img 
+                        src={LOGO_LIGHT} 
+                        alt="MCUBES" 
+                        className="h-full w-full object-contain object-left"
+                      />
+                   </div>
                 </Link>
                 
                 <div className="flex flex-col gap-3">
