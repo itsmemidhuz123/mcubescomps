@@ -12,11 +12,14 @@ service cloud.firestore {
     }
     
     // Check if user is admin
-    // This requires the user document to have a field 'role' set to 'admin'
+    // Matches 'ADMIN' (used in AuthContext.js) or 'admin' (legacy/manual)
     function isAdmin() {
       return isSignedIn() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+             (
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' || 
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+             );
     }
     
     // Check if user owns the document being accessed
@@ -85,6 +88,7 @@ service cloud.firestore {
     // IMPORTANT: This contains sensitive financial data
     match /payments/{paymentId} {
       // Read: Owner can see own payments, Admin can see ALL
+      // Note: Admin can query collectionGroup, User must query with where('userId', '==', auth.uid)
       allow read: if isSignedIn() && 
                  (resource.data.userId == request.auth.uid || isAdmin());
       

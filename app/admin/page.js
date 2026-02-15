@@ -115,6 +115,11 @@ export default function AdminPanel() {
 
     } catch (error) {
       console.error('Error fetching admin data:', error);
+      if (error.code === 'permission-denied' || error.message.includes('permission')) {
+        alert("Access Denied: Your user account in Firestore does not have the 'role: admin' field required by security rules.");
+      } else {
+        alert("Error loading admin data: " + error.message);
+      }
     } finally {
       setLoadingData(false);
     }
