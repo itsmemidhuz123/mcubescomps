@@ -2,123 +2,117 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is authenticated
+    // -------------------------------------------------------------------------
+    // HELPER FUNCTIONS
+    // -------------------------------------------------------------------------
+    
+    // Check if user is authenticated
     function isSignedIn() {
       return request.auth != null;
     }
     
-    // Helper function to check if user is admin
-    // Checks if user document exists and has role == 'admin'
+    // Check if user is admin
+    // This requires the user document to have a field 'role' set to 'admin'
     function isAdmin() {
       return isSignedIn() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // Helper function to check if user owns the document
+    // Check if user owns the document being accessed
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+
+    // -------------------------------------------------------------------------
+    // COLLECTION RULES
+    // -------------------------------------------------------------------------
     
     // Users collection
     match /users/{userId} {
-      // Anyone can read public user profiles (for leaderboards, public profiles)
+      // Allow public read for profiles/leaderboards
       allow read: if true;
       
-      // Users can create their own profile during registration
+      // Creation: User can create their own profile
       allow create: if isSignedIn() && request.auth.uid == userId;
       
-      // Users can update their own profile, admins can update any profile
+      // Update: User can update own profile, Admin can update any
       allow update: if isOwner(userId) || isAdmin();
       
-      // Only admins can delete users
+      // Delete: Only Admin
       allow delete: if isAdmin();
     }
     
     // Competitions collection
     match /competitions/{competitionId} {
-      // Anyone can read competitions (for browsing, leaderboards)
+      // Public read
       allow read: if true;
       
-      // Only admins can create, update, or delete competitions
+      // Admin only write access
       allow create, update, delete: if isAdmin();
     }
     
-    // Results collection (TOP-LEVEL COLLECTION - not subcollection)
+    // Results collection
     match /results/{resultId} {
-      // Anyone can read results (for public leaderboards, rankings, profiles)
+      // Public read
       allow read: if true;
       
-      // Users can create their own results during competition
+      // Create: User can create result if it belongs to them
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       
-      // Users can update their own results, admins can update any
-      allow update: if isSignedIn() && 
-                       (resource.data.userId == request.auth.uid || isAdmin());
-      
-      // Users can delete their own results, admins can delete any
-      allow delete: if isSignedIn() && 
-                       (resource.data.userId == request.auth.uid || isAdmin());
+      // Update/Delete: Owner or Admin
+      allow update, delete: if isSignedIn() && 
+                           (resource.data.userId == request.auth.uid || isAdmin());
     }
     
     // Registrations collection
     match /registrations/{registrationId} {
-      // Anyone can read registrations (needed for leaderboard participant count)
+      // Public read (for participant counts)
       allow read: if true;
       
-      // Users can create their own registrations
+      // Create: User can register themselves
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       
-      // Users can update their own registrations, admins can update any
+      // Update: Owner or Admin
       allow update: if isSignedIn() && 
-                       (resource.data.userId == request.auth.uid || isAdmin());
+                   (resource.data.userId == request.auth.uid || isAdmin());
       
-      // Only admins can delete registrations
+      // Delete: Only Admin
       allow delete: if isAdmin();
     }
     
-    // Payments collection (for tracking payment history)
+    // Payments collection
+    // IMPORTANT: This contains sensitive financial data
     match /payments/{paymentId} {
-      // CRITICAL FIX: Allow authenticated users to read their own payments
-      // Allow admins to read all payments for admin dashboard
+      // Read: Owner can see own payments, Admin can see ALL
       allow read: if isSignedIn() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
+                 (resource.data.userId == request.auth.uid || isAdmin());
       
-      // Allow authenticated users to create payment records (for Razorpay integration)
+      // Create: Authenticated users (for checkout)
       allow create: if isSignedIn();
       
-      // Only admins can update payment records (for status updates)
+      // Update: Admin only (for status updates/refunds)
       allow update: if isAdmin();
       
-      // No one can delete payment records (immutable audit trail)
+      // Delete: No one (Immutable)
       allow delete: if false;
     }
     
-    // Anti-cheat logs collection
+    // Anti-cheat logs
     match /antiCheatLogs/{logId} {
-      // Only admins can read anti-cheat logs
       allow read: if isAdmin();
-      
-      // System can create logs (via server-side or authenticated users)
       allow create: if isSignedIn();
-      
-      // No one can update or delete logs (immutable audit trail)
       allow update, delete: if false;
     }
     
-    // Audit logs collection (for admin actions)
+    // Audit logs (Admin actions)
     match /auditLogs/{logId} {
-      // Only admins can read audit logs
       allow read: if isAdmin();
-      
-      // System can create logs
       allow create: if isSignedIn();
-      
-      // No one can update or delete logs (immutable audit trail)
       allow update, delete: if false;
     }
     
-    // Block all other collections by default
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }
