@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles } from 'lucide-react';
+import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2 } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -50,6 +50,7 @@ function ProfilePage() {
   const [payments, setPayments] = useState([]);
   const [results, setResults] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -138,6 +139,69 @@ function ProfilePage() {
     }
   }
 
+  async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validation
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Invalid file type. Please upload JPG, PNG, or WEBP.' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Max size is 5MB.' });
+      return;
+    }
+
+    setUploading(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      // 1. Get Presigned URL
+      const res = await fetch('/api/upload/profile-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          contentType: file.type
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to get upload URL');
+      const { url, key } = await res.json();
+
+      // 2. Upload to S3
+      const uploadRes = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+
+      if (!uploadRes.ok) throw new Error('Failed to upload image to storage');
+
+      // 3. Update Profile with new public URL
+      // Construct public URL (assuming bucket is public or using cloudfront, 
+      // but for this AWS setup standard S3 url pattern is typical if public access enabled)
+      // If the presigned URL response included the final public URL logic, we'd use that. 
+      // For now, we'll reconstruct it or rely on the logic that presigned URL upload 
+      // makes it available at the key location.
+      // S3 Public URL format: https://BUCKET.s3.REGION.amazonaws.com/KEY
+      
+      const publicUrl = `https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME || 'mcubescomps'}.s3.${process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+      
+      // Update local profile immediately
+      await updateProfile({ photoURL: publicUrl });
+      setMessage({ type: 'success', text: 'Profile photo updated!' });
+
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setMessage({ type: 'error', text: 'Failed to upload image: ' + error.message });
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const formatTime = (ms) => {
     if (!ms || ms === Infinity || ms === 'DNF') return 'DNF';
     return `${(ms / 1000).toFixed(2)}s`;
@@ -178,17 +242,32 @@ function ProfilePage() {
                 <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600 opacity-50" />
                 
                 <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="relative">
+                  <div className="relative group/avatar">
                      <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full" />
                      <Avatar className="w-24 h-24 border-4 border-black shadow-2xl relative">
-                      <AvatarImage src={userProfile?.photoURL} />
+                      <AvatarImage src={userProfile?.photoURL} className="object-cover" />
                       <AvatarFallback className="bg-zinc-800 text-2xl font-bold text-white">
                         {userProfile?.displayName?.[0] || 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <Badge className="absolute -bottom-2 -right-2 border-black bg-white text-black hover:bg-zinc-200">
-                       {userProfile?.wcaStyleId || 'MEMBER'}
-                    </Badge>
+                    
+                    {/* Upload Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer">
+                      <label className="cursor-pointer p-2 rounded-full hover:bg-white/20 transition-colors">
+                        {uploading ? (
+                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                        ) : (
+                          <Camera className="w-6 h-6 text-white" />
+                        )}
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleImageUpload}
+                          disabled={uploading}
+                        />
+                      </label>
+                    </div>
                   </div>
                   
                   <div>

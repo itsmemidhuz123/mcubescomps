@@ -2,15 +2,19 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Timer, Eye, EyeOff } from 'lucide-react'
+import { Timer, Eye, EyeOff, ShieldAlert, RotateCcw } from 'lucide-react'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 function SolvePage() {
   const params = useParams()
   const router = useRouter()
+  const { user, isAdmin } = useAuth()
   const [result, setResult] = useState(null)
   const [competition, setCompetition] = useState(null)
   const [scrambles, setScrambles] = useState([])
@@ -181,6 +185,29 @@ function SolvePage() {
     }
   }
   
+  // NEW: Admin Actions
+  async function handleAdminAction(action) {
+    if (!isAdmin || !result) return;
+    
+    let update = {};
+    if (action === 'DNF') update = { penalty: 'DNF' };
+    if (action === '+2') update = { penalty: '+2' };
+    if (action === 'RESET') update = { penalty: 'none', time: 0, attempt: Math.max(0, result.attempt - 1) }; // Risky reset logic, simplified for now
+    
+    if (action === 'RESET_PENALTY') update = { penalty: 'none' };
+
+    try {
+       await updateDoc(doc(db, 'results', result.id), {
+         ...update,
+         editedByAdmin: true
+       });
+       alert(`Admin action ${action} applied.`);
+       window.location.reload(); 
+    } catch (e) {
+       alert('Error: ' + e.message);
+    }
+  }
+  
   const formatTime = (ms) => {
     const seconds = Math.floor(ms / 1000)
     const centiseconds = Math.floor((ms % 1000) / 10)
@@ -196,38 +223,34 @@ function SolvePage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500 text-xl">Loading...</div>
       </div>
     )
   }
   
   if (!result || !competition) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Result not found</div>
-      </div>
-    )
+    return <div className="p-8 text-center">Result not found</div>
   }
   
   const currentAttempt = result.attempt
-  const currentScramble = scrambles.find(s => s.scrambleNumber === currentAttempt + 1)
-  
+  const currentScramble = scrambles.find(s => s.scrambleNumber === currentAttempt + 1) || { scrambleText: '...' };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex flex-col">
+    <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col">
       {/* Header */}
-      <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur">
+      <div className="border-b border-gray-200 bg-white">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">{competition.name}</h1>
-              <p className="text-gray-400">Solve {currentAttempt + 1} of 5</p>
+              <p className="text-gray-500">Solve {currentAttempt + 1} of 5</p>
             </div>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map(i => (
                 <Badge 
                   key={i} 
-                  className={i <= currentAttempt ? 'bg-green-600' : 'bg-gray-600'}
+                  className={i <= currentAttempt ? 'bg-blue-600' : 'bg-gray-200 text-gray-500'}
                 >
                   {i}
                 </Badge>
@@ -238,13 +261,32 @@ function SolvePage() {
       </div>
       
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex-1 flex items-center justify-center p-4 relative">
+        
+        {/* ADMIN OVERLAY */}
+        {isAdmin && (
+           <div className="absolute top-4 right-4 z-50">
+              <Card className="w-64 border-red-200 shadow-lg">
+                 <CardHeader className="py-3 bg-red-50 rounded-t-xl">
+                    <CardTitle className="text-sm text-red-700 flex items-center">
+                       <ShieldAlert className="w-4 h-4 mr-2" /> Admin Controls
+                    </CardTitle>
+                 </CardHeader>
+                 <CardContent className="p-3 grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleAdminAction('+2')}>+2</Button>
+                    <Button variant="outline" size="sm" onClick={() => handleAdminAction('DNF')}>DNF</Button>
+                    <Button variant="outline" size="sm" onClick={() => handleAdminAction('RESET_PENALTY')} className="col-span-2">Clear Penalty</Button>
+                 </CardContent>
+              </Card>
+           </div>
+        )}
+
         <div className="w-full max-w-4xl space-y-6">
           {/* Scramble */}
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-white border-gray-200 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white">Scramble</CardTitle>
+                <CardTitle className="text-gray-900">Scramble</CardTitle>
                 {phase === 'ready' && (
                   <Button
                     variant="ghost"
@@ -258,23 +300,23 @@ function SolvePage() {
             </CardHeader>
             <CardContent>
               {scrambleVisible ? (
-                <p className="text-2xl font-mono text-center text-blue-400">
+                <p className="text-2xl font-mono text-center text-blue-600 font-bold tracking-wider">
                   {currentScramble?.scrambleText}
                 </p>
               ) : (
-                <p className="text-gray-500 text-center">Hidden - Start inspection to view</p>
+                <p className="text-gray-400 text-center italic">Hidden - Start inspection to view</p>
               )}
             </CardContent>
           </Card>
           
-          {/* Timer */}
-          <Card className="bg-gray-800 border-gray-700">
+          {/* Timer Card - using white theme */}
+          <Card className="bg-white border-gray-200 shadow-sm">
             <CardContent className="py-12">
               <div className="text-center space-y-6">
                 {phase === 'ready' && (
                   <>
                     <Timer className="h-20 w-20 mx-auto text-blue-500" />
-                    <div className="text-6xl font-bold">Ready</div>
+                    <div className="text-6xl font-bold text-gray-900">Ready</div>
                     <Button
                       onClick={startInspection}
                       className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-8 px-12 text-2xl"
@@ -309,7 +351,7 @@ function SolvePage() {
                 
                 {phase === 'solving' && (
                   <>
-                    <div className="text-9xl font-bold text-green-500">
+                    <div className="text-9xl font-bold text-gray-900 font-mono">
                       {formatTime(solveTime)}
                     </div>
                     <Button
@@ -323,7 +365,7 @@ function SolvePage() {
                 
                 {phase === 'finished' && (
                   <>
-                    <div className="text-8xl font-bold text-white">
+                    <div className="text-8xl font-bold text-gray-900">
                       {formatTime(solveTime)}
                     </div>
                     {penalty !== 'none' && (
@@ -331,7 +373,7 @@ function SolvePage() {
                         {penalty}
                       </Badge>
                     )}
-                    <div className="text-gray-400 text-xl">Submitting...</div>
+                    <div className="text-gray-500 text-xl animate-pulse">Submitting result...</div>
                   </>
                 )}
               </div>
@@ -340,10 +382,9 @@ function SolvePage() {
           
           {/* Instructions */}
           {phase === 'ready' && (
-            <Alert className="bg-gray-800 border-gray-700">
-              <AlertDescription className="text-gray-300">
+            <Alert className="bg-blue-50 border-blue-100">
+              <AlertDescription className="text-blue-800 flex items-center justify-center">
                 ℹ️ Click "Start Inspection" to begin. You have 15 seconds to inspect the cube.
-                +2 penalty for 15-17 seconds. DNF for over 17 seconds.
               </AlertDescription>
             </Alert>
           )}

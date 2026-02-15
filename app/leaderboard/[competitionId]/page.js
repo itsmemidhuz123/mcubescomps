@@ -226,38 +226,41 @@ function LeaderboardPage() {
   };
 
   const getRankBadge = (index, hasResults) => {
-    if (!hasResults) return <span className="text-gray-500">-</span>;
+    if (!hasResults) return <span className="text-gray-400">-</span>;
     if (index === 0) return <Medal className="h-6 w-6 text-yellow-500" />;
     if (index === 1) return <Medal className="h-6 w-6 text-gray-400" />;
     if (index === 2) return <Medal className="h-6 w-6 text-orange-600" />;
-    return <span className="text-gray-400 font-bold text-lg">{index + 1}</span>;
+    return <span className="text-gray-500 font-bold text-lg">{index + 1}</span>;
   };
 
   const currentLeaderboard = getCombinedLeaderboard();
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading leaderboard...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+           <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+           <div className="text-gray-500 text-sm">Loading leaderboard...</div>
+        </div>
       </div>
     );
   }
 
   if (!competition) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Competition not found</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-900 text-xl font-medium">Competition not found</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
         <Button
           variant="ghost"
           onClick={() => router.push(`/competition/${params.competitionId}`)}
-          className="mb-6 text-gray-400 hover:text-white"
+          className="mb-6 text-gray-500 hover:text-gray-900 -ml-2"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Competition
@@ -265,10 +268,12 @@ function LeaderboardPage() {
 
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <Trophy className="h-10 w-10 text-yellow-500" />
+            <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100">
+               <Trophy className="h-8 w-8 text-yellow-500" />
+            </div>
             <div>
-              <h1 className="text-4xl font-bold">{competition.name}</h1>
-              <p className="text-gray-400">Leaderboard • {registeredUsers.length} Participants</p>
+              <h1 className="text-3xl font-bold text-gray-900">{competition.name}</h1>
+              <p className="text-gray-500">Leaderboard • {registeredUsers.length} Participants</p>
             </div>
           </div>
 
@@ -279,133 +284,149 @@ function LeaderboardPage() {
                 key={eventId}
                 variant={selectedEvent === eventId ? 'default' : 'outline'}
                 onClick={() => setSelectedEvent(eventId)}
-                className={selectedEvent === eventId ? 'bg-blue-600' : 'border-gray-600'}
+                className={`
+                  ${selectedEvent === eventId 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}
+                `}
               >
-                {getEventIcon(eventId)} {getEventName(eventId)}
+                {getEventIcon(eventId)} <span className="ml-2">{getEventName(eventId)}</span>
               </Button>
             ))}
           </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-400" />
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-40 bg-gray-800 border-gray-700">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="average">By Average</SelectItem>
-                  <SelectItem value="single">By Single</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="bg-white rounded-md border border-gray-200 p-1 shadow-sm">
+                 <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[180px] border-none shadow-none h-8">
+                     <Filter className="h-3.5 w-3.5 mr-2 text-gray-400" />
+                     <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                     <SelectItem value="average">Sort by Average</SelectItem>
+                     <SelectItem value="single">Sort by Best Single</SelectItem>
+                  </SelectContent>
+                 </Select>
+              </div>
             </div>
             <div className="flex-1 max-w-md">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search by name or ID..."
+                  placeholder="Search competitor..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-gray-800 border-gray-700"
+                  className="pl-10 bg-white border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white text-2xl">
-              {getEventIcon(selectedEvent)} {getEventName(selectedEvent)} Results
-              <span className="text-gray-400 font-normal text-lg ml-2">
-                ({currentLeaderboard.length} participants)
-              </span>
+        <Card className="bg-white border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader className="bg-gray-50/50 border-b border-gray-100 pb-4">
+            <CardTitle className="text-gray-900 text-xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                 {getEventIcon(selectedEvent)} 
+                 <span>{getEventName(selectedEvent)} Results</span>
+              </div>
+              <Badge variant="secondary" className="font-normal text-gray-500 bg-white border border-gray-200">
+                {currentLeaderboard.length} entries
+              </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {currentLeaderboard.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                No participants registered for this event yet
+              <div className="text-center py-16 text-gray-500">
+                <Trophy className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                <p>No participants registered for this event yet</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-gray-700 hover:bg-gray-700/50">
-                      <TableHead className="text-gray-300 w-20">Rank</TableHead>
-                      <TableHead className="text-gray-300">Participant</TableHead>
-                      <TableHead className="text-gray-300">MCUBES ID</TableHead>
-                      <TableHead className="text-gray-300">Country</TableHead>
-                      <TableHead className="text-gray-300 text-center">Solves</TableHead>
-                      <TableHead className="text-gray-300 text-right font-bold">
+                    <TableRow className="border-gray-100 hover:bg-gray-50/50 bg-gray-50/30">
+                      <TableHead className="text-gray-500 w-20 text-center">Rank</TableHead>
+                      <TableHead className="text-gray-500">Competitor</TableHead>
+                      <TableHead className="text-gray-500 hidden md:table-cell">WCA ID</TableHead>
+                      <TableHead className="text-gray-500 hidden sm:table-cell">Country</TableHead>
+                      <TableHead className="text-gray-500 text-center hidden lg:table-cell">Solves</TableHead>
+                      <TableHead className="text-gray-500 text-right font-bold w-32">
                         {sortBy === 'average' ? 'Average' : 'Best Single'}
                       </TableHead>
-                      <TableHead className="text-gray-300 text-right">
+                      <TableHead className="text-gray-500 text-right w-32 hidden sm:table-cell">
                         {sortBy === 'average' ? 'Best' : 'Avg'}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentLeaderboard.map((entry, index) => (
-                      <TableRow key={entry.userId} className="border-gray-700 hover:bg-gray-700/50">
+                      <TableRow 
+                        key={entry.userId} 
+                        className="border-gray-100 hover:bg-gray-50/80 transition-colors"
+                      >
                         <TableCell>
                           <div className="flex items-center justify-center">
                             {getRankBadge(index, entry.hasResults)}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            {entry.photoURL && (
-                              <img src={entry.photoURL} alt={entry.userName} className="h-8 w-8 rounded-full" />
-                            )}
-                            <span className="font-medium">{entry.userName || 'Unknown'}</span>
-                            {!entry.hasResults && (
-                              <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
-                                No solves yet
-                              </Badge>
-                            )}
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9 border border-gray-100">
+                               <AvatarImage src={entry.photoURL} />
+                               <AvatarFallback className="bg-gray-100 text-gray-600 text-xs">
+                                  {entry.userName?.charAt(0) || 'U'}
+                               </AvatarFallback>
+                            </Avatar>
+                            <div>
+                               <div className="font-medium text-gray-900">{entry.userName || 'Unknown'}</div>
+                               {!entry.hasResults && (
+                                 <p className="text-[10px] text-gray-400 sm:hidden">No solves</p>
+                               )}
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-400">{entry.wcaStyleId || 'N/A'}</TableCell>
-                        <TableCell className="text-gray-400">{entry.country || 'Unknown'}</TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-gray-500 hidden md:table-cell font-mono text-xs">{entry.wcaStyleId || '-'}</TableCell>
+                        <TableCell className="text-gray-500 hidden sm:table-cell">{entry.country || '-'}</TableCell>
+                        <TableCell className="text-center hidden lg:table-cell">
                           {entry.times && entry.times.length > 0 ? (
                             <div className="flex flex-wrap justify-center gap-1">
                               {entry.times.map((time, i) => (
-                                <span key={i} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
+                                <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
                                   {formatTime(time)}
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-gray-500">-</span>
+                            <span className="text-gray-300">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right font-bold text-xl">
+                        <TableCell className="text-right font-bold text-lg">
                           {entry.hasResults ? (
                             sortBy === 'average' ? (
                               entry.average === Infinity || entry.average === 'DNF' ? (
-                                <Badge variant="destructive">DNF</Badge>
+                                <Badge variant="destructive" className="text-[10px] h-5">DNF</Badge>
                               ) : (
-                                <span className="text-green-400">{formatTime(entry.average)}</span>
+                                <span className="text-gray-900">{formatTime(entry.average)}</span>
                               )
                             ) : (
                               entry.bestSingle === Infinity ? (
-                                <Badge variant="destructive">DNF</Badge>
+                                <Badge variant="destructive" className="text-[10px] h-5">DNF</Badge>
                               ) : (
-                                <span className="text-blue-400">{formatTime(entry.bestSingle)}</span>
+                                <span className="text-blue-600">{formatTime(entry.bestSingle)}</span>
                               )
                             )
                           ) : (
-                            <span className="text-gray-500">-</span>
+                            <span className="text-gray-300">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right text-blue-400">
+                        <TableCell className="text-right text-gray-500 text-sm hidden sm:table-cell">
                           {entry.hasResults ? (
                             sortBy === 'average' ? formatTime(entry.bestSingle) : formatTime(entry.average)
                           ) : (
-                            <span className="text-gray-500">-</span>
+                            <span className="text-gray-300">-</span>
                           )}
                         </TableCell>
                       </TableRow>
