@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Calendar, Users, Timer, Zap, Target, Award, ChevronRight, Cube } from 'lucide-react';
+import { Trophy, Calendar, Users, Timer, Zap, Target, Award, ChevronRight, Box } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -207,7 +207,7 @@ function HomePage() {
           ) : featuredCompetitions.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-50 mb-4">
-                <Cube className="w-8 h-8 text-gray-400" />
+                <Box className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-1">No active competitions</h3>
               <p className="text-gray-500">Check back later for new events.</p>
