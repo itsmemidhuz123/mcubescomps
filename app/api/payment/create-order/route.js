@@ -3,6 +3,11 @@ import Razorpay from 'razorpay';
 
 export async function POST(request) {
   try {
+    if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Razorpay keys missing in environment variables');
+      return NextResponse.json({ error: 'Server misconfiguration: Payment keys not set' }, { status: 500 });
+    }
+
     // Initialize Razorpay inside the handler to prevent build-time errors
     // when environment variables might be missing
     const razorpay = new Razorpay({

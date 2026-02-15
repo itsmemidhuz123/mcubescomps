@@ -43,7 +43,7 @@ function CompetitionDetail() {
 
   useEffect(() => {
     calculatePrice();
-  }, [selectedEvents, competition]);
+  }, [selectedEvents, competition, payInUSD]);
 
   // Load Razorpay script
   useEffect(() => {
