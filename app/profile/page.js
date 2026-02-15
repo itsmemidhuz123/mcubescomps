@@ -212,31 +212,27 @@ function ProfilePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.uid,
-          contentType: compressedFile.type
+          fileType: compressedFile.type // Changed from contentType to match API expectation
         })
       });
       
       if (!res.ok) throw new Error('Failed to get upload URL');
-      const { url, key } = await res.json();
+      const { uploadUrl, publicUrl } = await res.json(); // Destructure correct fields from API response
 
       // 2. Upload to S3
-      const uploadRes = await fetch(url, {
+      const uploadRes = await fetch(uploadUrl, { // Use uploadUrl from response
         method: 'PUT',
         headers: { 'Content-Type': compressedFile.type },
         body: compressedFile
       });
 
-      if (!uploadRes.ok) throw new Error('Failed to upload image to storage');
+      if (!uploadRes.ok) {
+        const errorText = await uploadRes.text();
+        throw new Error(`S3 Upload Failed: ${uploadRes.status} ${uploadRes.statusText} - ${errorText}`);
+      }
 
       // 3. Update Profile with new public URL
-      // Construct public URL (assuming bucket is public or using cloudfront, 
-      // but for this AWS setup standard S3 url pattern is typical if public access enabled)
-      // If the presigned URL response included the final public URL logic, we'd use that. 
-      // For now, we'll reconstruct it or rely on the logic that presigned URL upload 
-      // makes it available at the key location.
-      // S3 Public URL format: https://BUCKET.s3.REGION.amazonaws.com/KEY
-      
-      const publicUrl = `https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME || 'mcubescomps'}.s3.${process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+      // Use the authoritative URL from the server response
       
       // Update local profile immediately
       await updateProfile({ photoURL: publicUrl });
