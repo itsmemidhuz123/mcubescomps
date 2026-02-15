@@ -149,22 +149,70 @@ function ProfilePage() {
       setMessage({ type: 'error', text: 'Invalid file type. Please upload JPG, PNG, or WEBP.' });
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setMessage({ type: 'error', text: 'File too large. Max size is 5MB.' });
-      return;
+    
+    // Size check (pre-compression)
+    if (file.size > 10 * 1024 * 1024) {
+       setMessage({ type: 'error', text: 'Original file too large. Max 10MB.' });
+       return;
     }
 
     setUploading(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: '', text: 'Compressing image...' });
 
     try {
+      // Image Compression / Resizing
+      const compressedFile = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('Compression failed'));
+              return;
+            }
+            // Create new file from blob
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(newFile);
+          }, 'image/jpeg', 0.85); // 85% quality JPEG
+        };
+        img.onerror = (err) => reject(err);
+      });
+
+      setMessage({ type: '', text: 'Uploading...' });
+
       // 1. Get Presigned URL
       const res = await fetch('/api/upload/profile-photo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.uid,
-          contentType: file.type
+          contentType: compressedFile.type
         })
       });
       
@@ -174,8 +222,8 @@ function ProfilePage() {
       // 2. Upload to S3
       const uploadRes = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file
+        headers: { 'Content-Type': compressedFile.type },
+        body: compressedFile
       });
 
       if (!uploadRes.ok) throw new Error('Failed to upload image to storage');

@@ -25,6 +25,9 @@ function RankingsPage() {
   const [selectedEvent, setSelectedEvent] = useState('333');
   const [mode, setMode] = useState('single');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+  
   const [tab, setTab] = useState('rankings');
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +36,10 @@ function RankingsPage() {
   const [stats, setStats] = useState({ competitors: 0, solves: 0 });
 
   const events = ['333', '222', '444', '555', '333oh', 'pyram', 'skewb', 'clock'];
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedEvent, mode, searchQuery]);
 
   useEffect(() => {
     fetchStats();
@@ -116,6 +123,12 @@ function RankingsPage() {
     if (!searchQuery) return true;
     return r.userName?.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const totalPages = Math.ceil(filteredRankings.length / itemsPerPage);
+  const paginatedRankings = filteredRankings.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -211,7 +224,8 @@ function RankingsPage() {
                        </TableRow>
                     </TableHeader>
                     <TableBody>
-                       {filteredRankings.map((rank, index) => {
+                       {paginatedRankings.map((rank, index) => {
+                          const globalIndex = (currentPage - 1) * itemsPerPage + index;
                           const isCurrentUser = user && rank.userId === user.uid;
                           return (
                              <TableRow 
@@ -223,7 +237,7 @@ function RankingsPage() {
                              >
                                 <TableCell className="text-center font-medium">
                                    <div className="flex justify-center">
-                                      {getRankIcon(index)}
+                                      {getRankIcon(globalIndex)}
                                    </div>
                                 </TableCell>
                                 <TableCell>
@@ -256,6 +270,57 @@ function RankingsPage() {
                  </Table>
               )}
            </div>
+           
+           {/* Pagination Controls */}
+           {totalPages > 1 && (
+             <div className="flex items-center justify-between px-4 py-4 border-t border-gray-100 bg-gray-50/30">
+               <div className="text-sm text-gray-500">
+                 Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredRankings.length)} of {filteredRankings.length}
+               </div>
+               <div className="flex gap-2">
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                   disabled={currentPage === 1}
+                   className="h-8 text-xs"
+                 >
+                   Previous
+                 </Button>
+                 <div className="flex items-center gap-1">
+                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                     // Simple pagination logic for display
+                     let pNum = i + 1;
+                     if (totalPages > 5 && currentPage > 3) {
+                       pNum = currentPage - 3 + i;
+                       if (pNum > totalPages) pNum = i + (totalPages - 4);
+                     }
+                     
+                     return (
+                       <Button
+                         key={pNum}
+                         variant={currentPage === pNum ? "default" : "ghost"}
+                         size="sm"
+                         onClick={() => setCurrentPage(pNum)}
+                         className={`h-8 w-8 p-0 text-xs ${currentPage === pNum ? 'bg-blue-600' : 'text-gray-600'}`}
+                       >
+                         {pNum}
+                       </Button>
+                     );
+                   })}
+                 </div>
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                   disabled={currentPage === totalPages}
+                   className="h-8 text-xs"
+                 >
+                   Next
+                 </Button>
+               </div>
+             </div>
+           )}
         </Card>
 
       </div>
