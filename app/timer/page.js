@@ -9,52 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { RotateCcw, Settings, Clock } from 'lucide-react';
 import Link from 'next/link';
 
-// Header Component
-function Header() {
-  const { user, userProfile, loading, signOut, isAdmin } = useAuth();
-  const router = useRouter();
-
-  return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">MCUBES</span>
-          </Link>
-          
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
-            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
-            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
-            <Link href="/timer" className="text-blue-600 font-semibold">Timer</Link>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            {!loading && user ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
-                  {userProfile?.displayName || 'Profile'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => router.push('/auth/login')}>Sign In</Button>
-                <Button onClick={() => router.push('/auth/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-                  Get Started
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
 function TimerPage() {
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -171,32 +125,6 @@ function TimerPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black">
-      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <span className="text-xl font-bold text-white">MCUBES</span>
-            </Link>
-            
-            <nav className="hidden md:flex items-center gap-8">
-              <Link href="/" className="text-gray-400 hover:text-white font-medium">Home</Link>
-              <Link href="/competitions" className="text-gray-400 hover:text-white font-medium">Competitions</Link>
-              <Link href="/rankings" className="text-gray-400 hover:text-white font-medium">Rankings</Link>
-              <Link href="/timer" className="text-blue-400 font-semibold">Timer</Link>
-            </nav>
-
-            <div className="flex items-center gap-3">
-              <Link href="/auth/login">
-                <Button variant="ghost" className="text-gray-400 hover:text-white">Sign In</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Timer Display */}

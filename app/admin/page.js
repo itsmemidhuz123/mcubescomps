@@ -18,42 +18,6 @@ import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 
-function Header() {
-  const { userProfile, signOut } = useAuth();
-  const router = useRouter();
-
-  return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">MCUBES</span>
-          </Link>
-          
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
-            <Link href="/competitions" className="text-gray-600 hover:text-gray-900 font-medium">Competitions</Link>
-            <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <Badge className="bg-purple-100 text-purple-700">
-              <Shield className="w-3 h-3 mr-1" /> Admin
-            </Badge>
-            <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
-              {userProfile?.displayName || 'Profile'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => signOut()}>Logout</Button>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
 function AdminPanel() {
   const { user, userProfile, isAdmin, loading } = useAuth();
   const router = useRouter();
@@ -371,8 +335,7 @@ function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-
+      
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Panel</h1>

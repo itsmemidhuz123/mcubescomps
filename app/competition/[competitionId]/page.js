@@ -421,38 +421,8 @@ function CompetitionDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <span className="text-xl font-bold text-gray-900">MCUBES</span>
-            </Link>
-            
-            <nav className="hidden md:flex items-center gap-8">
-              <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">Home</Link>
-              <Link href="/competitions" className="text-blue-600 font-semibold">Competitions</Link>
-              <Link href="/rankings" className="text-gray-600 hover:text-gray-900 font-medium">Rankings</Link>
-            </nav>
-
-            <div className="flex items-center gap-3">
-              {user ? (
-                <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
-                  {userProfile?.displayName || 'Profile'}
-                </Button>
-              ) : (
-                <Button onClick={() => router.push('/auth/login')} className="bg-blue-600">
-                  Sign In
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
+      {/* Header removed - using global Navbar */}
+      
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Button
           variant="ghost"
