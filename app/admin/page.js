@@ -9,14 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Trash2, Users, Trophy, DollarSign, Activity, FileDown, Search, AlertTriangle, Shield, Check } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Activity, Check } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 
 export default function AdminPanel() {
@@ -40,7 +40,12 @@ export default function AdminPanel() {
   const [formData, setFormData] = useState({
     name: '',
     date: '',
-    registrationFee: 0,
+    type: 'FREE', // FREE or PAID
+    currency: 'INR', // INR or USD
+    pricingModel: 'flat', // flat or base_plus_extra
+    flatPrice: 0,
+    basePrice: 0,
+    perEventPrice: 0,
     solveLimit: 5,
     selectedEvents: [],
     scrambles: {},
@@ -85,10 +90,14 @@ export default function AdminPanel() {
       const auditSnap = await getDocs(auditQuery);
       setAuditLogs(auditSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-      // Stats
+      // Stats Calculation
       const totalRevenue = paymentsData
         .filter(p => p.status === 'SUCCESS')
-        .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        .reduce((sum, p) => {
+          // Convert USD to INR for total display (approx)
+          const amount = parseFloat(p.amount) || 0;
+          return sum + (p.currency === 'USD' ? amount * 90 : amount);
+        }, 0);
 
       setStats({
         totalUsers: usersData.length,
@@ -103,22 +112,6 @@ export default function AdminPanel() {
     }
   }
 
-  // Logging
-  const logAction = async (action, details) => {
-    try {
-      await addDoc(collection(db, 'auditLogs'), {
-        action,
-        adminId: user.uid,
-        adminName: user.email,
-        details,
-        timestamp: new Date().toISOString()
-      });
-    } catch (e) {
-      console.error('Log failed', e);
-    }
-  };
-
-  // --- COMPETITION LOGIC ---
   const handleCompSubmit = async (e) => {
     e.preventDefault();
     if (formData.selectedEvents.length === 0) return alert('Select at least one event');
@@ -134,7 +127,12 @@ export default function AdminPanel() {
     const compData = {
       name: formData.name,
       date: formData.date,
-      registrationFee: Number(formData.registrationFee),
+      type: formData.type,
+      currency: formData.currency,
+      pricingModel: formData.pricingModel,
+      flatPrice: Number(formData.flatPrice),
+      basePrice: Number(formData.basePrice),
+      perEventPrice: Number(formData.perEventPrice),
       solveLimit: Number(formData.solveLimit),
       events: formData.selectedEvents,
       scrambles: formData.scrambles,
@@ -143,16 +141,17 @@ export default function AdminPanel() {
       updatedAt: new Date().toISOString()
     };
 
+    if (!editingComp) {
+      compData.createdAt = new Date().toISOString();
+      compData.participantCount = 0;
+    }
+
     try {
       if (editingComp) {
         await updateDoc(doc(db, 'competitions', editingComp.id), compData);
-        logAction('UPDATE_COMPETITION', { compId: editingComp.id, name: compData.name });
         alert('Competition updated');
       } else {
-        compData.createdAt = new Date().toISOString();
-        compData.participantCount = 0;
-        const ref = await addDoc(collection(db, 'competitions'), compData);
-        logAction('CREATE_COMPETITION', { compId: ref.id, name: compData.name });
+        await addDoc(collection(db, 'competitions'), compData);
         alert('Competition created');
       }
       setEditingComp(null);
@@ -165,8 +164,9 @@ export default function AdminPanel() {
 
   const resetForm = () => {
     setFormData({
-      name: '', date: '', registrationFee: 0, solveLimit: 5,
-      selectedEvents: [], scrambles: {}, isPublished: false
+      name: '', date: '', type: 'FREE', currency: 'INR', pricingModel: 'flat',
+      flatPrice: 0, basePrice: 0, perEventPrice: 0,
+      solveLimit: 5, selectedEvents: [], scrambles: {}, isPublished: false
     });
   };
 
@@ -175,7 +175,12 @@ export default function AdminPanel() {
     setFormData({
       name: comp.name || '',
       date: comp.date || comp.startDate || '',
-      registrationFee: comp.registrationFee || 0,
+      type: comp.type || 'FREE',
+      currency: comp.currency || 'INR',
+      pricingModel: comp.pricingModel || 'flat',
+      flatPrice: comp.flatPrice || comp.registrationFee || 0,
+      basePrice: comp.basePrice || 0,
+      perEventPrice: comp.perEventPrice || 0,
       solveLimit: comp.solveLimit || 5,
       selectedEvents: comp.events || [],
       scrambles: comp.scrambles || {},
@@ -204,33 +209,13 @@ export default function AdminPanel() {
     });
   };
 
-  // --- USER LOGIC ---
-  const handleSuspendUser = async (userId, currentStatus) => {
-    const newStatus = currentStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    if (!confirm(`Are you sure you want to change user status to ${newStatus}?`)) return;
-    
-    try {
-      await updateDoc(doc(db, 'users', userId), { status: newStatus });
-      logAction('USER_STATUS_CHANGE', { userId, status: newStatus });
-      fetchData();
-    } catch (e) {
-      alert('Failed to update user');
-    }
-  };
-
-  // --- PAYMENT LOGIC ---
   const handleExportPayments = () => {
     if (!payments.length) return alert('No payments to export');
     
     const headers = ['ID', 'User Email', 'Amount', 'Currency', 'Status', 'Date', 'Competition ID'];
     const rows = payments.map(p => [
-      p.id,
-      p.userEmail || 'N/A',
-      p.amount,
-      p.currency,
-      p.status,
-      new Date(p.createdAt).toLocaleString(),
-      p.competitionId || 'N/A'
+      p.id, p.userEmail || 'N/A', p.amount, p.currency, p.status,
+      new Date(p.createdAt).toLocaleString(), p.competitionId || 'N/A'
     ]);
     
     const csvContent = [
@@ -255,9 +240,7 @@ export default function AdminPanel() {
     <div className="container mx-auto p-6 space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        <div className="flex gap-2">
-          <Badge variant="outline">{user?.email}</Badge>
-        </div>
+        <Button variant="outline" onClick={fetchData}><RefreshCw className="w-4 h-4 mr-2"/> Refresh Data</Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -267,7 +250,7 @@ export default function AdminPanel() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{stats.totalRevenue}</div>
+            <div className="text-2xl font-bold">₹{stats.totalRevenue.toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card>
@@ -298,15 +281,14 @@ export default function AdminPanel() {
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
         </TabsList>
 
-        {/* COMPETITIONS MANAGEMENT */}
         <TabsContent value="competitions" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>{editingComp ? 'Edit Competition' : 'Create New Competition'}</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleCompSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleCompSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Competition Name</Label>
                     <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
@@ -315,14 +297,93 @@ export default function AdminPanel() {
                     <Label>Date</Label>
                     <Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Registration Fee (₹)</Label>
-                    <Input type="number" value={formData.registrationFee} onChange={e => setFormData({...formData, registrationFee: e.target.value})} required />
+                </div>
+
+                {/* PRICING SECTION */}
+                <div className="space-y-4 border p-4 rounded-md bg-slate-50 dark:bg-slate-900">
+                  <h3 className="font-semibold">Pricing Configuration</h3>
+                  
+                  <div className="flex gap-6">
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <RadioGroup 
+                        value={formData.type} 
+                        onValueChange={val => setFormData({...formData, type: val})}
+                        className="flex gap-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="FREE" id="type-free" />
+                          <Label htmlFor="type-free">Free</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="PAID" id="type-paid" />
+                          <Label htmlFor="type-paid">Paid</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    {formData.type === 'PAID' && (
+                      <div className="space-y-2">
+                         <Label>Currency</Label>
+                         <Select value={formData.currency} onValueChange={val => setFormData({...formData, currency: val})}>
+                            <SelectTrigger className="w-[100px]">
+                               <SelectValue placeholder="Currency" />
+                            </SelectTrigger>
+                            <SelectContent>
+                               <SelectItem value="INR">INR (₹)</SelectItem>
+                               <SelectItem value="USD">USD ($)</SelectItem>
+                            </SelectContent>
+                         </Select>
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>Solve Limit</Label>
-                    <Input type="number" value={formData.solveLimit} onChange={e => setFormData({...formData, solveLimit: e.target.value})} required />
-                  </div>
+
+                  {formData.type === 'PAID' && (
+                    <div className="space-y-4 animate-in fade-in">
+                      <div className="space-y-2">
+                        <Label>Pricing Model</Label>
+                        <RadioGroup 
+                          value={formData.pricingModel} 
+                          onValueChange={val => setFormData({...formData, pricingModel: val})}
+                          className="flex gap-4"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="flat" id="model-flat" />
+                            <Label htmlFor="model-flat">Flat Fee (One price for any number of events)</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="base_plus_extra" id="model-base" />
+                            <Label htmlFor="model-base">Base Fee + Per Event Fee</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {formData.pricingModel === 'flat' ? (
+                          <div className="space-y-2">
+                            <Label>Flat Registration Fee</Label>
+                            <Input type="number" value={formData.flatPrice} onChange={e => setFormData({...formData, flatPrice: e.target.value})} required />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="space-y-2">
+                              <Label>Base Fee (Includes 1st event)</Label>
+                              <Input type="number" value={formData.basePrice} onChange={e => setFormData({...formData, basePrice: e.target.value})} required />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Fee Per Extra Event</Label>
+                              <Input type="number" value={formData.perEventPrice} onChange={e => setFormData({...formData, perEventPrice: e.target.value})} required />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Solve Limit (AoX)</Label>
+                  <Input type="number" value={formData.solveLimit} onChange={e => setFormData({...formData, solveLimit: e.target.value})} required />
                 </div>
 
                 <div className="flex items-center space-x-2 border p-4 rounded-md">
@@ -388,9 +449,9 @@ export default function AdminPanel() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Events</TableHead>
-                  <TableHead>Published</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -399,14 +460,14 @@ export default function AdminPanel() {
                   <TableRow key={comp.id}>
                     <TableCell className="font-medium">{comp.name}</TableCell>
                     <TableCell>{new Date(comp.date || comp.startDate).toLocaleDateString()}</TableCell>
-                    <TableCell><Badge>{comp.status}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant={comp.type === 'FREE' ? 'secondary' : 'default'}>
+                        {comp.type} {comp.type === 'PAID' && `(${comp.currency})`}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{comp.events?.length || 0} Events</TableCell>
                     <TableCell>
-                      {comp.isPublished ? (
-                        <Badge variant="default" className="bg-green-600"><Check className="w-3 h-3 mr-1"/> Yes</Badge>
-                      ) : (
-                        <Badge variant="secondary">Draft</Badge>
-                      )}
+                      {comp.isPublished ? <Badge className="bg-green-600">Published</Badge> : <Badge variant="outline">Draft</Badge>}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" onClick={() => loadCompForEdit(comp)}>Edit</Button>
@@ -418,11 +479,13 @@ export default function AdminPanel() {
           </div>
         </TabsContent>
 
-        {/* USERS MANAGEMENT */}
         <TabsContent value="users">
           <Card>
             <CardHeader>
-              <CardTitle>User Management</CardTitle>
+               <div className="flex justify-between items-center">
+                  <CardTitle>User Management</CardTitle>
+                  <Badge variant="secondary">Total: {users.length}</Badge>
+               </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -432,7 +495,6 @@ export default function AdminPanel() {
                     <TableHead>Email</TableHead>
                     <TableHead>WCA ID</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -441,20 +503,7 @@ export default function AdminPanel() {
                       <TableCell>{u.displayName || 'N/A'}</TableCell>
                       <TableCell>{u.email}</TableCell>
                       <TableCell>{u.wcaId || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant={u.status === 'SUSPENDED' ? 'destructive' : 'outline'}>
-                          {u.status || 'ACTIVE'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant={u.status === 'SUSPENDED' ? 'default' : 'destructive'} 
-                          size="sm"
-                          onClick={() => handleSuspendUser(u.id, u.status)}
-                        >
-                          {u.status === 'SUSPENDED' ? 'Unsuspend' : 'Suspend'}
-                        </Button>
-                      </TableCell>
+                      <TableCell><Badge variant="outline">{u.status || 'ACTIVE'}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -463,7 +512,6 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
 
-        {/* PAYMENTS */}
         <TabsContent value="payments">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -481,7 +529,6 @@ export default function AdminPanel() {
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>ID</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -490,10 +537,7 @@ export default function AdminPanel() {
                       <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>{p.userEmail}</TableCell>
                       <TableCell>{p.currency} {p.amount}</TableCell>
-                      <TableCell>
-                        <Badge variant={p.status === 'SUCCESS' ? 'default' : 'destructive'}>{p.status}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{p.id.slice(0, 8)}...</TableCell>
+                      <TableCell><Badge>{p.status}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -502,35 +546,17 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
 
-        {/* AUDIT LOGS */}
         <TabsContent value="audit">
           <Card>
-            <CardHeader>
-              <CardTitle>System Audit Logs</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>System Logs</CardTitle></CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Admin</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {auditLogs.map(log => (
-                    <TableRow key={log.id}>
-                      <TableCell>{new Date(log.timestamp).toLocaleString()}</TableCell>
-                      <TableCell><Badge variant="outline">{log.action}</Badge></TableCell>
-                      <TableCell>{log.adminName}</TableCell>
-                      <TableCell className="font-mono text-xs max-w-xs truncate">
-                        {JSON.stringify(log.details)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-2">
+                 {auditLogs.map(log => (
+                    <div key={log.id} className="text-sm border-b pb-2">
+                       <span className="font-bold">{log.action}</span> - {new Date(log.timestamp).toLocaleString()}
+                    </div>
+                 ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

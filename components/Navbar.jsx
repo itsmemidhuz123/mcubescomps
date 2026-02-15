@@ -45,7 +45,12 @@ export function Navbar() {
             <img 
               src={LOGO_LIGHT} 
               alt="MCUBES" 
-              className="h-full w-full object-contain object-left"
+              className="h-full w-full object-contain object-left dark:hidden"
+            />
+            <img 
+              src={LOGO_DARK} 
+              alt="MCUBES" 
+              className="h-full w-full object-contain object-left hidden dark:block"
             />
           </div>
         </Link>
@@ -128,7 +133,12 @@ export function Navbar() {
                       <img 
                         src={LOGO_LIGHT} 
                         alt="MCUBES" 
-                        className="h-full w-full object-contain object-left"
+                        className="h-full w-full object-contain object-left dark:hidden"
+                      />
+                      <img 
+                        src={LOGO_DARK} 
+                        alt="MCUBES" 
+                        className="h-full w-full object-contain object-left hidden dark:block"
                       />
                    </div>
                 </Link>
