@@ -17,7 +17,9 @@ export async function POST(request) {
     let finalCurrency = currency;
 
     if (currency === 'USD') {
-      finalAmount = Math.round(amount * 90 * 100); // USD -> INR (x90) -> Paise (x100)
+      // REQUIREMENT: 1 USD = 90 INR
+      // Amount * 90 (to INR) * 100 (to Paise)
+      finalAmount = Math.round(amount * 90 * 100); 
       finalCurrency = 'INR';
     } else {
       finalAmount = Math.round(amount * 100); // INR -> Paise (x100)

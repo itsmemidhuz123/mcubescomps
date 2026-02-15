@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock } from 'lucide-react';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
 
@@ -113,11 +113,18 @@ function CompetitionDetail() {
     const eventCount = selectedEvents.length;
 
     if (competition.pricingModel === 'flat') {
-      price = competition.flatPrice || 0;
+      price = Number(competition.flatPrice) || 0;
     } else if (competition.pricingModel === 'base_plus_extra') {
-      if (eventCount > 0) {
-        price = (competition.basePrice || 0) + ((competition.perEventPrice || 0) * Math.max(0, eventCount - 1));
-      }
+      // Base fee (covers 1st event) + (Extra events * Per Event Price)
+      const base = Number(competition.basePrice) || 0;
+      const perEvent = Number(competition.perEventPrice) || 0;
+      const extraEvents = Math.max(0, eventCount - 1);
+      price = base + (extraEvents * perEvent);
+    }
+    
+    // Fallback if model is missing but old price exists
+    if (price === 0 && competition.registrationFee) {
+       price = Number(competition.registrationFee);
     }
 
     setTotalPrice(price);
@@ -575,10 +582,35 @@ function CompetitionDetail() {
                   {/* Pricing Display */}
                   {competition.type === 'PAID' && selectedEvents.length > 0 && (
                     <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4">
-                      <p className="text-sm mb-1">
-                        {competition.pricingModel === 'flat' ? 'Flat fee' : `Base fee + ${getCurrencySymbol(competition.currency)}${competition.perEventPrice || 0} per additional event`}
-                      </p>
-                      <p className="font-bold text-xl">Total: {getCurrencySymbol(competition.currency)}{totalPrice}</p>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-semibold">Pricing Breakdown:</span>
+                        <Badge variant="outline" className="bg-white text-blue-800 border-blue-300">
+                          {competition.currency || 'INR'}
+                        </Badge>
+                      </div>
+                      
+                      {competition.pricingModel === 'flat' ? (
+                        <p className="text-sm">Flat Registration Fee</p>
+                      ) : (
+                        <ul className="text-sm space-y-1 list-disc list-inside">
+                          <li>Base Fee (includes 1 event): {getCurrencySymbol(competition.currency)}{competition.basePrice || 0}</li>
+                          <li>Extra Events: {Math.max(0, selectedEvents.length - 1)} x {getCurrencySymbol(competition.currency)}{competition.perEventPrice || 0}</li>
+                        </ul>
+                      )}
+                      
+                      <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-end">
+                        <span className="text-sm text-blue-600">Total Amount:</span>
+                        <div className="text-right">
+                          <span className="font-bold text-2xl">
+                            {getCurrencySymbol(competition.currency)}{totalPrice}
+                          </span>
+                          {competition.currency === 'USD' && (
+                             <p className="text-xs text-blue-600 mt-1">
+                               (≈ ₹{(totalPrice * 90).toLocaleString()} INR)
+                             </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 

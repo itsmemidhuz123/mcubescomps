@@ -81,9 +81,11 @@ export function AuthProvider({ children }) {
                 wcaId: '',
                 country: 'Unknown',
                 createdAt: new Date().toISOString(),
-                totalCompetitions: 0
+                totalCompetitions: 0,
+                status: 'ACTIVE'
               };
               
+              // FORCE SAVE to ensure Admin Stats picks it up
               await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
               setUserProfile(newProfile);
               localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));

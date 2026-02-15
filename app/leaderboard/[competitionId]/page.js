@@ -150,7 +150,7 @@ function LeaderboardPage() {
 
   // Combine registered users with their results
   function getCombinedLeaderboard() {
-    if (!selectedEvent) return [];
+    if (!selectedEvent || !competition) return [];
     
     const results = leaderboards[selectedEvent] || [];
     const resultsMap = new Map(results.map(r => [r.userId, r]));
@@ -210,8 +210,8 @@ function LeaderboardPage() {
     // Filter by search
     if (searchQuery) {
       return combined.filter(entry => 
-        entry.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        entry.wcaStyleId?.toLowerCase().includes(searchQuery.toLowerCase())
+        (entry.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (entry.wcaStyleId || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -254,6 +254,11 @@ function LeaderboardPage() {
     );
   }
 
+  // Safety check for selected event
+  if (!selectedEvent && competition.events?.length > 0) {
+    setSelectedEvent(competition.events[0]);
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -279,7 +284,7 @@ function LeaderboardPage() {
 
           {/* Event Tabs */}
           <div className="flex flex-wrap gap-2 mb-6">
-            {competition.events?.map(eventId => (
+            {(competition.events || []).map(eventId => (
               <Button
                 key={eventId}
                 variant={selectedEvent === eventId ? 'default' : 'outline'}
