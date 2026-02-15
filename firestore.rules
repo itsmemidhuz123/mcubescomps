@@ -8,8 +8,10 @@ service cloud.firestore {
     }
     
     // Helper function to check if user is admin
+    // Checks if user document exists and has role == 'admin'
     function isAdmin() {
       return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
@@ -77,15 +79,19 @@ service cloud.firestore {
     
     // Payments collection (for tracking payment history)
     match /payments/{paymentId} {
-      // Users can read their own payments, admins can read all
+      // CRITICAL FIX: Allow authenticated users to read their own payments
+      // Allow admins to read all payments for admin dashboard
       allow read: if isSignedIn() && 
                      (resource.data.userId == request.auth.uid || isAdmin());
       
-      // Only server (admin) can create payment records
-      allow create: if isAdmin();
+      // Allow authenticated users to create payment records (for Razorpay integration)
+      allow create: if isSignedIn();
       
-      // No one can update or delete payment records (immutable audit trail)
-      allow update, delete: if false;
+      // Only admins can update payment records (for status updates)
+      allow update: if isAdmin();
+      
+      // No one can delete payment records (immutable audit trail)
+      allow delete: if false;
     }
     
     // Anti-cheat logs collection
@@ -93,7 +99,7 @@ service cloud.firestore {
       // Only admins can read anti-cheat logs
       allow read: if isAdmin();
       
-      // System can create logs (via server-side)
+      // System can create logs (via server-side or authenticated users)
       allow create: if isSignedIn();
       
       // No one can update or delete logs (immutable audit trail)
@@ -106,7 +112,7 @@ service cloud.firestore {
       allow read: if isAdmin();
       
       // System can create logs
-      allow create: if isAdmin();
+      allow create: if isSignedIn();
       
       // No one can update or delete logs (immutable audit trail)
       allow update, delete: if false;
