@@ -99,3 +99,15 @@ node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 # Environment files
 *.env
 *.env.*
+
+# Softgen - prevent committing dependencies and build artifacts
+.turbo/
+.env.local
+.env.*.local
+*.key
+*.jwt
+service-account*.json
+firebase-service-account.json
+.git-credentials
+.secrets
+secrets/
