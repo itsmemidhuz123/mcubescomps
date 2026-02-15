@@ -254,7 +254,7 @@ export function AuthProvider({ children }) {
     signOut,
     resetPassword,
     updateProfile,
-    isAdmin: userProfile?.role === 'ADMIN'
+    isAdmin: userProfile?.role === 'ADMIN' || userProfile?.role === 'admin'
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

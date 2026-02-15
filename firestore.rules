@@ -13,6 +13,7 @@ service cloud.firestore {
     
     // Check if user is admin
     // Matches 'ADMIN' (used in AuthContext.js) or 'admin' (legacy/manual)
+    // Ensures access if either format is used in the user document
     function isAdmin() {
       return isSignedIn() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
