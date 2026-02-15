@@ -226,7 +226,7 @@ function LeaderboardPage() {
   };
 
   const getRankBadge = (index, hasResults) => {
-    if (!hasResults) return <span className="text-gray-400">-</span>;
+    if (!hasResults) return <Badge variant="outline" className="text-xs bg-gray-50 text-gray-400 border-gray-200">Registered</Badge>;
     if (index === 0) return <Medal className="h-6 w-6 text-yellow-500" />;
     if (index === 1) return <Medal className="h-6 w-6 text-gray-400" />;
     if (index === 2) return <Medal className="h-6 w-6 text-orange-600" />;

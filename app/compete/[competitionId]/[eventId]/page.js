@@ -28,6 +28,7 @@ function TimerPage() {
   const [saving, setSaving] = useState(false);
   const [scrambleRevealedId, setScrambleRevealedId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [userIp, setUserIp] = useState('unknown');
   
   // Anti-cheat state
   const [flagged, setFlagged] = useState(false);
@@ -76,6 +77,13 @@ function TimerPage() {
       router.push('/auth/login');
       return;
     }
+    
+    // Fetch IP for anti-cheat
+    fetch('/api/get-ip')
+      .then(res => res.json())
+      .then(data => setUserIp(data.ip))
+      .catch(err => console.error('IP fetch failed', err));
+
     initializeCompetition();
   }, [user, params.competitionId, params.eventId]);
 
@@ -347,6 +355,7 @@ function TimerPage() {
         userEmail: user.email,
         userName: userProfile?.displayName || 'Unknown',
         wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+        userIp: userIp, // Log IP
         competitionId: params.competitionId,
         eventId: params.eventId,
         attemptNumber: currentAttempt,
