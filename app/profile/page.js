@@ -151,8 +151,8 @@ function ProfilePage() {
     }
     
     // Size check (pre-compression)
-    if (file.size > 10 * 1024 * 1024) {
-       setMessage({ type: 'error', text: 'Original file too large. Max 10MB.' });
+    if (file.size > 5 * 1024 * 1024) {
+       setMessage({ type: 'error', text: 'Original file too large. Max 5MB.' });
        return;
     }
 
@@ -250,6 +250,23 @@ function ProfilePage() {
     }
   }
 
+  async function handleDeletePhoto() {
+    if (!confirm('Are you sure you want to remove your profile photo?')) return;
+    
+    setUploading(true);
+    try {
+      // We don't necessarily need to delete from S3 (it gets overwritten anyway), 
+      // but we must remove the reference from the user profile.
+      await updateProfile({ photoURL: null });
+      setMessage({ type: 'success', text: 'Profile photo removed.' });
+    } catch (error) {
+      console.error('Remove failed:', error);
+      setMessage({ type: 'error', text: 'Failed to remove photo.' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const formatTime = (ms) => {
     if (!ms || ms === Infinity || ms === 'DNF') return 'DNF';
     return `${(ms / 1000).toFixed(2)}s`;
@@ -292,20 +309,20 @@ function ProfilePage() {
                 <div className="flex flex-col items-center text-center space-y-4">
                   <div className="relative group/avatar">
                      <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full" />
-                     <Avatar className="w-24 h-24 border-4 border-black shadow-2xl relative">
+                     <Avatar className="w-24 h-24 border-4 border-black shadow-2xl relative bg-zinc-800">
                       <AvatarImage src={userProfile?.photoURL} className="object-cover" />
                       <AvatarFallback className="bg-zinc-800 text-2xl font-bold text-white">
                         {userProfile?.displayName?.[0] || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     
-                    {/* Upload Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer">
-                      <label className="cursor-pointer p-2 rounded-full hover:bg-white/20 transition-colors">
+                    {/* Upload / Delete Overlay */}
+                    <div className="absolute -bottom-2 -right-2 flex gap-1">
+                      <label className="cursor-pointer p-2 rounded-full bg-blue-600 hover:bg-blue-500 border-2 border-black transition-colors shadow-lg group/btn" title="Upload Photo">
                         {uploading ? (
-                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                          <Loader2 className="w-4 h-4 text-white animate-spin" />
                         ) : (
-                          <Camera className="w-6 h-6 text-white" />
+                          <Camera className="w-4 h-4 text-white" />
                         )}
                         <input 
                           type="file" 
@@ -315,6 +332,17 @@ function ProfilePage() {
                           disabled={uploading}
                         />
                       </label>
+                      
+                      {userProfile?.photoURL && (
+                        <button 
+                          onClick={handleDeletePhoto}
+                          disabled={uploading}
+                          className="p-2 rounded-full bg-red-600 hover:bg-red-500 border-2 border-black transition-colors shadow-lg"
+                          title="Remove Photo"
+                        >
+                          <Trash2 className="w-4 h-4 text-white" />
+                        </button>
+                      )}
                     </div>
                   </div>
                   

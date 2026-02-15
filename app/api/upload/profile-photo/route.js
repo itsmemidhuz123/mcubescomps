@@ -21,7 +21,7 @@ export async function POST(request) {
       );
     }
 
-    // Define the key path as requested
+    // Define the key path exactly as required: mcubescomps/users/{userId}/profile.jpg
     const key = `mcubescomps/users/${userId}/profile.jpg`;
 
     const command = new PutObjectCommand({
