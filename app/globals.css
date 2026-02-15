@@ -16,6 +16,10 @@ code {
         monospace;
 }
 
+* {
+    scroll-behavior: smooth;
+}
+
 .App {
     text-align: center;
 }
