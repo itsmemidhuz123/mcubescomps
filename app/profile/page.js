@@ -23,41 +23,6 @@ const COUNTRIES = [
   'Russia', 'Italy', 'Spain', 'Netherlands', 'Other'
 ];
 
-function Header() {
-  const { user, userProfile, signOut, isAdmin } = useAuth();
-  const router = useRouter();
-
-  return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/80 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 text-white font-bold text-sm shadow-lg shadow-blue-900/20 group-hover:shadow-blue-900/40 transition-all">M</div>
-          <span className="font-bold text-lg tracking-tight text-white">MCUBES</span>
-        </Link>
-        
-        <nav className="hidden md:flex items-center gap-6">
-          <Link href="/" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Home</Link>
-          <Link href="/competitions" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Competitions</Link>
-          <Link href="/rankings" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Rankings</Link>
-        </nav>
-
-        <div className="flex items-center gap-3">
-            {isAdmin && (
-              <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="text-zinc-400 hover:text-white hover:bg-white/5 w-8 h-8">
-                <Shield className="w-4 h-4" />
-              </Button>
-            )}
-            <div className="h-4 w-[1px] bg-white/10 mx-1 hidden sm:block" />
-            <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 text-xs font-medium">
-              <LogOut className="w-3.5 h-3.5 mr-1.5" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
-        </div>
-      </div>
-    </header>
-  );
-}
-
 function CompactStat({ icon: Icon, label, value, colorClass }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50 border border-white/5">
@@ -202,7 +167,6 @@ function ProfilePage() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-black to-black pointer-events-none" />
       
       <div className="relative z-10">
-        <Header />
         
         <main className="container mx-auto px-4 py-8 max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
