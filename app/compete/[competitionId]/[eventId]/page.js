@@ -57,6 +57,13 @@ function TimerPage() {
 
       const compData = { id: compDoc.id, ...compDoc.data() };
       
+      // Security Check: Suspension
+      if (userProfile?.status === 'SUSPENDED') {
+        alert('Your account is suspended. You cannot compete.');
+        router.push('/');
+        return;
+      }
+
       // Check competition timing
       const now = new Date();
       const compStart = compData.competitionStartDate ? new Date(compData.competitionStartDate) :

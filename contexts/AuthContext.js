@@ -52,6 +52,17 @@ export function AuthProvider({ children }) {
           if (mounted) {
             if (userDoc.exists()) {
               const profileData = { ...userDoc.data(), uid: firebaseUser.uid };
+              
+              // SUSPENSION CHECK
+              if (profileData.status === 'SUSPENDED') {
+                await firebaseSignOut(auth);
+                setUser(null);
+                setUserProfile(null);
+                localStorage.removeItem('mcubes_profile');
+                setAuthError('Your account has been suspended.');
+                return;
+              }
+
               setUserProfile(profileData);
               localStorage.setItem('mcubes_profile', JSON.stringify(profileData));
             } else {

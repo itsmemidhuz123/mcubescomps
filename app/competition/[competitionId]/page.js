@@ -202,6 +202,11 @@ function CompetitionDetail() {
       return;
     }
 
+    if (userProfile?.status === 'SUSPENDED') {
+      alert('Your account is suspended. You cannot register for competitions.');
+      return;
+    }
+
     if (selectedEvents.length === 0) {
       alert('Please select at least one event');
       return;
@@ -246,6 +251,11 @@ function CompetitionDetail() {
   async function handlePayment() {
     if (!user) {
       router.push('/auth/login');
+      return;
+    }
+
+    if (userProfile?.status === 'SUSPENDED') {
+      alert('Your account is suspended. You cannot register for competitions.');
       return;
     }
 
