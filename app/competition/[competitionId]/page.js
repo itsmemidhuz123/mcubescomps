@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
@@ -24,6 +26,7 @@ function CompetitionDetail() {
   const [totalPrice, setTotalPrice] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
+  const [payInUSD, setPayInUSD] = useState(false);
 
   useEffect(() => {
     if (params.competitionId) {
@@ -111,23 +114,48 @@ function CompetitionDetail() {
 
     let price = 0;
     const eventCount = selectedEvents.length;
+    
+    // Get base values in Competition's currency
+    let base = Number(competition.basePrice) || 0;
+    let perEvent = Number(competition.perEventPrice) || 0;
+    let flat = Number(competition.flatPrice) || 0;
+    let regFee = Number(competition.registrationFee) || 0;
+
+    // Convert to User's selected currency if needed
+    // Rule: 1 USD = 90 INR
+    const compCurrency = competition.currency || 'INR';
+    const targetCurrency = payInUSD ? 'USD' : 'INR';
+
+    if (compCurrency !== targetCurrency) {
+      if (compCurrency === 'INR' && targetCurrency === 'USD') {
+        // INR -> USD
+        base = base / 90;
+        perEvent = perEvent / 90;
+        flat = flat / 90;
+        regFee = regFee / 90;
+      } else if (compCurrency === 'USD' && targetCurrency === 'INR') {
+        // USD -> INR
+        base = base * 90;
+        perEvent = perEvent * 90;
+        flat = flat * 90;
+        regFee = regFee * 90;
+      }
+    }
 
     if (competition.pricingModel === 'flat') {
-      price = Number(competition.flatPrice) || 0;
+      price = flat;
     } else if (competition.pricingModel === 'base_plus_extra') {
-      // Base fee (covers 1st event) + (Extra events * Per Event Price)
-      const base = Number(competition.basePrice) || 0;
-      const perEvent = Number(competition.perEventPrice) || 0;
       const extraEvents = Math.max(0, eventCount - 1);
       price = base + (extraEvents * perEvent);
     }
     
-    // Fallback if model is missing but old price exists
-    if (price === 0 && competition.registrationFee) {
-       price = Number(competition.registrationFee);
+    // Fallback
+    if (price === 0 && regFee) {
+       price = regFee;
     }
 
-    setTotalPrice(price);
+    // Round to 2 decimals
+    setTotalPrice(Math.round(price * 100) / 100);
   }
 
   // Get registration status
@@ -135,18 +163,18 @@ function CompetitionDetail() {
     if (!competition) return { canRegister: false, message: 'Loading...' };
 
     const now = new Date();
-    const regOpen = competition.registrationOpenDate ? new Date(competition.registrationOpenDate) : null;
-    const regClose = competition.registrationCloseDate ? new Date(competition.registrationCloseDate) : null;
+    // Strictly use registration dates
+    const regOpen = competition.registrationStartDate ? new Date(competition.registrationStartDate) : null;
+    const regClose = competition.registrationEndDate ? new Date(competition.registrationEndDate) : null;
 
     if (!regOpen || !regClose) {
-      // Fallback to legacy dates
-      return { canRegister: true, message: '', status: 'open' };
+      return { canRegister: true, message: 'Registration Open', status: 'open' };
     }
 
     if (now < regOpen) {
       return {
         canRegister: false,
-        message: `Registration opens on ${formatDate(competition.registrationOpenDate)}`,
+        message: `Registration opens on ${formatDate(regOpen)}`,
         status: 'not_opened'
       };
     }
@@ -159,7 +187,7 @@ function CompetitionDetail() {
       };
     }
 
-    return { canRegister: true, message: '', status: 'open' };
+    return { canRegister: true, message: 'Registration Open', status: 'open' };
   }
 
   // Get competition status
@@ -167,19 +195,18 @@ function CompetitionDetail() {
     if (!competition) return { canCompete: false, message: 'Loading...' };
 
     const now = new Date();
-    const compStart = competition.competitionStartDate ? new Date(competition.competitionStartDate) : 
-                      (competition.startDate ? new Date(competition.startDate) : null);
-    const compEnd = competition.competitionEndDate ? new Date(competition.competitionEndDate) :
-                    (competition.endDate ? new Date(competition.endDate) : null);
+    // Strictly use competition dates
+    const compStart = competition.startDate ? new Date(competition.startDate) : null;
+    const compEnd = competition.endDate ? new Date(competition.endDate) : null;
 
     if (!compStart || !compEnd) {
-      return { canCompete: true, message: '', status: 'live' };
+      return { canCompete: true, message: 'Live', status: 'live' };
     }
 
     if (now < compStart) {
       return {
         canCompete: false,
-        message: `Competition starts on ${formatDate(competition.competitionStartDate || competition.startDate)}`,
+        message: `Competition starts on ${formatDate(compStart)}`,
         status: 'upcoming'
       };
     }
@@ -192,7 +219,7 @@ function CompetitionDetail() {
       };
     }
 
-    return { canCompete: true, message: '', status: 'live' };
+    return { canCompete: true, message: 'Competition is Live', status: 'live' };
   }
 
   const handleEventToggle = (eventId) => {
@@ -280,7 +307,7 @@ function CompetitionDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: totalPrice,
-          currency: competition.currency || 'INR',
+          currency: payInUSD ? 'USD' : 'INR', // Send selected currency
           userId: user.uid,
           competitionId: params.competitionId,
           events: selectedEvents
@@ -582,19 +609,42 @@ function CompetitionDetail() {
                   {/* Pricing Display */}
                   {competition.type === 'PAID' && selectedEvents.length > 0 && (
                     <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4">
-                      <div className="flex justify-between items-center mb-2">
+                      <div className="flex justify-between items-center mb-4">
                         <span className="font-semibold">Pricing Breakdown:</span>
-                        <Badge variant="outline" className="bg-white text-blue-800 border-blue-300">
-                          {competition.currency || 'INR'}
-                        </Badge>
+                        
+                        <div className="flex items-center gap-2">
+                           <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">INR</Label>
+                           <Switch 
+                              id="currency-mode" 
+                              checked={payInUSD}
+                              onCheckedChange={setPayInUSD}
+                           />
+                           <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">USD</Label>
+                        </div>
                       </div>
                       
                       {competition.pricingModel === 'flat' ? (
                         <p className="text-sm">Flat Registration Fee</p>
                       ) : (
                         <ul className="text-sm space-y-1 list-disc list-inside">
-                          <li>Base Fee (includes 1 event): {getCurrencySymbol(competition.currency)}{competition.basePrice || 0}</li>
-                          <li>Extra Events: {Math.max(0, selectedEvents.length - 1)} x {getCurrencySymbol(competition.currency)}{competition.perEventPrice || 0}</li>
+                          <li>Base Fee (includes 1 event): {payInUSD ? '$' : '₹'}{
+                            (() => {
+                               const base = Number(competition.basePrice) || 0;
+                               const compCur = competition.currency || 'INR';
+                               if (payInUSD && compCur === 'INR') return (base / 90).toFixed(2);
+                               if (!payInUSD && compCur === 'USD') return (base * 90).toFixed(0);
+                               return base;
+                            })()
+                          }</li>
+                          <li>Extra Events: {Math.max(0, selectedEvents.length - 1)} x {payInUSD ? '$' : '₹'}{
+                             (() => {
+                               const pe = Number(competition.perEventPrice) || 0;
+                               const compCur = competition.currency || 'INR';
+                               if (payInUSD && compCur === 'INR') return (pe / 90).toFixed(2);
+                               if (!payInUSD && compCur === 'USD') return (pe * 90).toFixed(0);
+                               return pe;
+                            })()
+                          }</li>
                         </ul>
                       )}
                       
@@ -602,13 +652,11 @@ function CompetitionDetail() {
                         <span className="text-sm text-blue-600">Total Amount:</span>
                         <div className="text-right">
                           <span className="font-bold text-2xl">
-                            {getCurrencySymbol(competition.currency)}{totalPrice}
+                            {payInUSD ? '$' : '₹'}{totalPrice}
                           </span>
-                          {competition.currency === 'USD' && (
-                             <p className="text-xs text-blue-600 mt-1">
-                               (≈ ₹{(totalPrice * 90).toLocaleString()} INR)
-                             </p>
-                          )}
+                          <p className="text-xs text-blue-500 mt-1 opacity-80">
+                            {payInUSD ? 'Paid via INR Gateway (Converted)' : 'Standard Rate'}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -624,12 +672,12 @@ function CompetitionDetail() {
                     </Button>
                   ) : (
                     <Button
-                      onClick={handlePayment}
+                      onClick={() => handlePayment()}
                       disabled={processing || selectedEvents.length === 0}
                       className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg"
                     >
                       <DollarSign className="h-5 w-5 mr-2" />
-                      {processing ? 'Processing...' : `Pay ${getCurrencySymbol(competition.currency)}${totalPrice} & Register`}
+                      {processing ? 'Processing...' : `Pay ${payInUSD ? '$' : '₹'}${totalPrice} & Register`}
                     </Button>
                   )}
                 </>

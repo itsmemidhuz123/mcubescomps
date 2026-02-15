@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Activity, Check } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Activity, Check, Trash2, Ban, ShieldCheck } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 
 export default function AdminPanel() {
@@ -39,7 +39,10 @@ export default function AdminPanel() {
   const [editingComp, setEditingComp] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    date: '',
+    startDate: '',
+    endDate: '',
+    registrationStartDate: '',
+    registrationEndDate: '',
     type: 'FREE', // FREE or PAID
     currency: 'INR', // INR or USD
     pricingModel: 'flat', // flat or base_plus_extra
@@ -71,7 +74,7 @@ export default function AdminPanel() {
       // Competitions
       const compsSnap = await getDocs(collection(db, 'competitions'));
       const compsData = compsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      compsData.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+      compsData.sort((a, b) => new Date(b.startDate || b.createdAt) - new Date(a.startDate || a.createdAt));
       setCompetitions(compsData);
 
       // Users
@@ -94,15 +97,20 @@ export default function AdminPanel() {
       const totalRevenue = paymentsData
         .filter(p => p.status === 'SUCCESS')
         .reduce((sum, p) => {
-          // Convert USD to INR for total display (approx)
           const amount = parseFloat(p.amount) || 0;
           return sum + (p.currency === 'USD' ? amount * 90 : amount);
         }, 0);
+      
+      const now = new Date();
+      const activeComps = compsData.filter(c => {
+        const end = c.endDate ? new Date(c.endDate) : new Date();
+        return end > now;
+      }).length;
 
       setStats({
         totalUsers: usersData.length,
         totalRevenue,
-        activeCompetitions: compsData.filter(c => c.status === 'UPCOMING' || c.status === 'LIVE').length
+        activeCompetitions: activeComps
       });
 
     } catch (error) {
@@ -111,6 +119,32 @@ export default function AdminPanel() {
       setLoadingData(false);
     }
   }
+
+  // User Management Actions
+  const handleToggleUserStatus = async (userId, currentStatus) => {
+    const newStatus = currentStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+    if (!confirm(`Are you sure you want to change user status to ${newStatus}?`)) return;
+    
+    try {
+      await updateDoc(doc(db, 'users', userId), { status: newStatus });
+      setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      alert(`User ${newStatus === 'ACTIVE' ? 'activated' : 'suspended'}`);
+    } catch (error) {
+      alert('Error updating user: ' + error.message);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!confirm('Are you sure? This action cannot be undone.')) return;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      setUsers(users.filter(u => u.id !== userId));
+      setStats(prev => ({ ...prev, totalUsers: prev.totalUsers - 1 }));
+      alert('User deleted');
+    } catch (error) {
+      alert('Error deleting user: ' + error.message);
+    }
+  };
 
   const handleCompSubmit = async (e) => {
     e.preventDefault();
@@ -126,7 +160,10 @@ export default function AdminPanel() {
 
     const compData = {
       name: formData.name,
-      date: formData.date,
+      startDate: formData.startDate,
+      endDate: formData.endDate,
+      registrationStartDate: formData.registrationStartDate,
+      registrationEndDate: formData.registrationEndDate,
       type: formData.type,
       currency: formData.currency,
       pricingModel: formData.pricingModel,
@@ -137,7 +174,7 @@ export default function AdminPanel() {
       events: formData.selectedEvents,
       scrambles: formData.scrambles,
       isPublished: formData.isPublished,
-      status: new Date(formData.date) > new Date() ? 'UPCOMING' : 'LIVE',
+      status: new Date(formData.startDate) > new Date() ? 'UPCOMING' : 'LIVE',
       updatedAt: new Date().toISOString()
     };
 
@@ -164,7 +201,8 @@ export default function AdminPanel() {
 
   const resetForm = () => {
     setFormData({
-      name: '', date: '', type: 'FREE', currency: 'INR', pricingModel: 'flat',
+      name: '', startDate: '', endDate: '', registrationStartDate: '', registrationEndDate: '',
+      type: 'FREE', currency: 'INR', pricingModel: 'flat',
       flatPrice: 0, basePrice: 0, perEventPrice: 0,
       solveLimit: 5, selectedEvents: [], scrambles: {}, isPublished: false
     });
@@ -174,7 +212,10 @@ export default function AdminPanel() {
     setEditingComp(comp);
     setFormData({
       name: comp.name || '',
-      date: comp.date || comp.startDate || '',
+      startDate: comp.startDate || '',
+      endDate: comp.endDate || '',
+      registrationStartDate: comp.registrationStartDate || '',
+      registrationEndDate: comp.registrationEndDate || '',
       type: comp.type || 'FREE',
       currency: comp.currency || 'INR',
       pricingModel: comp.pricingModel || 'flat',
@@ -233,6 +274,16 @@ export default function AdminPanel() {
     document.body.removeChild(link);
   };
 
+  // Helper to get Competition Name for Payments
+  const getCompetitionName = (compId) => {
+    const comp = competitions.find(c => c.id === compId);
+    return comp ? comp.name : 'Unknown Competition';
+  };
+
+  // Helper to get formatted date string for inputs
+  // Note: HTML date inputs expect YYYY-MM-DDTHH:mm format
+  // This might need adjustment depending on how data is stored, assuming ISO strings
+
   if (authLoading || loadingData) return <div className="p-8 text-center">Loading Admin Panel...</div>;
   if (!isAdmin) return null;
 
@@ -289,13 +340,33 @@ export default function AdminPanel() {
             <CardContent>
               <form onSubmit={handleCompSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
+                  <div className="space-y-2 col-span-2">
                     <Label>Competition Name</Label>
                     <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Date</Label>
-                    <Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
+                  
+                  <div className="space-y-4 border p-4 rounded-md bg-blue-50/50">
+                    <h3 className="font-semibold text-blue-900">Competition Period (When users can solve)</h3>
+                    <div className="space-y-2">
+                      <Label>Start Date & Time</Label>
+                      <Input type="datetime-local" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End Date & Time</Label>
+                      <Input type="datetime-local" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} required />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 border p-4 rounded-md bg-green-50/50">
+                    <h3 className="font-semibold text-green-900">Registration Period (When users can signup)</h3>
+                    <div className="space-y-2">
+                      <Label>Registration Opens</Label>
+                      <Input type="datetime-local" value={formData.registrationStartDate} onChange={e => setFormData({...formData, registrationStartDate: e.target.value})} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Registration Closes</Label>
+                      <Input type="datetime-local" value={formData.registrationEndDate} onChange={e => setFormData({...formData, registrationEndDate: e.target.value})} required />
+                    </div>
                   </div>
                 </div>
 
@@ -448,7 +519,7 @@ export default function AdminPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Dates</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Events</TableHead>
                   <TableHead>Status</TableHead>
@@ -459,7 +530,12 @@ export default function AdminPanel() {
                 {competitions.map(comp => (
                   <TableRow key={comp.id}>
                     <TableCell className="font-medium">{comp.name}</TableCell>
-                    <TableCell>{new Date(comp.date || comp.startDate).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="text-xs">
+                        <div>Start: {new Date(comp.startDate).toLocaleDateString()}</div>
+                        <div>End: {new Date(comp.endDate).toLocaleDateString()}</div>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={comp.type === 'FREE' ? 'secondary' : 'default'}>
                         {comp.type} {comp.type === 'PAID' && `(${comp.currency})`}
@@ -493,17 +569,44 @@ export default function AdminPanel() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>WCA ID</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map(u => (
                     <TableRow key={u.id}>
-                      <TableCell>{u.displayName || 'N/A'}</TableCell>
+                      <TableCell className="font-medium">{u.displayName || 'N/A'}</TableCell>
                       <TableCell>{u.email}</TableCell>
-                      <TableCell>{u.wcaId || '-'}</TableCell>
-                      <TableCell><Badge variant="outline">{u.status || 'ACTIVE'}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={u.status === 'SUSPENDED' ? 'destructive' : 'outline'}>
+                          {u.status || 'ACTIVE'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleToggleUserStatus(u.id, u.status || 'ACTIVE')}
+                            className={u.status === 'SUSPENDED' ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-orange-600 hover:text-orange-700 hover:bg-orange-50"}
+                            title={u.status === 'SUSPENDED' ? "Activate User" : "Suspend User"}
+                          >
+                            {u.status === 'SUSPENDED' ? <ShieldCheck className="h-4 w-4 mr-1" /> : <Ban className="h-4 w-4 mr-1" />}
+                            {u.status === 'SUSPENDED' ? "Activate" : "Suspend"}
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Delete User"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -526,6 +629,7 @@ export default function AdminPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
+                    <TableHead>Competition</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
@@ -535,9 +639,14 @@ export default function AdminPanel() {
                   {payments.map(p => (
                     <TableRow key={p.id}>
                       <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-medium text-blue-600">{getCompetitionName(p.competitionId)}</TableCell>
                       <TableCell>{p.userEmail}</TableCell>
-                      <TableCell>{p.currency} {p.amount}</TableCell>
-                      <TableCell><Badge>{p.status}</Badge></TableCell>
+                      <TableCell className="font-mono">{p.currency} {p.amount}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.status === 'SUCCESS' ? 'default' : 'secondary'}>
+                           {p.status}
+                        </Badge>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

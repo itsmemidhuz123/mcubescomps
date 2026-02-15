@@ -5,8 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Trophy, Medal, Search, Filter } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
@@ -354,6 +356,7 @@ function LeaderboardPage() {
                   <TableHeader>
                     <TableRow className="border-gray-100 hover:bg-gray-50/50 bg-gray-50/30">
                       <TableHead className="text-gray-500 w-20 text-center">Rank</TableHead>
+                      <TableHead className="text-gray-500 w-16 text-center">Avatar</TableHead>
                       <TableHead className="text-gray-500">Competitor</TableHead>
                       <TableHead className="text-gray-500 hidden md:table-cell">WCA ID</TableHead>
                       <TableHead className="text-gray-500 hidden sm:table-cell">Country</TableHead>
@@ -378,19 +381,23 @@ function LeaderboardPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center">
                             <Avatar className="h-9 w-9 border border-gray-100">
                                <AvatarImage src={entry.photoURL} />
                                <AvatarFallback className="bg-gray-100 text-gray-600 text-xs">
                                   {entry.userName?.charAt(0) || 'U'}
                                </AvatarFallback>
                             </Avatar>
-                            <div>
-                               <div className="font-medium text-gray-900">{entry.userName || 'Unknown'}</div>
-                               {!entry.hasResults && (
-                                 <p className="text-[10px] text-gray-400 sm:hidden">No solves</p>
-                               )}
-                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Link href={`/user/${entry.userId}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline transition-colors">
+                              {entry.userName || 'Unknown'}
+                            </Link>
+                            {!entry.hasResults && (
+                              <p className="text-[10px] text-gray-400 sm:hidden">No solves</p>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-500 hidden md:table-cell font-mono text-xs">{entry.wcaStyleId || '-'}</TableCell>

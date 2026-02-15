@@ -249,7 +249,10 @@ function RankingsPage() {
                                       </Avatar>
                                       <div>
                                          <div className={`font-semibold text-sm ${isCurrentUser ? 'text-blue-700' : 'text-gray-900'}`}>
-                                            {rank.userName} {isCurrentUser && '(You)'}
+                                            <Link href={`/user/${rank.userId}`} className="hover:underline hover:text-blue-600 transition-colors">
+                                              {rank.userName}
+                                            </Link>
+                                            {isCurrentUser && ' (You)'}
                                          </div>
                                          <div className="text-xs text-gray-500 md:hidden">{rank.competitionName}</div>
                                       </div>
