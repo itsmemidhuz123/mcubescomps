@@ -316,13 +316,19 @@ function CompetitionDetail() {
 
       // Check if response is OK
       if (!orderResponse.ok) {
-        let errorMessage = 'Payment service unavailable. Please try again.';
+        let errorMessage = `Payment failed (${orderResponse.status})`;
         try {
-          const errorData = await orderResponse.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
+          const text = await orderResponse.text();
+          try {
+            const data = JSON.parse(text);
+            errorMessage = data.error || data.message || errorMessage;
+          } catch {
+            // If not JSON, use text if short, otherwise generic
+            if (text && text.length < 100) errorMessage = text; 
+            else errorMessage = `Server Error (${orderResponse.status}): Please check logs`;
+          }
         } catch (e) {
-          const textError = await orderResponse.text();
-          if (textError) errorMessage = textError;
+          console.error("Failed to read error response", e);
         }
         console.error('Payment API error:', errorMessage);
         throw new Error(errorMessage);
