@@ -3,6 +3,14 @@ import crypto from 'crypto';
 
 export async function POST(request) {
   try {
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Razorpay secret missing in environment variables');
+      return NextResponse.json(
+        { error: 'Server Config Error: Razorpay secret is missing in Vercel Environment Variables.' }, 
+        { status: 500 }
+      );
+    }
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await request.json();
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;

@@ -3,19 +3,27 @@ import Razorpay from 'razorpay';
 
 export async function POST(request) {
   try {
+    // validate env vars
     if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       console.error('Razorpay keys missing in environment variables');
-      return NextResponse.json({ error: 'Server misconfiguration: Payment keys not set' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Server Config Error: Razorpay keys are missing in Vercel Environment Variables.' }, 
+        { status: 500 }
+      );
     }
 
-    // Initialize Razorpay inside the handler to prevent build-time errors
-    // when environment variables might be missing
+    // Initialize Razorpay
     const razorpay = new Razorpay({
       key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
 
-    const { amount, currency } = await request.json();
+    const body = await request.json();
+    const { amount, currency } = body;
+    
+    if (!amount) {
+       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    }
 
     // Razorpay always expects amount in smallest currency unit (paise for INR)
     // If currency is USD, we convert to INR (x90) as per requirement

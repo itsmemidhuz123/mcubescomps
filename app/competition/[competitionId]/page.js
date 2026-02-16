@@ -316,9 +316,16 @@ function CompetitionDetail() {
 
       // Check if response is OK
       if (!orderResponse.ok) {
-        const errorText = await orderResponse.text();
-        console.error('Payment API error:', errorText);
-        throw new Error('Payment service unavailable. Please try again.');
+        let errorMessage = 'Payment service unavailable. Please try again.';
+        try {
+          const errorData = await orderResponse.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          const textError = await orderResponse.text();
+          if (textError) errorMessage = textError;
+        }
+        console.error('Payment API error:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       const order = await orderResponse.json();
