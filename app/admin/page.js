@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 
 // Helper to format milliseconds to MM:SS display
@@ -56,6 +56,7 @@ export default function AdminPanel() {
   const [users, setUsers] = useState([]);
   const [payments, setPayments] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [flaggedSolves, setFlaggedSolves] = useState([]);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalRevenue: 0,
@@ -118,6 +119,30 @@ export default function AdminPanel() {
       const auditSnap = await getDocs(auditQuery);
       setAuditLogs(auditSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
+      // Fetch Flagged Solves from all competitions
+      const flaggedResults = [];
+      const fetchPromises = compsData.map(async (comp) => {
+        try {
+          const q = query(collection(db, 'competitions', comp.id, 'results'), where('flagged', '==', true));
+          const snap = await getDocs(q);
+          snap.forEach(doc => {
+            flaggedResults.push({
+              id: doc.id,
+              ...doc.data(),
+              competitionId: comp.id,
+              competitionName: comp.name,
+              path: `competitions/${comp.id}/results/${doc.id}`
+            });
+          });
+        } catch (e) {
+          console.error(`Error fetching results for ${comp.id}`, e);
+        }
+      });
+      await Promise.all(fetchPromises);
+      // Sort by date desc
+      flaggedResults.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setFlaggedSolves(flaggedResults);
+
       const totalRevenue = paymentsData
         .filter(p => p.status === 'SUCCESS')
         .reduce((sum, p) => {
@@ -174,181 +199,75 @@ export default function AdminPanel() {
     }
   };
 
-  const handleCompSubmit = async (e) => {
-    e.preventDefault();
-    if (formData.selectedEvents.length === 0) return alert('Select at least one event');
-
-    // Scramble Validation
-    for (const eventId of formData.selectedEvents) {
-      const eventScrambles = formData.scrambles[eventId];
-      if (!eventScrambles || eventScrambles.length < 5 || eventScrambles.some(s => !s?.trim())) {
-        return alert(`Please enter all 5 scrambles for ${getEventName(eventId)}`);
-      }
-    }
-
-    // Build eventSettings with proper validation
-    const finalEventSettings = {};
-    for (const eventId of formData.selectedEvents) {
-      const settings = formData.eventSettings[eventId] || getDefaultEventSettings(eventId);
-      finalEventSettings[eventId] = {
-        format: settings.format || 'Ao5',
-        applyCutOff: Boolean(settings.applyCutOff),
-        cutOffTime: Number(settings.cutOffTime) || 120000,
-        cutOffAttempts: Number(settings.cutOffAttempts) || 2,
-        applyMaxTime: Boolean(settings.applyMaxTime),
-        maxTimeLimit: Number(settings.maxTimeLimit) || 600000
-      };
-    }
-
-    const compData = {
-      name: formData.name,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      registrationStartDate: formData.registrationStartDate,
-      registrationEndDate: formData.registrationEndDate,
-      type: formData.type,
-      currency: formData.currency,
-      pricingModel: formData.pricingModel,
-      flatPrice: Number(formData.flatPrice),
-      basePrice: Number(formData.basePrice),
-      perEventPrice: Number(formData.perEventPrice),
-      solveLimit: Number(formData.solveLimit),
-      events: formData.selectedEvents,
-      eventSettings: finalEventSettings,
-      scrambles: formData.scrambles,
-      isPublished: formData.isPublished,
-      status: new Date(formData.startDate) > new Date() ? 'UPCOMING' : 'LIVE',
-      updatedAt: new Date().toISOString()
-    };
-
-    if (!editingComp) {
-      compData.createdAt = new Date().toISOString();
-      compData.participantCount = 0;
-    }
+  const handleResolveFlag = async (solve, action) => {
+    if (!confirm(`Are you sure you want to ${action} this solve?`)) return;
 
     try {
-      if (editingComp) {
-        await updateDoc(doc(db, 'competitions', editingComp.id), compData);
-        alert('Competition updated');
-      } else {
-        await addDoc(collection(db, 'competitions'), compData);
-        alert('Competition created');
+      const solveRef = doc(db, solve.path);
+      
+      if (action === 'approve') {
+        // Remove flag, keep time
+        await updateDoc(solveRef, {
+          flagged: false,
+          flagResolved: true,
+          flagResolution: 'Approved by Admin'
+        });
+      } else if (action === 'dnf') {
+        // Keep flag record but mark as DNF
+        await updateDoc(solveRef, {
+          time: -1, // DNF
+          penalty: 'DNF',
+          flagResolved: true,
+          flagResolution: 'DNF by Admin'
+        });
+      } else if (action === 'delete') {
+        await deleteDoc(solveRef);
       }
-      setEditingComp(null);
-      resetForm();
-      fetchData();
+
+      // Add audit log
+      await addDoc(collection(db, 'auditLogs'), {
+        action: `SOLVE_${action.toUpperCase()}`,
+        adminId: user.uid,
+        adminEmail: user.email,
+        solveId: solve.id,
+        userEmail: solve.userEmail,
+        timestamp: new Date().toISOString()
+      });
+
+      alert('Action completed');
+      fetchData(); // Refresh
     } catch (error) {
-      alert('Error saving competition: ' + error.message);
+      alert('Error: ' + error.message);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '', startDate: '', endDate: '', registrationStartDate: '', registrationEndDate: '',
-      type: 'FREE', currency: 'INR', pricingModel: 'flat',
-      flatPrice: 0, basePrice: 0, perEventPrice: 0,
-      solveLimit: 5, selectedEvents: [], eventSettings: {}, scrambles: {}, isPublished: false
-    });
-  };
-
-  const loadCompForEdit = (comp) => {
-    setEditingComp(comp);
+  const handleExportFlags = () => {
+    if (!flaggedSolves.length) return alert('No flagged solves to export');
     
-    // Build eventSettings from existing data or defaults
-    const loadedEventSettings = {};
-    (comp.events || []).forEach(eventId => {
-      if (comp.eventSettings && comp.eventSettings[eventId]) {
-        loadedEventSettings[eventId] = comp.eventSettings[eventId];
-      } else {
-        loadedEventSettings[eventId] = getDefaultEventSettings(eventId);
-      }
-    });
-
-    setFormData({
-      name: comp.name || '',
-      startDate: comp.startDate || '',
-      endDate: comp.endDate || '',
-      registrationStartDate: comp.registrationStartDate || '',
-      registrationEndDate: comp.registrationEndDate || '',
-      type: comp.type || 'FREE',
-      currency: comp.currency || 'INR',
-      pricingModel: comp.pricingModel || 'flat',
-      flatPrice: comp.flatPrice || comp.registrationFee || 0,
-      basePrice: comp.basePrice || 0,
-      perEventPrice: comp.perEventPrice || 0,
-      solveLimit: comp.solveLimit || 5,
-      selectedEvents: comp.events || [],
-      eventSettings: loadedEventSettings,
-      scrambles: comp.scrambles || {},
-      isPublished: comp.isPublished || false
-    });
-  };
-
-  const handleEventToggle = (eventId) => {
-    setFormData(prev => {
-      const isSelected = prev.selectedEvents.includes(eventId);
-      let newEvents;
-      let newEventSettings = { ...prev.eventSettings };
-      
-      if (isSelected) {
-        newEvents = prev.selectedEvents.filter(id => id !== eventId);
-        delete newEventSettings[eventId];
-      } else {
-        newEvents = [...prev.selectedEvents, eventId];
-        newEventSettings[eventId] = getDefaultEventSettings(eventId);
-      }
-      
-      return { ...prev, selectedEvents: newEvents, eventSettings: newEventSettings };
-    });
-  };
-
-  const handleEventSettingChange = (eventId, field, value) => {
-    setFormData(prev => {
-      const currentSettings = prev.eventSettings[eventId] || getDefaultEventSettings(eventId);
-      return {
-        ...prev,
-        eventSettings: {
-          ...prev.eventSettings,
-          [eventId]: {
-            ...currentSettings,
-            [field]: value
-          }
-        }
-      };
-    });
-  };
-
-  const handleScrambleChange = (eventId, index, value) => {
-    setFormData(prev => {
-      const currentScrambles = prev.scrambles[eventId] || Array(5).fill('');
-      const newScrambles = [...currentScrambles];
-      newScrambles[index] = value;
-      return {
-        ...prev,
-        scrambles: { ...prev.scrambles, [eventId]: newScrambles }
-      };
-    });
-  };
-
-  const handleExportPayments = () => {
-    if (!payments.length) return alert('No payments to export');
-    
-    const headers = ['ID', 'User Email', 'Amount', 'Currency', 'Status', 'Date', 'Competition ID'];
-    const rows = payments.map(p => [
-      p.id, p.userEmail || 'N/A', p.amount, p.currency, p.status,
-      new Date(p.createdAt).toLocaleString(), p.competitionId || 'N/A'
+    const headers = ['ID', 'User', 'Competition', 'Event', 'Time', 'Flag Reason', 'Violations', 'IP', 'Device', 'Date'];
+    const rows = flaggedSolves.map(s => [
+      s.id,
+      s.userName || s.userEmail,
+      s.competitionName,
+      s.eventId,
+      s.time,
+      s.flagReason,
+      JSON.stringify(s.violations || {}),
+      s.ipAddress || 'N/A',
+      JSON.stringify(s.deviceInfo || {}),
+      new Date(s.createdAt).toLocaleString()
     ]);
     
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `payments_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `flagged_solves_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -403,9 +322,134 @@ export default function AdminPanel() {
         <TabsList>
           <TabsTrigger value="competitions">Competitions</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="security" className="text-orange-600 data-[state=active]:text-orange-700">
+            <ShieldCheck className="w-4 h-4 mr-2" />
+            Security & Anti-Cheat
+            {flaggedSolves.length > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                {flaggedSolves.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="security">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-red-600 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Flagged Solves Review
+                </CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Solves flagged by the anti-cheat system for suspicious activity.
+                </p>
+              </div>
+              <Button variant="outline" onClick={handleExportFlags}>
+                <FileDown className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {flaggedSolves.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                  <p>No flagged solves found. System is clean.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User / Comp</TableHead>
+                        <TableHead>Event / Time</TableHead>
+                        <TableHead>Violation Details</TableHead>
+                        <TableHead>Tech Info</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {flaggedSolves.map(solve => (
+                        <TableRow key={solve.id}>
+                          <TableCell>
+                            <div className="font-medium">{solve.userName || 'Unknown'}</div>
+                            <div className="text-xs text-gray-500">{solve.userEmail}</div>
+                            <div className="text-xs font-semibold mt-1 text-blue-600">{solve.competitionName}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-bold">{getEventName(solve.eventId)}</div>
+                            <div className="font-mono text-lg text-orange-600">
+                              {solve.penalty === 'DNF' ? 'DNF' : (solve.time / 1000).toFixed(2) + 's'}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {new Date(solve.createdAt).toLocaleDateString()}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[250px]">
+                            <div className="space-y-1">
+                              <Badge variant="destructive" className="mb-1">{solve.flagReason}</Badge>
+                              <div className="text-xs grid grid-cols-2 gap-1">
+                                {solve.violations?.tabSwitch && <span className="text-red-500">• Tab Switch</span>}
+                                {solve.violations?.windowBlur && <span className="text-red-500">• Window Blur</span>}
+                                {solve.violations?.multiTab && <span className="text-red-500">• Multi-Tab</span>}
+                                {solve.violations?.rightClick && <span className="text-red-500">• Right Click</span>}
+                                {solve.violations?.devTools && <span className="text-red-500">• DevTools</span>}
+                                {solve.violations?.suspiciousTime && <span className="text-red-500">• Suspicious Time</span>}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs space-y-1">
+                              <div><span className="font-semibold">IP:</span> {solve.ipAddress || 'N/A'}</div>
+                              <div><span className="font-semibold">Loc:</span> {solve.city}, {solve.country}</div>
+                              {solve.anomalyScore > 0 && (
+                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                  Score: {solve.anomalyScore}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="text-green-600 hover:bg-green-50 border-green-200"
+                                onClick={() => handleResolveFlag(solve, 'approve')}
+                                title="Approve (Clear Flag)"
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="text-orange-600 hover:bg-orange-50 border-orange-200"
+                                onClick={() => handleResolveFlag(solve, 'dnf')}
+                                title="Penalty (DNF)"
+                              >
+                                <Gavel className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={() => handleResolveFlag(solve, 'delete')}
+                                title="Delete Solve"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="competitions" className="space-y-4">
           <Card>
@@ -487,41 +531,8 @@ export default function AdminPanel() {
                   {formData.type === 'PAID' && (
                     <div className="space-y-4 animate-in fade-in">
                       <div className="space-y-2">
-                        <Label>Pricing Model</Label>
-                        <RadioGroup 
-                          value={formData.pricingModel} 
-                          onValueChange={val => setFormData({...formData, pricingModel: val})}
-                          className="flex gap-4"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="flat" id="model-flat" />
-                            <Label htmlFor="model-flat">Flat Fee (One price for any number of events)</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="base_plus_extra" id="model-base" />
-                            <Label htmlFor="model-base">Base Fee + Per Event Fee</Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        {formData.pricingModel === 'flat' ? (
-                          <div className="space-y-2">
-                            <Label>Flat Registration Fee</Label>
-                            <Input type="number" value={formData.flatPrice} onChange={e => setFormData({...formData, flatPrice: e.target.value})} required />
-                          </div>
-                        ) : (
-                          <>
-                            <div className="space-y-2">
-                              <Label>Base Fee (Includes 1st event)</Label>
-                              <Input type="number" value={formData.basePrice} onChange={e => setFormData({...formData, basePrice: e.target.value})} required />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Fee Per Extra Event</Label>
-                              <Input type="number" value={formData.perEventPrice} onChange={e => setFormData({...formData, perEventPrice: e.target.value})} required />
-                            </div>
-                          </>
-                        )}
+                        <Label>Flat Registration Fee</Label>
+                        <Input type="number" value={formData.flatPrice} onChange={e => setFormData({...formData, flatPrice: e.target.value})} required />
                       </div>
                     </div>
                   )}

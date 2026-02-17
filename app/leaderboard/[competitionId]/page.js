@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Trophy, Medal, Search, Filter, Clock, Timer } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Search, Filter, Clock, Timer, AlertTriangle } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import {
   Table,
@@ -131,12 +131,14 @@ function LeaderboardPage() {
               wcaStyleId: userData.wcaStyleId || resultData.wcaStyleId || 'N/A',
               country: userData.country || resultData.country || 'Unknown',
               photoURL: userData.photoURL,
-              hasResults: true
+              hasResults: true,
+              flagged: resultData.flagged || false // Ensure flagged status is included
             });
           } catch (e) {
             results.push({
               ...resultData,
-              hasResults: true
+              hasResults: true,
+              flagged: resultData.flagged || false
             });
           }
         }
@@ -176,7 +178,8 @@ function LeaderboardPage() {
         average: null,
         bestSingle: null,
         times: [],
-        hasResults: false
+        hasResults: false,
+        flagged: false
       };
     });
 
@@ -396,6 +399,14 @@ function LeaderboardPage() {
                             <Link href={`/user/${entry.userId}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline transition-colors">
                               {entry.userName || 'Unknown'}
                             </Link>
+                            {entry.flagged && (
+                              <div className="group relative">
+                                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 bg-gray-900 text-white text-xs rounded p-2 z-10 text-center">
+                                  Flagged for review
+                                </div>
+                              </div>
+                            )}
                             {!entry.hasResults && (
                               <p className="text-[10px] text-gray-400 sm:hidden">No solves</p>
                             )}
@@ -422,13 +433,17 @@ function LeaderboardPage() {
                               entry.average === Infinity || entry.average === 'DNF' ? (
                                 <Badge variant="destructive" className="text-[10px] h-5">DNF</Badge>
                               ) : (
-                                <span className="text-gray-900">{formatTime(entry.average)}</span>
+                                <span className={`text-gray-900 ${entry.flagged ? 'text-yellow-600' : ''}`}>
+                                  {formatTime(entry.average)}
+                                </span>
                               )
                             ) : (
                               entry.bestSingle === Infinity ? (
                                 <Badge variant="destructive" className="text-[10px] h-5">DNF</Badge>
                               ) : (
-                                <span className="text-blue-600">{formatTime(entry.bestSingle)}</span>
+                                <span className={`text-blue-600 ${entry.flagged ? 'text-yellow-600' : ''}`}>
+                                  {formatTime(entry.bestSingle)}
+                                </span>
                               )
                             )
                           ) : (

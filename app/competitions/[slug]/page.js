@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Timer, ArrowLeft, Trophy, Play } from 'lucide-react'
+import { Timer, ArrowLeft, Trophy, Play, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 function CompetitionDetail() {
@@ -151,6 +151,16 @@ function CompetitionDetail() {
                 <p>• DNF for over 17 seconds inspection</p>
                 <p>• Average of 5 (drop best and worst)</p>
               </div>
+            </div>
+
+            <div className="bg-orange-950/30 border border-orange-900/50 p-4 rounded-lg">
+              <h4 className="flex items-center gap-2 font-semibold text-orange-400 mb-2">
+                <ShieldCheck className="h-4 w-4" />
+                Anti-Cheat & Integrity Policy
+              </h4>
+              <p className="text-sm text-gray-400">
+                Opening developer tools, switching tabs, refreshing the page, or interacting with browser controls during a solve may result in your attempt being flagged for review.
+              </p>
             </div>
             
             {!myResult && (
