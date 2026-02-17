@@ -16,8 +16,36 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Activity, Check, Trash2, Ban, ShieldCheck } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
+
+// Helper to format milliseconds to MM:SS display
+function formatTimeInput(ms) {
+  if (!ms || ms === 0) return { minutes: '0', seconds: '00' };
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return { minutes: minutes.toString(), seconds: seconds.toString().padStart(2, '0') };
+}
+
+// Helper to parse MM:SS to milliseconds
+function parseTimeToMs(minutes, seconds) {
+  const mins = parseInt(minutes) || 0;
+  const secs = parseInt(seconds) || 0;
+  return (mins * 60 + secs) * 1000;
+}
+
+// Default event settings
+function getDefaultEventSettings(eventId) {
+  return {
+    format: 'Ao5',
+    applyCutOff: false,
+    cutOffTime: 120000, // 2:00 default
+    cutOffAttempts: 2,
+    applyMaxTime: false,
+    maxTimeLimit: 600000 // 10:00 default
+  };
+}
 
 export default function AdminPanel() {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -43,14 +71,15 @@ export default function AdminPanel() {
     endDate: '',
     registrationStartDate: '',
     registrationEndDate: '',
-    type: 'FREE', // FREE or PAID
-    currency: 'INR', // INR or USD
-    pricingModel: 'flat', // flat or base_plus_extra
+    type: 'FREE',
+    currency: 'INR',
+    pricingModel: 'flat',
     flatPrice: 0,
     basePrice: 0,
     perEventPrice: 0,
     solveLimit: 5,
     selectedEvents: [],
+    eventSettings: {},
     scrambles: {},
     isPublished: false
   });
@@ -71,29 +100,24 @@ export default function AdminPanel() {
   async function fetchData() {
     setLoadingData(true);
     try {
-      // Competitions
       const compsSnap = await getDocs(collection(db, 'competitions'));
       const compsData = compsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       compsData.sort((a, b) => new Date(b.startDate || b.createdAt) - new Date(a.startDate || a.createdAt));
       setCompetitions(compsData);
 
-      // Users
       const usersSnap = await getDocs(collection(db, 'users'));
       const usersData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(usersData);
 
-      // Payments
       const paymentsSnap = await getDocs(collection(db, 'payments'));
       const paymentsData = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       paymentsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setPayments(paymentsData);
 
-      // Audit Logs
       const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
       const auditSnap = await getDocs(auditQuery);
       setAuditLogs(auditSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-      // Stats Calculation
       const totalRevenue = paymentsData
         .filter(p => p.status === 'SUCCESS')
         .reduce((sum, p) => {
@@ -125,7 +149,6 @@ export default function AdminPanel() {
     }
   }
 
-  // User Management Actions
   const handleToggleUserStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
     if (!confirm(`Are you sure you want to change user status to ${newStatus}?`)) return;
@@ -163,6 +186,20 @@ export default function AdminPanel() {
       }
     }
 
+    // Build eventSettings with proper validation
+    const finalEventSettings = {};
+    for (const eventId of formData.selectedEvents) {
+      const settings = formData.eventSettings[eventId] || getDefaultEventSettings(eventId);
+      finalEventSettings[eventId] = {
+        format: settings.format || 'Ao5',
+        applyCutOff: Boolean(settings.applyCutOff),
+        cutOffTime: Number(settings.cutOffTime) || 120000,
+        cutOffAttempts: Number(settings.cutOffAttempts) || 2,
+        applyMaxTime: Boolean(settings.applyMaxTime),
+        maxTimeLimit: Number(settings.maxTimeLimit) || 600000
+      };
+    }
+
     const compData = {
       name: formData.name,
       startDate: formData.startDate,
@@ -177,6 +214,7 @@ export default function AdminPanel() {
       perEventPrice: Number(formData.perEventPrice),
       solveLimit: Number(formData.solveLimit),
       events: formData.selectedEvents,
+      eventSettings: finalEventSettings,
       scrambles: formData.scrambles,
       isPublished: formData.isPublished,
       status: new Date(formData.startDate) > new Date() ? 'UPCOMING' : 'LIVE',
@@ -209,12 +247,23 @@ export default function AdminPanel() {
       name: '', startDate: '', endDate: '', registrationStartDate: '', registrationEndDate: '',
       type: 'FREE', currency: 'INR', pricingModel: 'flat',
       flatPrice: 0, basePrice: 0, perEventPrice: 0,
-      solveLimit: 5, selectedEvents: [], scrambles: {}, isPublished: false
+      solveLimit: 5, selectedEvents: [], eventSettings: {}, scrambles: {}, isPublished: false
     });
   };
 
   const loadCompForEdit = (comp) => {
     setEditingComp(comp);
+    
+    // Build eventSettings from existing data or defaults
+    const loadedEventSettings = {};
+    (comp.events || []).forEach(eventId => {
+      if (comp.eventSettings && comp.eventSettings[eventId]) {
+        loadedEventSettings[eventId] = comp.eventSettings[eventId];
+      } else {
+        loadedEventSettings[eventId] = getDefaultEventSettings(eventId);
+      }
+    });
+
     setFormData({
       name: comp.name || '',
       startDate: comp.startDate || '',
@@ -229,6 +278,7 @@ export default function AdminPanel() {
       perEventPrice: comp.perEventPrice || 0,
       solveLimit: comp.solveLimit || 5,
       selectedEvents: comp.events || [],
+      eventSettings: loadedEventSettings,
       scrambles: comp.scrambles || {},
       isPublished: comp.isPublished || false
     });
@@ -236,10 +286,35 @@ export default function AdminPanel() {
 
   const handleEventToggle = (eventId) => {
     setFormData(prev => {
-      const newEvents = prev.selectedEvents.includes(eventId)
-        ? prev.selectedEvents.filter(id => id !== eventId)
-        : [...prev.selectedEvents, eventId];
-      return { ...prev, selectedEvents: newEvents };
+      const isSelected = prev.selectedEvents.includes(eventId);
+      let newEvents;
+      let newEventSettings = { ...prev.eventSettings };
+      
+      if (isSelected) {
+        newEvents = prev.selectedEvents.filter(id => id !== eventId);
+        delete newEventSettings[eventId];
+      } else {
+        newEvents = [...prev.selectedEvents, eventId];
+        newEventSettings[eventId] = getDefaultEventSettings(eventId);
+      }
+      
+      return { ...prev, selectedEvents: newEvents, eventSettings: newEventSettings };
+    });
+  };
+
+  const handleEventSettingChange = (eventId, field, value) => {
+    setFormData(prev => {
+      const currentSettings = prev.eventSettings[eventId] || getDefaultEventSettings(eventId);
+      return {
+        ...prev,
+        eventSettings: {
+          ...prev.eventSettings,
+          [eventId]: {
+            ...currentSettings,
+            [field]: value
+          }
+        }
+      };
     });
   };
 
@@ -279,15 +354,10 @@ export default function AdminPanel() {
     document.body.removeChild(link);
   };
 
-  // Helper to get Competition Name for Payments
   const getCompetitionName = (compId) => {
     const comp = competitions.find(c => c.id === compId);
     return comp ? comp.name : 'Unknown Competition';
   };
-
-  // Helper to get formatted date string for inputs
-  // Note: HTML date inputs expect YYYY-MM-DDTHH:mm format
-  // This might need adjustment depending on how data is stored, assuming ISO strings
 
   if (authLoading || loadingData) return <div className="p-8 text-center">Loading Admin Panel...</div>;
   if (!isAdmin) return null;
@@ -471,6 +541,7 @@ export default function AdminPanel() {
                   <Label htmlFor="published">Publish Competition (Visible to public)</Label>
                 </div>
 
+                {/* EVENTS SELECTION */}
                 <div className="space-y-2">
                   <Label>Events</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -487,6 +558,128 @@ export default function AdminPanel() {
                   </div>
                 </div>
 
+                {/* PER-EVENT SETTINGS (CUT-OFF & MAX TIME) */}
+                {formData.selectedEvents.length > 0 && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-5 w-5 text-orange-500" />
+                      <Label className="text-lg font-semibold">Event Time Limits (WCA-Style)</Label>
+                    </div>
+                    <p className="text-sm text-gray-500">Configure cut-off and maximum time limits per event. All times in MM:SS format.</p>
+                    
+                    {formData.selectedEvents.map(eventId => {
+                      const settings = formData.eventSettings[eventId] || getDefaultEventSettings(eventId);
+                      const cutOffTime = formatTimeInput(settings.cutOffTime);
+                      const maxTime = formatTimeInput(settings.maxTimeLimit);
+                      
+                      return (
+                        <Card key={eventId} className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200">
+                          <CardHeader className="py-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              {getEventName(eventId)} ({settings.format})
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            {/* Cut-Off Settings */}
+                            <div className="space-y-3 p-3 bg-white/50 dark:bg-black/20 rounded-lg">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox 
+                                  id={`cutoff-${eventId}`}
+                                  checked={settings.applyCutOff}
+                                  onCheckedChange={(checked) => handleEventSettingChange(eventId, 'applyCutOff', checked)}
+                                />
+                                <Label htmlFor={`cutoff-${eventId}`} className="font-medium">Enable Cut-Off</Label>
+                              </div>
+                              
+                              {settings.applyCutOff && (
+                                <div className="grid grid-cols-2 gap-4 pl-6 animate-in fade-in">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-gray-600">Cut-Off Time (MM:SS)</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Input 
+                                        type="number" 
+                                        min="0"
+                                        max="59"
+                                        className="w-16 text-center"
+                                        value={cutOffTime.minutes}
+                                        onChange={(e) => handleEventSettingChange(eventId, 'cutOffTime', parseTimeToMs(e.target.value, cutOffTime.seconds))}
+                                      />
+                                      <span className="font-bold">:</span>
+                                      <Input 
+                                        type="number" 
+                                        min="0"
+                                        max="59"
+                                        className="w-16 text-center"
+                                        value={cutOffTime.seconds}
+                                        onChange={(e) => handleEventSettingChange(eventId, 'cutOffTime', parseTimeToMs(cutOffTime.minutes, e.target.value))}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-gray-600">Attempts to Beat Cut-Off</Label>
+                                    <Select 
+                                      value={settings.cutOffAttempts.toString()} 
+                                      onValueChange={(val) => handleEventSettingChange(eventId, 'cutOffAttempts', parseInt(val))}
+                                    >
+                                      <SelectTrigger className="w-20">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="1">1</SelectItem>
+                                        <SelectItem value="2">2</SelectItem>
+                                        <SelectItem value="3">3</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Max Time Settings */}
+                            <div className="space-y-3 p-3 bg-white/50 dark:bg-black/20 rounded-lg">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox 
+                                  id={`maxtime-${eventId}`}
+                                  checked={settings.applyMaxTime}
+                                  onCheckedChange={(checked) => handleEventSettingChange(eventId, 'applyMaxTime', checked)}
+                                />
+                                <Label htmlFor={`maxtime-${eventId}`} className="font-medium">Enable Maximum Time Limit</Label>
+                              </div>
+                              
+                              {settings.applyMaxTime && (
+                                <div className="pl-6 animate-in fade-in">
+                                  <Label className="text-xs text-gray-600">Maximum Time (MM:SS)</Label>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Input 
+                                      type="number" 
+                                      min="0"
+                                      max="59"
+                                      className="w-16 text-center"
+                                      value={maxTime.minutes}
+                                      onChange={(e) => handleEventSettingChange(eventId, 'maxTimeLimit', parseTimeToMs(e.target.value, maxTime.seconds))}
+                                    />
+                                    <span className="font-bold">:</span>
+                                    <Input 
+                                      type="number" 
+                                      min="0"
+                                      max="59"
+                                      className="w-16 text-center"
+                                      value={maxTime.seconds}
+                                      onChange={(e) => handleEventSettingChange(eventId, 'maxTimeLimit', parseTimeToMs(maxTime.minutes, e.target.value))}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* SCRAMBLES */}
                 {formData.selectedEvents.length > 0 && (
                   <div className="space-y-4 border-t pt-4">
                     <Label className="text-lg">Scrambles (5 per event required)</Label>
