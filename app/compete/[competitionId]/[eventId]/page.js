@@ -8,18 +8,28 @@ import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video } from 'lucide-react';
+import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+
+// Helper to format time from milliseconds
+function formatTimeDisplay(ms) {
+  if (ms === null || ms === undefined) return '--:--';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 function TimerPage() {
   const { user, userProfile } = useAuth();
   const router = useRouter();
   const params = useParams();
   const [competition, setCompetition] = useState(null);
+  const [eventConfig, setEventConfig] = useState(null);
   const [registration, setRegistration] = useState(null);
   const [currentAttempt, setCurrentAttempt] = useState(1);
-  const [phase, setPhase] = useState('intro'); // intro, rules, ready, inspection, solving, submitted, complete, evidence
-  const [inspectionTime, setInspectionTime] = useState(15000); // Store in ms for accuracy
+  const [phase, setPhase] = useState('intro'); // intro, rules, ready, inspection, solving, submitted, complete, evidence, eliminated
+  const [inspectionTime, setInspectionTime] = useState(15000);
   const [solveTime, setSolveTime] = useState(0);
   const [scrambleRevealed, setScrambleRevealed] = useState(false);
   const [currentScramble, setCurrentScramble] = useState('');
@@ -29,6 +39,10 @@ function TimerPage() {
   const [scrambleRevealedId, setScrambleRevealedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userIp, setUserIp] = useState('unknown');
+  
+  // Cut-off tracking state
+  const [passedCutOff, setPassedCutOff] = useState(false);
+  const [eliminatedByCutOff, setEliminatedByCutOff] = useState(false);
   
   // Anti-cheat state
   const [flagged, setFlagged] = useState(false);
@@ -78,7 +92,6 @@ function TimerPage() {
       return;
     }
     
-    // Fetch IP for anti-cheat
     fetch('/api/get-ip')
       .then(res => res.json())
       .then(data => setUserIp(data.ip))
@@ -90,7 +103,6 @@ function TimerPage() {
   async function initializeCompetition() {
     setLoading(true);
     try {
-      // Fetch competition
       const compDoc = await getDoc(doc(db, 'competitions', params.competitionId));
       if (!compDoc.exists()) {
         alert('Competition not found!');
@@ -127,6 +139,17 @@ function TimerPage() {
       }
       
       setCompetition(compData);
+      
+      // Load event-specific configuration
+      const config = compData.eventSettings?.[params.eventId] || {
+        format: 'Ao5',
+        applyCutOff: false,
+        cutOffTime: 120000,
+        cutOffAttempts: 2,
+        applyMaxTime: false,
+        maxTimeLimit: 600000
+      };
+      setEventConfig(config);
 
       // Check registration
       const regsQuery = query(
@@ -151,8 +174,7 @@ function TimerPage() {
         return;
       }
 
-      // Fetch existing solves and check for DNF on refresh
-      await loadSolvesAndCheckDNF(compData);
+      await loadSolvesAndCheckDNF(compData, config);
       
     } catch (error) {
       console.error('Failed to initialize:', error);
@@ -162,8 +184,7 @@ function TimerPage() {
     }
   }
 
-  async function loadSolvesAndCheckDNF(compData) {
-    // Fetch existing solves
+  async function loadSolvesAndCheckDNF(compData, config) {
     const solvesQuery = query(
       collection(db, 'solves'),
       where('userId', '==', user.uid),
@@ -179,6 +200,34 @@ function TimerPage() {
     const nextAttempt = solves.length + 1;
     setCurrentAttempt(nextAttempt);
 
+    // Check if already eliminated by cut-off
+    const hasEliminationDNF = solves.some(s => s.reason === 'CUT_OFF_EXCEEDED');
+    if (hasEliminationDNF) {
+      setEliminatedByCutOff(true);
+      setPhase('eliminated');
+      return;
+    }
+
+    // Check cut-off status from existing solves
+    if (config?.applyCutOff) {
+      const cutOffAttempts = config.cutOffAttempts || 2;
+      const attemptsForCutOff = solves.filter(s => s.attemptNumber <= cutOffAttempts);
+      const hasPassed = attemptsForCutOff.some(s => {
+        const time = s.finalTime || s.time;
+        return time !== null && time !== Infinity && time <= config.cutOffTime;
+      });
+      setPassedCutOff(hasPassed);
+      
+      // Check if failed cut-off (completed all cut-off attempts without passing)
+      if (!hasPassed && attemptsForCutOff.length >= cutOffAttempts) {
+        setEliminatedByCutOff(true);
+        setPhase('eliminated');
+        return;
+      }
+    } else {
+      setPassedCutOff(true); // No cut-off = automatically passed
+    }
+
     // Check if all solves completed
     if (solves.length >= solveLimit) {
       setPhase('evidence');
@@ -192,11 +241,9 @@ function TimerPage() {
       if (revealDoc.exists()) {
         const data = revealDoc.data();
         if (data.revealed && !data.submitted) {
-          // Mark as DNF due to refresh
-          await saveSolve(0, 'DNF', true);
+          await saveSolve(0, 'DNF', true, 'PAGE_REFRESH');
           alert('Your previous attempt was marked as DNF because you refreshed after revealing the scramble.');
-          // Reload solves
-          await loadSolvesAndCheckDNF(compData);
+          await loadSolvesAndCheckDNF(compData, config);
           return;
         }
       }
@@ -277,14 +324,12 @@ function TimerPage() {
     beepPlayedRef.current = { eight: false, five: false };
     inspectionStartRef.current = performance.now();
 
-    // Use requestAnimationFrame for smooth updates
     function updateInspection() {
       const elapsed = performance.now() - inspectionStartRef.current;
       const remaining = 15000 - elapsed;
       
       setInspectionTime(remaining);
 
-      // Beeps
       if (remaining <= 8000 && remaining > 7900 && !beepPlayedRef.current.eight) {
         playBeep(440);
         beepPlayedRef.current.eight = true;
@@ -294,14 +339,12 @@ function TimerPage() {
         beepPlayedRef.current.five = true;
       }
 
-      // Penalty zones
       if (remaining <= 0 && remaining > -2000) {
         setPenalty('+2');
       } else if (remaining <= -2000) {
-        // Auto DNF
         setPenalty('DNF');
         cancelAnimationFrame(animationFrameRef.current);
-        saveSolve(0, 'DNF');
+        saveSolve(0, 'DNF', false, 'INSPECTION_EXCEEDED');
         return;
       }
 
@@ -322,6 +365,15 @@ function TimerPage() {
     function updateSolve() {
       const elapsed = performance.now() - solveStartRef.current;
       setSolveTime(elapsed);
+      
+      // Check maximum time limit during solve
+      if (eventConfig?.applyMaxTime && elapsed > eventConfig.maxTimeLimit) {
+        cancelAnimationFrame(animationFrameRef.current);
+        setSolveTime(eventConfig.maxTimeLimit);
+        saveSolve(eventConfig.maxTimeLimit, 'DNF', false, 'MAX_TIME_EXCEEDED');
+        return;
+      }
+      
       animationFrameRef.current = requestAnimationFrame(updateSolve);
     }
 
@@ -334,37 +386,56 @@ function TimerPage() {
     cancelAnimationFrame(animationFrameRef.current);
     const finalTime = performance.now() - solveStartRef.current;
     setSolveTime(finalTime);
-    saveSolve(finalTime, penalty);
+    
+    // Check if solve exceeds maximum time (edge case: stopped exactly at or just over)
+    if (eventConfig?.applyMaxTime && finalTime > eventConfig.maxTimeLimit) {
+      saveSolve(finalTime, 'DNF', false, 'MAX_TIME_EXCEEDED');
+    } else {
+      saveSolve(finalTime, penalty);
+    }
   }
 
-  async function saveSolve(time, appliedPenalty, isRefreshDNF = false) {
+  async function saveSolve(time, appliedPenalty, isRefreshDNF = false, reason = null) {
     setSaving(true);
     setPhase('submitted');
     
     try {
       let finalTime = Math.round(time);
+      let solveReason = reason;
+      
+      // Apply +2 penalty before cut-off check
       if (appliedPenalty === '+2') {
         finalTime = Math.round(time) + 2000;
       } else if (appliedPenalty === 'DNF') {
         finalTime = Infinity;
       }
 
-      // Save solve to Firestore with Anti-cheat flags
+      // Determine if this solve passes cut-off
+      let newPassedCutOff = passedCutOff;
+      if (eventConfig?.applyCutOff && !passedCutOff && currentAttempt <= eventConfig.cutOffAttempts) {
+        if (finalTime !== Infinity && finalTime <= eventConfig.cutOffTime) {
+          newPassedCutOff = true;
+          setPassedCutOff(true);
+        }
+      }
+
+      // Save solve to Firestore
       await addDoc(collection(db, 'solves'), {
         userId: user.uid,
         userEmail: user.email,
         userName: userProfile?.displayName || 'Unknown',
         wcaStyleId: userProfile?.wcaStyleId || 'N/A',
-        userIp: userIp, // Log IP
+        userIp: userIp,
         competitionId: params.competitionId,
         eventId: params.eventId,
         attemptNumber: currentAttempt,
-        time: Math.round(time),
-        finalTime: finalTime,
+        time: appliedPenalty === 'DNF' ? null : Math.round(time),
+        finalTime: finalTime === Infinity ? null : finalTime,
         penalty: appliedPenalty,
+        reason: solveReason,
         scramble: currentScramble,
         isRefreshDNF: isRefreshDNF,
-        flagged: flagged || isRefreshDNF, // Auto flag refresh DNFs
+        flagged: flagged || isRefreshDNF,
         flagReason: isRefreshDNF ? 'Page refreshed during solve' : flagReason,
         createdAt: new Date().toISOString()
       });
@@ -377,28 +448,66 @@ function TimerPage() {
         }, { merge: true });
       }
 
-      // Check if all solves completed
       const solveLimit = competition?.solveLimit || 5;
+      const updatedSolves = [...existingSolves, { 
+        attemptNumber: currentAttempt, 
+        time, 
+        finalTime: finalTime === Infinity ? null : finalTime, 
+        penalty: appliedPenalty,
+        reason: solveReason
+      }];
+      
+      // Check if failed cut-off after this attempt
+      if (eventConfig?.applyCutOff && !newPassedCutOff && currentAttempt >= eventConfig.cutOffAttempts) {
+        // Failed cut-off - auto DNF remaining solves
+        const remainingAttempts = solveLimit - currentAttempt;
+        for (let i = 1; i <= remainingAttempts; i++) {
+          await addDoc(collection(db, 'solves'), {
+            userId: user.uid,
+            userEmail: user.email,
+            userName: userProfile?.displayName || 'Unknown',
+            wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+            userIp: userIp,
+            competitionId: params.competitionId,
+            eventId: params.eventId,
+            attemptNumber: currentAttempt + i,
+            time: null,
+            finalTime: null,
+            penalty: 'DNF',
+            reason: 'CUT_OFF_EXCEEDED',
+            scramble: competition?.scrambles?.[params.eventId]?.[currentAttempt + i - 1] || '',
+            isRefreshDNF: false,
+            flagged: false,
+            flagReason: '',
+            createdAt: new Date().toISOString()
+          });
+        }
+        
+        setEliminatedByCutOff(true);
+        await calculateAndSaveResults(true);
+        setPhase('eliminated');
+        return;
+      }
+
+      // Check if all solves completed
       if (currentAttempt >= solveLimit) {
-        await calculateAndSaveResults();
+        await calculateAndSaveResults(false);
         setPhase('evidence');
       } else {
         // Prepare for next attempt after short delay
         setTimeout(() => {
           const nextAttempt = currentAttempt + 1;
           setCurrentAttempt(nextAttempt);
-          setExistingSolves(prev => [...prev, { attemptNumber: currentAttempt, time, finalTime, penalty: appliedPenalty }]);
+          setExistingSolves(updatedSolves);
           setPhase('ready');
           setScrambleRevealed(false);
           setScrambleRevealedId(null);
           setSolveTime(0);
           setInspectionTime(15000);
           setPenalty('none');
-          // Reset flags for next solve
           setFlagged(false);
           setFlagReason('');
           
-          // Load next scramble
           const scrambles = competition?.scrambles?.[params.eventId];
           if (scrambles && scrambles.length >= nextAttempt) {
             setCurrentScramble(scrambles[nextAttempt - 1]);
@@ -413,7 +522,7 @@ function TimerPage() {
     }
   }
 
-  async function calculateAndSaveResults() {
+  async function calculateAndSaveResults(eliminatedByCutOff = false) {
     try {
       const solvesQuery = query(
         collection(db, 'solves'),
@@ -424,14 +533,21 @@ function TimerPage() {
       const solvesSnapshot = await getDocs(solvesQuery);
       const solves = solvesSnapshot.docs.map(doc => doc.data());
       
-      const times = solves.map(s => s.finalTime || s.time);
+      const times = solves.map(s => {
+        if (s.penalty === 'DNF' || s.finalTime === null || s.finalTime === undefined) {
+          return Infinity;
+        }
+        return s.finalTime;
+      });
+      
       const validTimes = times.filter(t => t !== Infinity && typeof t === 'number');
       const bestSingle = validTimes.length > 0 ? Math.min(...validTimes) : Infinity;
       
       const dnfCount = times.filter(t => t === Infinity).length;
       let average = Infinity;
       
-      if (times.length >= 5 && dnfCount <= 1) {
+      // WCA Average calculation: Ao5 with trimmed mean
+      if (times.length >= 5 && dnfCount <= 1 && !eliminatedByCutOff) {
         const sorted = [...times].sort((a, b) => {
           if (a === Infinity) return 1;
           if (b === Infinity) return -1;
@@ -452,9 +568,10 @@ function TimerPage() {
         competitionId: params.competitionId,
         competitionName: competition?.name || '',
         eventId: params.eventId,
-        times: times,
-        bestSingle: bestSingle,
-        average: average,
+        times: times.map(t => t === Infinity ? null : t),
+        bestSingle: bestSingle === Infinity ? null : bestSingle,
+        average: average === Infinity ? null : average,
+        eliminatedByCutOff: eliminatedByCutOff,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -487,7 +604,7 @@ function TimerPage() {
     );
   }
 
-  // INTRO SCREEN - How Competition Works
+  // INTRO SCREEN
   if (phase === 'intro') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
@@ -514,7 +631,7 @@ function TimerPage() {
                   <ul className="space-y-3 text-gray-300">
                     <li className="flex items-start gap-2">
                       <span className="text-blue-400 font-bold">1.</span>
-                      You will complete <strong>{competition.solveLimit || 5} solves</strong> (Format: Ao{competition.solveLimit || 5})
+                      You will complete <strong>{competition.solveLimit || 5} solves</strong> (Format: {eventConfig?.format || 'Ao5'})
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-blue-400 font-bold">2.</span>
@@ -534,6 +651,40 @@ function TimerPage() {
                     </li>
                   </ul>
                 </div>
+
+                {/* Event Time Limits Display */}
+                {(eventConfig?.applyCutOff || eventConfig?.applyMaxTime) && (
+                  <div className="bg-orange-900/30 p-6 rounded-lg border border-orange-700">
+                    <h2 className="text-xl font-semibold mb-4 text-orange-400 flex items-center gap-2">
+                      <Timer className="h-5 w-5" />
+                      Time Limits for This Event
+                    </h2>
+                    <div className="space-y-3 text-gray-300">
+                      {eventConfig?.applyCutOff && (
+                        <div className="flex items-start gap-2">
+                          <Clock className="h-4 w-4 text-orange-400 mt-1" />
+                          <div>
+                            <strong className="text-orange-300">Cut-Off: {formatTimeDisplay(eventConfig.cutOffTime)}</strong>
+                            <p className="text-sm text-gray-400">
+                              You must beat this time within your first {eventConfig.cutOffAttempts} attempt(s), or remaining solves will be DNF.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {eventConfig?.applyMaxTime && (
+                        <div className="flex items-start gap-2">
+                          <Timer className="h-4 w-4 text-red-400 mt-1" />
+                          <div>
+                            <strong className="text-red-300">Maximum Time: {formatTimeDisplay(eventConfig.maxTimeLimit)}</strong>
+                            <p className="text-sm text-gray-400">
+                              If any solve exceeds this time, it will be marked as DNF.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <Button
                   onClick={() => setPhase('rules')}
@@ -585,6 +736,18 @@ function TimerPage() {
                       <span className="text-red-400">DNF</span>
                       Starting after <strong>17 seconds</strong> = DNF
                     </li>
+                    {eventConfig?.applyCutOff && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-400">✂️</span>
+                        <strong>Cut-Off:</strong> Beat {formatTimeDisplay(eventConfig.cutOffTime)} in first {eventConfig.cutOffAttempts} solve(s) or be eliminated
+                      </li>
+                    )}
+                    {eventConfig?.applyMaxTime && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-red-400">⏰</span>
+                        <strong>Max Time:</strong> Any solve over {formatTimeDisplay(eventConfig.maxTimeLimit)} = DNF
+                      </li>
+                    )}
                     <li className="flex items-start gap-2">
                       <span className="text-green-400">✓</span>
                       Results are automatically calculated and saved
@@ -617,6 +780,68 @@ function TimerPage() {
     );
   }
 
+  // ELIMINATED BY CUT-OFF SCREEN
+  if (phase === 'eliminated') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="py-8">
+              <div className="text-center space-y-6">
+                <div className="text-6xl">✂️</div>
+                <h1 className="text-3xl font-bold text-orange-400">Eliminated by Cut-Off</h1>
+                <p className="text-gray-400">
+                  You did not beat the cut-off time of <strong>{formatTimeDisplay(eventConfig?.cutOffTime)}</strong> within the first {eventConfig?.cutOffAttempts} attempt(s).
+                </p>
+                
+                <div className="bg-orange-900/30 p-4 rounded-lg border border-orange-700">
+                  <p className="text-orange-300">
+                    All remaining solves have been marked as DNF. Your average for this event is DNF.
+                  </p>
+                </div>
+
+                <div className="bg-gray-900 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3">Your Attempts:</h3>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {existingSolves.map((solve, i) => (
+                      <Badge key={i} className={
+                        solve.penalty === 'DNF' || solve.finalTime === null 
+                          ? solve.reason === 'CUT_OFF_EXCEEDED' 
+                            ? 'bg-orange-600' 
+                            : 'bg-red-600'
+                          : 'bg-blue-600'
+                      }>
+                        {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
+                        {solve.penalty === '+2' && ' (+2)'}
+                        {solve.reason === 'CUT_OFF_EXCEEDED' && ' (Cut-Off)'}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 justify-center pt-4">
+                  <Button
+                    onClick={() => router.push(`/leaderboard/${params.competitionId}`)}
+                    className="bg-yellow-600 hover:bg-yellow-700"
+                  >
+                    View Leaderboard
+                  </Button>
+                  <Button
+                    onClick={() => router.push(`/competition/${params.competitionId}`)}
+                    variant="outline"
+                    className="border-gray-600"
+                  >
+                    Back to Competition
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   // EVIDENCE SUBMISSION SCREEN
   if (phase === 'evidence') {
     return (
@@ -635,15 +860,21 @@ function TimerPage() {
                   <h3 className="font-semibold mb-3">Your Solves:</h3>
                   <div className="flex flex-wrap justify-center gap-2">
                     {existingSolves.map((solve, i) => (
-                      <Badge key={i} className={solve.penalty === 'DNF' || solve.finalTime === Infinity ? 'bg-red-600' : 'bg-blue-600'}>
-                        {solve.penalty === 'DNF' || solve.finalTime === Infinity ? 'DNF' : formatTime(solve.finalTime || solve.time)}
+                      <Badge key={i} className={
+                        solve.penalty === 'DNF' || solve.finalTime === null 
+                          ? solve.reason === 'MAX_TIME_EXCEEDED'
+                            ? 'bg-purple-600'
+                            : 'bg-red-600' 
+                          : 'bg-blue-600'
+                      }>
+                        {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
                         {solve.penalty === '+2' && ' (+2)'}
+                        {solve.reason === 'MAX_TIME_EXCEEDED' && ' (Max Time)'}
                       </Badge>
                     ))}
                   </div>
                 </div>
 
-                {/* Evidence Submission Section */}
                 <div className="bg-purple-900/30 p-6 rounded-lg border border-purple-700 text-left">
                   <h2 className="text-xl font-semibold mb-4 text-purple-400 flex items-center gap-2">
                     <Video className="h-5 w-5" />
@@ -741,14 +972,52 @@ function TimerPage() {
         </div>
       </div>
 
+      {/* Cut-Off Status Banner */}
+      {eventConfig?.applyCutOff && !passedCutOff && currentAttempt <= eventConfig.cutOffAttempts && (
+        <div className="bg-orange-900/50 border-b border-orange-700 py-2">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-orange-300 text-sm flex items-center justify-center gap-2">
+              <Clock className="h-4 w-4" />
+              <strong>Cut-Off Active:</strong> Beat {formatTimeDisplay(eventConfig.cutOffTime)} in {eventConfig.cutOffAttempts - currentAttempt + 1} remaining attempt(s)
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {eventConfig?.applyCutOff && passedCutOff && (
+        <div className="bg-green-900/50 border-b border-green-700 py-2">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-green-300 text-sm flex items-center justify-center gap-2">
+              <Check className="h-4 w-4" />
+              <strong>Cut-Off Passed!</strong> Continue with remaining solves.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Max Time Warning */}
+      {eventConfig?.applyMaxTime && (
+        <div className="bg-purple-900/30 border-b border-purple-700 py-1">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-purple-300 text-xs flex items-center justify-center gap-2">
+              <Timer className="h-3 w-3" />
+              Max Time: {formatTimeDisplay(eventConfig.maxTimeLimit)} per solve
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Previous Solves */}
       {existingSolves.length > 0 && (
         <div className="container mx-auto px-4 py-2">
           <div className="flex flex-wrap gap-2 justify-center">
             {existingSolves.map((solve, i) => (
-              <Badge key={i} variant="outline" className="border-gray-600">
-                Solve {solve.attemptNumber}: {solve.penalty === 'DNF' || solve.finalTime === Infinity ? 'DNF' : formatTime(solve.finalTime || solve.time)}
+              <Badge key={i} variant="outline" className={`border-gray-600 ${
+                solve.reason === 'MAX_TIME_EXCEEDED' ? 'border-purple-500 text-purple-300' : ''
+              }`}>
+                Solve {solve.attemptNumber}: {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
                 {solve.penalty === '+2' && ' (+2)'}
+                {solve.reason === 'MAX_TIME_EXCEEDED' && ' (Max)'}
               </Badge>
             ))}
           </div>
@@ -756,7 +1025,7 @@ function TimerPage() {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-150px)] p-4">
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] p-4">
         {/* Scramble */}
         <Card className="bg-gray-800 border-gray-700 w-full max-w-3xl mb-8">
           <CardContent className="py-6">
@@ -840,9 +1109,23 @@ function TimerPage() {
               {/* SOLVING STATE */}
               {phase === 'solving' && (
                 <>
-                  <div className="text-9xl font-bold text-green-500 tabular-nums">
+                  <div className={`text-9xl font-bold tabular-nums ${
+                    eventConfig?.applyMaxTime && solveTime > eventConfig.maxTimeLimit * 0.8
+                      ? 'text-red-500'
+                      : eventConfig?.applyMaxTime && solveTime > eventConfig.maxTimeLimit * 0.5
+                        ? 'text-yellow-500'
+                        : 'text-green-500'
+                  }`}>
                     {formatTime(solveTime)}
                   </div>
+                  {eventConfig?.applyMaxTime && (
+                    <p className="text-gray-400 text-sm">
+                      Max: {formatTimeDisplay(eventConfig.maxTimeLimit)}
+                      {solveTime > eventConfig.maxTimeLimit * 0.8 && (
+                        <span className="text-red-400 ml-2">⚠️ Approaching limit!</span>
+                      )}
+                    </p>
+                  )}
                   <Button
                     onClick={stopSolve}
                     className="bg-red-600 hover:bg-red-700 py-6 px-12 text-xl"
