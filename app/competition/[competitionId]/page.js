@@ -11,9 +11,18 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info } from 'lucide-react';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import Link from 'next/link';
+
+// Helper to format time from milliseconds
+function formatTimeDisplay(ms) {
+  if (ms === null || ms === undefined || ms === 0) return '--:--';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 function CompetitionDetail() {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -115,26 +124,21 @@ function CompetitionDetail() {
     let price = 0;
     const eventCount = selectedEvents.length;
     
-    // Get base values in Competition's currency
     let base = Number(competition.basePrice) || 0;
     let perEvent = Number(competition.perEventPrice) || 0;
     let flat = Number(competition.flatPrice) || 0;
     let regFee = Number(competition.registrationFee) || 0;
 
-    // Convert to User's selected currency if needed
-    // Rule: 1 USD = 90 INR
     const compCurrency = competition.currency || 'INR';
     const targetCurrency = payInUSD ? 'USD' : 'INR';
 
     if (compCurrency !== targetCurrency) {
       if (compCurrency === 'INR' && targetCurrency === 'USD') {
-        // INR -> USD
         base = base / 90;
         perEvent = perEvent / 90;
         flat = flat / 90;
         regFee = regFee / 90;
       } else if (compCurrency === 'USD' && targetCurrency === 'INR') {
-        // USD -> INR
         base = base * 90;
         perEvent = perEvent * 90;
         flat = flat * 90;
@@ -149,21 +153,17 @@ function CompetitionDetail() {
       price = base + (extraEvents * perEvent);
     }
     
-    // Fallback
     if (price === 0 && regFee) {
        price = regFee;
     }
 
-    // Round to 2 decimals
     setTotalPrice(Math.round(price * 100) / 100);
   }
 
-  // Get registration status
   function getRegistrationStatus() {
     if (!competition) return { canRegister: false, message: 'Loading...' };
 
     const now = new Date();
-    // Strictly use registration dates
     const regOpen = competition.registrationStartDate ? new Date(competition.registrationStartDate) : null;
     const regClose = competition.registrationEndDate ? new Date(competition.registrationEndDate) : null;
 
@@ -190,12 +190,10 @@ function CompetitionDetail() {
     return { canRegister: true, message: 'Registration Open', status: 'open' };
   }
 
-  // Get competition status
   function getCompetitionStatus() {
     if (!competition) return { canCompete: false, message: 'Loading...' };
 
     const now = new Date();
-    // Strictly use competition dates
     const compStart = competition.startDate ? new Date(competition.startDate) : null;
     const compEnd = competition.endDate ? new Date(competition.endDate) : null;
 
@@ -248,7 +246,6 @@ function CompetitionDetail() {
 
     setProcessing(true);
     try {
-      // Create registration
       await addDoc(collection(db, 'registrations'), {
         userId: user.uid,
         userEmail: user.email,
@@ -262,7 +259,6 @@ function CompetitionDetail() {
         createdAt: new Date().toISOString()
       });
 
-      // Update competition participant count
       try {
         await updateDoc(doc(db, 'competitions', params.competitionId), {
           participantCount: increment(1)
@@ -301,20 +297,18 @@ function CompetitionDetail() {
     setProcessing(true);
 
     try {
-      // Create order via API
       const orderResponse = await fetch('/api/payment/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: totalPrice,
-          currency: payInUSD ? 'USD' : 'INR', // Send selected currency
+          currency: payInUSD ? 'USD' : 'INR',
           userId: user.uid,
           competitionId: params.competitionId,
           events: selectedEvents
         })
       });
 
-      // Check if response is OK
       if (!orderResponse.ok) {
         let errorMessage = `Payment failed (${orderResponse.status})`;
         try {
@@ -323,7 +317,6 @@ function CompetitionDetail() {
             const data = JSON.parse(text);
             errorMessage = data.error || data.message || errorMessage;
           } catch {
-            // If not JSON, use text if short, otherwise generic
             if (text && text.length < 100) errorMessage = text; 
             else errorMessage = `Server Error (${orderResponse.status}): Please check logs`;
           }
@@ -340,7 +333,6 @@ function CompetitionDetail() {
         throw new Error(order.error || 'Failed to create order');
       }
 
-      // Razorpay checkout
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: order.amount,
@@ -349,7 +341,6 @@ function CompetitionDetail() {
         description: competition.name,
         order_id: order.id,
         handler: async function (response) {
-          // Verify payment
           const verifyResponse = await fetch('/api/payment/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -364,7 +355,6 @@ function CompetitionDetail() {
           });
 
           if (verifyResponse.ok) {
-            // Save registration after successful payment
             await addDoc(collection(db, 'registrations'), {
               userId: user.uid,
               userEmail: user.email,
@@ -379,7 +369,6 @@ function CompetitionDetail() {
               createdAt: new Date().toISOString()
             });
 
-            // Save payment record
             await addDoc(collection(db, 'payments'), {
               userId: user.uid,
               userEmail: user.email,
@@ -394,7 +383,6 @@ function CompetitionDetail() {
               createdAt: new Date().toISOString()
             });
 
-            // Update participant count
             try {
               await updateDoc(doc(db, 'competitions', params.competitionId), {
                 participantCount: increment(1)
@@ -454,6 +442,11 @@ function CompetitionDetail() {
     return currency === 'INR' ? '₹' : '$';
   };
 
+  // Get event settings for display
+  const getEventSettings = (eventId) => {
+    return competition?.eventSettings?.[eventId] || null;
+  };
+
   const regStatus = getRegistrationStatus();
   const compStatus = getCompetitionStatus();
 
@@ -478,8 +471,6 @@ function CompetitionDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header removed - using global Navbar */}
-      
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Button
           variant="ghost"
@@ -576,6 +567,64 @@ function CompetitionDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Event Rules & Time Limits Card */}
+        {competition.events && competition.events.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Timer className="h-5 w-5 text-orange-500" />
+                Event Rules & Time Limits
+              </CardTitle>
+              <CardDescription>
+                WCA-style cut-off and maximum time limits apply to certain events
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                {competition.events.map(eventId => {
+                  const settings = getEventSettings(eventId);
+                  const hasCutOff = settings?.applyCutOff;
+                  const hasMaxTime = settings?.applyMaxTime;
+                  
+                  return (
+                    <div key={eventId} className="border rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-gray-900">
+                          {getEventIcon(eventId)} {getEventName(eventId)}
+                        </h3>
+                        <Badge variant="outline">{settings?.format || 'Ao5'}</Badge>
+                      </div>
+                      
+                      {(hasCutOff || hasMaxTime) ? (
+                        <div className="space-y-2 text-sm">
+                          {hasCutOff && (
+                            <div className="flex items-center gap-2 text-orange-700 bg-orange-50 px-3 py-2 rounded">
+                              <Clock className="h-4 w-4" />
+                              <span>
+                                <strong>Cut-Off:</strong> {formatTimeDisplay(settings.cutOffTime)} ({settings.cutOffAttempts} attempt{settings.cutOffAttempts > 1 ? 's' : ''} to beat)
+                              </span>
+                            </div>
+                          )}
+                          {hasMaxTime && (
+                            <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded">
+                              <Timer className="h-4 w-4" />
+                              <span>
+                                <strong>Maximum Time:</strong> {formatTimeDisplay(settings.maxTimeLimit)} per solve
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No time limits configured</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Event Selection - Only show if can register and not registered */}
         {!registration && regStatus.canRegister && (

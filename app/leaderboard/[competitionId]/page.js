@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Trophy, Medal, Search, Filter } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Search, Filter, Clock, Timer } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
 import {
   Table,
@@ -227,8 +227,9 @@ function LeaderboardPage() {
     return `${seconds}s`;
   };
 
-  const getRankBadge = (index, hasResults) => {
+  const getRankBadge = (index, hasResults, eliminatedByCutOff) => {
     if (!hasResults) return <Badge variant="outline" className="text-xs bg-gray-50 text-gray-400 border-gray-200">Registered</Badge>;
+    if (eliminatedByCutOff) return <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-200">Cut-Off</Badge>;
     if (index === 0) return <Medal className="h-6 w-6 text-yellow-500" />;
     if (index === 1) return <Medal className="h-6 w-6 text-gray-400" />;
     if (index === 2) return <Medal className="h-6 w-6 text-orange-600" />;
@@ -377,7 +378,7 @@ function LeaderboardPage() {
                       >
                         <TableCell>
                           <div className="flex items-center justify-center">
-                            {getRankBadge(index, entry.hasResults)}
+                            {getRankBadge(index, entry.hasResults, entry.eliminatedByCutOff)}
                           </div>
                         </TableCell>
                         <TableCell>
