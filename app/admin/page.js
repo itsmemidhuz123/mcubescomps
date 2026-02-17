@@ -278,6 +278,160 @@ export default function AdminPanel() {
     return comp ? comp.name : 'Unknown Competition';
   };
 
+  const handleEventToggle = (eventId) => {
+    setFormData(prev => {
+      const current = prev.selectedEvents;
+      const updated = current.includes(eventId)
+        ? current.filter(id => id !== eventId)
+        : [...current, eventId];
+      return { ...prev, selectedEvents: updated };
+    });
+  };
+
+  const handleEventSettingChange = (eventId, setting, value) => {
+    setFormData(prev => {
+      const currentSettings = prev.eventSettings[eventId] || getDefaultEventSettings(eventId);
+      return {
+        ...prev,
+        eventSettings: {
+          ...prev.eventSettings,
+          [eventId]: { ...currentSettings, [setting]: value }
+        }
+      };
+    });
+  };
+
+  const handleScrambleChange = (eventId, index, value) => {
+    setFormData(prev => {
+      const currentScrambles = prev.scrambles[eventId] || {};
+      return {
+        ...prev,
+        scrambles: {
+          ...prev.scrambles,
+          [eventId]: { ...currentScrambles, [index]: value }
+        }
+      };
+    });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      startDate: '',
+      endDate: '',
+      registrationStartDate: '',
+      registrationEndDate: '',
+      type: 'FREE',
+      currency: 'INR',
+      pricingModel: 'flat',
+      flatPrice: 0,
+      basePrice: 0,
+      perEventPrice: 0,
+      solveLimit: 5,
+      selectedEvents: [],
+      eventSettings: {},
+      scrambles: {},
+      isPublished: false
+    });
+    setEditingComp(null);
+  };
+
+  const loadCompForEdit = (comp) => {
+    setEditingComp(comp);
+    setFormData({
+      name: comp.name || '',
+      startDate: comp.startDate || '',
+      endDate: comp.endDate || '',
+      registrationStartDate: comp.registrationStartDate || '',
+      registrationEndDate: comp.registrationEndDate || '',
+      type: comp.type || 'FREE',
+      currency: comp.currency || 'INR',
+      pricingModel: comp.pricingModel || 'flat',
+      flatPrice: comp.flatPrice || 0,
+      basePrice: comp.basePrice || 0,
+      perEventPrice: comp.perEventPrice || 0,
+      solveLimit: comp.solveLimit || 5,
+      selectedEvents: comp.events || [],
+      eventSettings: comp.eventSettings || {},
+      scrambles: comp.scrambles || {},
+      isPublished: comp.isPublished || false
+    });
+  };
+
+  const handleCompSubmit = async (e) => {
+    e.preventDefault();
+    if (formData.selectedEvents.length === 0) {
+      alert('Please select at least one event');
+      return;
+    }
+
+    try {
+      const compData = {
+        name: formData.name,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        registrationStartDate: formData.registrationStartDate,
+        registrationEndDate: formData.registrationEndDate,
+        type: formData.type,
+        currency: formData.currency,
+        pricingModel: formData.pricingModel,
+        flatPrice: parseFloat(formData.flatPrice),
+        basePrice: parseFloat(formData.basePrice),
+        perEventPrice: parseFloat(formData.perEventPrice),
+        solveLimit: parseInt(formData.solveLimit),
+        events: formData.selectedEvents,
+        eventSettings: formData.eventSettings,
+        scrambles: formData.scrambles,
+        isPublished: formData.isPublished,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingComp) {
+        await updateDoc(doc(db, 'competitions', editingComp.id), compData);
+        alert('Competition updated successfully');
+      } else {
+        compData.createdAt = new Date().toISOString();
+        compData.status = 'upcoming';
+        await addDoc(collection(db, 'competitions'), compData);
+        alert('Competition created successfully');
+      }
+
+      resetForm();
+      fetchData();
+    } catch (error) {
+      console.error('Error saving competition:', error);
+      alert('Error saving competition: ' + error.message);
+    }
+  };
+
+  const handleExportPayments = () => {
+    if (!payments.length) return alert('No payments to export');
+    
+    const headers = ['Date', 'Competition', 'User', 'Amount', 'Currency', 'Status'];
+    const rows = payments.map(p => [
+      new Date(p.createdAt).toLocaleDateString(),
+      getCompetitionName(p.competitionId),
+      p.userEmail,
+      p.amount,
+      p.currency,
+      p.status
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `payments_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (authLoading || loadingData) return <div className="p-8 text-center">Loading Admin Panel...</div>;
   if (!isAdmin) return null;
 
