@@ -4,8 +4,13 @@ import { Navbar } from '@/components/Navbar';
 import './globals.css';
 
 export const metadata = {
-  title: 'MCUBES - Online Speedcubing Competitions',
-  description: 'Participate in official-style online speedcubing competitions',
+  title: 'Mcubes Comps – Online Rubik’s Cube Competitions | Speedcubing Timer',
+  description: 'Compete in online Rubik’s Cube live competitions, Speedcubing cube timer. Join global speedcubers, track rankings, and practice with official formats.',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.png',
+    apple: '/icon.png',
+  },
 };
 
 export default function RootLayout({ children }) {
