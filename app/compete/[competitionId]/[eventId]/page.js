@@ -8,8 +8,9 @@ import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer } from 'lucide-react';
+import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer, Shield } from 'lucide-react';
 import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+import { AntiCheatDetector, getDeviceFingerprint, getUserIP } from '@/lib/antiCheat';
 
 // Helper to format time from milliseconds
 function formatTimeDisplay(ms) {
@@ -28,7 +29,7 @@ function TimerPage() {
   const [eventConfig, setEventConfig] = useState(null);
   const [registration, setRegistration] = useState(null);
   const [currentAttempt, setCurrentAttempt] = useState(1);
-  const [phase, setPhase] = useState('intro'); // intro, rules, ready, inspection, solving, submitted, complete, evidence, eliminated
+  const [phase, setPhase] = useState('intro');
   const [inspectionTime, setInspectionTime] = useState(15000);
   const [solveTime, setSolveTime] = useState(0);
   const [scrambleRevealed, setScrambleRevealed] = useState(false);
@@ -38,15 +39,16 @@ function TimerPage() {
   const [saving, setSaving] = useState(false);
   const [scrambleRevealedId, setScrambleRevealedId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [userIp, setUserIp] = useState('unknown');
+  const [userIp, setUserIp] = useState(null);
+  const [deviceInfo, setDeviceInfo] = useState(null);
   
   // Cut-off tracking state
   const [passedCutOff, setPassedCutOff] = useState(false);
   const [eliminatedByCutOff, setEliminatedByCutOff] = useState(false);
   
   // Anti-cheat state
-  const [flagged, setFlagged] = useState(false);
-  const [flagReason, setFlagReason] = useState('');
+  const antiCheatRef = useRef(null);
+  const [antiCheatWarning, setAntiCheatWarning] = useState('');
   
   const inspectionStartRef = useRef(null);
   const solveStartRef = useRef(null);
@@ -54,36 +56,22 @@ function TimerPage() {
   const audioContextRef = useRef(null);
   const beepPlayedRef = useRef({ eight: false, five: false });
 
-  // Anti-cheat Listeners
+  // Initialize Anti-Cheat Detector
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && (phase === 'inspection' || phase === 'solving')) {
-        setFlagged(true);
-        setFlagReason(prev => {
-          if (prev.includes('Tab switch')) return prev;
-          return prev ? `${prev}, Tab switch detected` : 'Tab switch detected';
-        });
-      }
-    };
-
-    const handleBlur = () => {
-      if (phase === 'inspection' || phase === 'solving') {
-        setFlagged(true);
-        setFlagReason(prev => {
-          if (prev.includes('Focus lost')) return prev;
-          return prev ? `${prev}, Focus lost` : 'Focus lost';
-        });
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-
+    antiCheatRef.current = new AntiCheatDetector();
+    
+    // Check for refresh violation on mount
+    const hasRefreshViolation = antiCheatRef.current.checkForRefreshViolation();
+    if (hasRefreshViolation) {
+      setAntiCheatWarning('⚠️ Page refresh detected during previous solve');
+    }
+    
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
+      if (antiCheatRef.current) {
+        antiCheatRef.current.deactivate();
+      }
     };
-  }, [phase]);
+  }, []);
 
   // Initialize and fetch data
   useEffect(() => {
@@ -92,11 +80,16 @@ function TimerPage() {
       return;
     }
     
-    fetch('/api/get-ip')
-      .then(res => res.json())
-      .then(data => setUserIp(data.ip))
-      .catch(err => console.error('IP fetch failed', err));
-
+    // Fetch IP and device info
+    async function fetchSecurityInfo() {
+      const ipData = await getUserIP();
+      setUserIp(ipData);
+      
+      const deviceData = getDeviceFingerprint();
+      setDeviceInfo(deviceData);
+    }
+    
+    fetchSecurityInfo();
     initializeCompetition();
   }, [user, params.competitionId, params.eventId]);
 
@@ -218,14 +211,14 @@ function TimerPage() {
       });
       setPassedCutOff(hasPassed);
       
-      // Check if failed cut-off (completed all cut-off attempts without passing)
+      // Check if failed cut-off
       if (!hasPassed && attemptsForCutOff.length >= cutOffAttempts) {
         setEliminatedByCutOff(true);
         setPhase('eliminated');
         return;
       }
     } else {
-      setPassedCutOff(true); // No cut-off = automatically passed
+      setPassedCutOff(true);
     }
 
     // Check if all solves completed
@@ -318,6 +311,12 @@ function TimerPage() {
       return;
     }
 
+    // Activate anti-cheat system
+    if (antiCheatRef.current) {
+      antiCheatRef.current.reset();
+      antiCheatRef.current.activate();
+    }
+
     setPhase('inspection');
     setInspectionTime(15000);
     setPenalty('none');
@@ -387,7 +386,7 @@ function TimerPage() {
     const finalTime = performance.now() - solveStartRef.current;
     setSolveTime(finalTime);
     
-    // Check if solve exceeds maximum time (edge case: stopped exactly at or just over)
+    // Check if solve exceeds maximum time
     if (eventConfig?.applyMaxTime && finalTime > eventConfig.maxTimeLimit) {
       saveSolve(finalTime, 'DNF', false, 'MAX_TIME_EXCEEDED');
     } else {
@@ -398,6 +397,18 @@ function TimerPage() {
   async function saveSolve(time, appliedPenalty, isRefreshDNF = false, reason = null) {
     setSaving(true);
     setPhase('submitted');
+    
+    // Deactivate anti-cheat and get violation report
+    let antiCheatReport = { flagged: false, violations: {}, flagReasons: [], anomalyScore: 0 };
+    if (antiCheatRef.current) {
+      antiCheatRef.current.deactivate();
+      
+      // Check for suspicious time
+      const previousTimes = existingSolves.map(s => s.finalTime || s.time).filter(t => t && t !== Infinity);
+      antiCheatRef.current.checkSuspiciousTime(time, previousTimes);
+      
+      antiCheatReport = antiCheatRef.current.getViolationReport();
+    }
     
     try {
       let finalTime = Math.round(time);
@@ -419,13 +430,16 @@ function TimerPage() {
         }
       }
 
-      // Save solve to Firestore
+      // Save solve to Firestore with anti-cheat data
       await addDoc(collection(db, 'solves'), {
         userId: user.uid,
         userEmail: user.email,
         userName: userProfile?.displayName || 'Unknown',
         wcaStyleId: userProfile?.wcaStyleId || 'N/A',
-        userIp: userIp,
+        userIp: userIp?.ip || 'unknown',
+        ipCountry: userIp?.country || 'unknown',
+        ipCity: userIp?.city || 'unknown',
+        deviceInfo: deviceInfo || {},
         competitionId: params.competitionId,
         eventId: params.eventId,
         attemptNumber: currentAttempt,
@@ -435,8 +449,17 @@ function TimerPage() {
         reason: solveReason,
         scramble: currentScramble,
         isRefreshDNF: isRefreshDNF,
-        flagged: flagged || isRefreshDNF,
-        flagReason: isRefreshDNF ? 'Page refreshed during solve' : flagReason,
+        // Anti-cheat fields
+        flagged: antiCheatReport.flagged || isRefreshDNF,
+        flagReason: antiCheatReport.flagReasons.join(', ') || (isRefreshDNF ? 'PAGE_REFRESH' : ''),
+        visibilityViolation: antiCheatReport.violations.tabSwitch || false,
+        windowBlurViolation: antiCheatReport.violations.windowBlur || false,
+        multiTabViolation: antiCheatReport.violations.multiTab || false,
+        rightClickViolation: antiCheatReport.violations.rightClick || false,
+        devToolsViolation: antiCheatReport.violations.devTools || false,
+        pageRefreshViolation: antiCheatReport.violations.pageRefresh || isRefreshDNF,
+        suspiciousTimeViolation: antiCheatReport.violations.suspiciousTime || false,
+        anomalyScore: antiCheatReport.anomalyScore || 0,
         createdAt: new Date().toISOString()
       });
 
@@ -454,12 +477,12 @@ function TimerPage() {
         time, 
         finalTime: finalTime === Infinity ? null : finalTime, 
         penalty: appliedPenalty,
-        reason: solveReason
+        reason: solveReason,
+        flagged: antiCheatReport.flagged || isRefreshDNF
       }];
       
       // Check if failed cut-off after this attempt
       if (eventConfig?.applyCutOff && !newPassedCutOff && currentAttempt >= eventConfig.cutOffAttempts) {
-        // Failed cut-off - auto DNF remaining solves
         const remainingAttempts = solveLimit - currentAttempt;
         for (let i = 1; i <= remainingAttempts; i++) {
           await addDoc(collection(db, 'solves'), {
@@ -467,7 +490,10 @@ function TimerPage() {
             userEmail: user.email,
             userName: userProfile?.displayName || 'Unknown',
             wcaStyleId: userProfile?.wcaStyleId || 'N/A',
-            userIp: userIp,
+            userIp: userIp?.ip || 'unknown',
+            ipCountry: userIp?.country || 'unknown',
+            ipCity: userIp?.city || 'unknown',
+            deviceInfo: deviceInfo || {},
             competitionId: params.competitionId,
             eventId: params.eventId,
             attemptNumber: currentAttempt + i,
@@ -479,6 +505,14 @@ function TimerPage() {
             isRefreshDNF: false,
             flagged: false,
             flagReason: '',
+            visibilityViolation: false,
+            windowBlurViolation: false,
+            multiTabViolation: false,
+            rightClickViolation: false,
+            devToolsViolation: false,
+            pageRefreshViolation: false,
+            suspiciousTimeViolation: false,
+            anomalyScore: 0,
             createdAt: new Date().toISOString()
           });
         }
@@ -494,7 +528,7 @@ function TimerPage() {
         await calculateAndSaveResults(false);
         setPhase('evidence');
       } else {
-        // Prepare for next attempt after short delay
+        // Prepare for next attempt
         setTimeout(() => {
           const nextAttempt = currentAttempt + 1;
           setCurrentAttempt(nextAttempt);
@@ -505,8 +539,7 @@ function TimerPage() {
           setSolveTime(0);
           setInspectionTime(15000);
           setPenalty('none');
-          setFlagged(false);
-          setFlagReason('');
+          setAntiCheatWarning('');
           
           const scrambles = competition?.scrambles?.[params.eventId];
           if (scrambles && scrambles.length >= nextAttempt) {
@@ -546,7 +579,7 @@ function TimerPage() {
       const dnfCount = times.filter(t => t === Infinity).length;
       let average = Infinity;
       
-      // WCA Average calculation: Ao5 with trimmed mean
+      // WCA Average calculation
       if (times.length >= 5 && dnfCount <= 1 && !eliminatedByCutOff) {
         const sorted = [...times].sort((a, b) => {
           if (a === Infinity) return 1;
@@ -558,6 +591,10 @@ function TimerPage() {
           average = Math.round(middle3.reduce((a, b) => a + b, 0) / 3);
         }
       }
+
+      // Check if any solve was flagged
+      const anyFlagged = solves.some(s => s.flagged);
+      const totalAnomalyScore = solves.reduce((sum, s) => sum + (s.anomalyScore || 0), 0);
 
       await addDoc(collection(db, 'results'), {
         userId: user.uid,
@@ -572,6 +609,8 @@ function TimerPage() {
         bestSingle: bestSingle === Infinity ? null : bestSingle,
         average: average === Infinity ? null : average,
         eliminatedByCutOff: eliminatedByCutOff,
+        flagged: anyFlagged,
+        totalAnomalyScore: totalAnomalyScore,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -755,6 +794,42 @@ function TimerPage() {
                   </ul>
                 </div>
 
+                {/* Competition Integrity Policy */}
+                <div className="bg-red-900/30 p-6 rounded-lg border border-red-700">
+                  <h2 className="text-xl font-semibold mb-4 text-red-400 flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Competition Integrity Policy
+                  </h2>
+                  <p className="text-gray-300 mb-3">
+                    This competition uses an automated anti-cheat system to ensure fair play. The following actions during a solve will be detected and may result in your attempt being flagged for review:
+                  </p>
+                  <ul className="space-y-2 text-gray-300 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-400">•</span>
+                      Switching tabs or minimizing the browser
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-400">•</span>
+                      Opening developer tools or browser inspect features
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-400">•</span>
+                      Refreshing the page after revealing the scramble
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-400">•</span>
+                      Opening multiple tabs of the competition
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-400">•</span>
+                      Suspicious timing patterns or impossibly fast solves
+                    </li>
+                  </ul>
+                  <p className="text-gray-400 text-sm mt-3">
+                    Flagged solves will be reviewed by administrators. Legitimate solves will not be affected.
+                  </p>
+                </div>
+
                 <div className="bg-gray-900 p-6 rounded-lg">
                   <h2 className="text-xl font-semibold mb-4 text-gray-300">🎮 Controls</h2>
                   <ul className="space-y-2 text-gray-300">
@@ -814,6 +889,7 @@ function TimerPage() {
                         {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
                         {solve.penalty === '+2' && ' (+2)'}
                         {solve.reason === 'CUT_OFF_EXCEEDED' && ' (Cut-Off)'}
+                        {solve.flagged && ' ⚠️'}
                       </Badge>
                     ))}
                   </div>
@@ -870,6 +946,7 @@ function TimerPage() {
                         {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
                         {solve.penalty === '+2' && ' (+2)'}
                         {solve.reason === 'MAX_TIME_EXCEEDED' && ' (Max Time)'}
+                        {solve.flagged && ' ⚠️'}
                       </Badge>
                     ))}
                   </div>
@@ -972,6 +1049,15 @@ function TimerPage() {
         </div>
       </div>
 
+      {/* Anti-cheat warning banner */}
+      {antiCheatWarning && (
+        <div className="bg-yellow-900/50 border-b border-yellow-700 py-2">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-yellow-300 text-sm">{antiCheatWarning}</p>
+          </div>
+        </div>
+      )}
+
       {/* Cut-Off Status Banner */}
       {eventConfig?.applyCutOff && !passedCutOff && currentAttempt <= eventConfig.cutOffAttempts && (
         <div className="bg-orange-900/50 border-b border-orange-700 py-2">
@@ -1018,6 +1104,7 @@ function TimerPage() {
                 Solve {solve.attemptNumber}: {solve.penalty === 'DNF' || solve.finalTime === null ? 'DNF' : formatTime(solve.finalTime)}
                 {solve.penalty === '+2' && ' (+2)'}
                 {solve.reason === 'MAX_TIME_EXCEEDED' && ' (Max)'}
+                {solve.flagged && ' ⚠️'}
               </Badge>
             ))}
           </div>
