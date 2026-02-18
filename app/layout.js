@@ -6,8 +6,8 @@ import Footer from '@/components/Footer';
 import './globals.css';
 
 export const metadata = {
-  title: 'Mcubes Comps – Online Rubik's Cube Competitions | Speedcubing Timer',
-  description: 'Compete in online Rubik's Cube live competitions, Speedcubing cube timer. Join global speedcubers, track rankings, and practice with official formats.',
+  title: "Mcubes Comps – Online Rubik's Cube Competitions | Speedcubing Timer",
+  description: "Compete in online Rubik's Cube live competitions, Speedcubing cube timer. Join global speedcubers, track rankings, and practice with official formats.",
   icons: {
     icon: '/icon.png',
     shortcut: '/favicon.png',
