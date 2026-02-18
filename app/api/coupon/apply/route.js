@@ -1,18 +1,35 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-if (!getApps().length) {
-    initializeApp({
-        credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-    });
+let adminDb = null;
+let FieldValue = null;
+
+async function getAdminDb() {
+    if (adminDb) return { db: adminDb, FieldValue };
+
+    const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+    const { getFirestore, FieldValue: FV } = await import('firebase-admin/firestore');
+
+    FieldValue = FV;
+
+    if (!getApps().length) {
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKey) {
+            throw new Error('Missing Firebase Admin credentials');
+        }
+
+        privateKey = privateKey.replace(/\\n/g, '\n');
+
+        initializeApp({
+            credential: cert({ projectId, clientEmail, privateKey }),
+        });
+    }
+
+    adminDb = getFirestore();
+    return { db: adminDb, FieldValue };
 }
-
-const adminDb = getFirestore();
 
 export async function POST(request) {
     try {
@@ -25,8 +42,10 @@ export async function POST(request) {
             }, { status: 400 });
         }
 
-        const result = await adminDb.runTransaction(async (transaction) => {
-            const couponQuery = adminDb
+        const { db, FieldValue } = await getAdminDb();
+
+        const result = await db.runTransaction(async (transaction) => {
+            const couponQuery = db
                 .collection('coupons')
                 .where('code', '==', couponCode.toUpperCase())
                 .limit(1);
@@ -56,7 +75,7 @@ export async function POST(request) {
                 throw new Error('This coupon has reached its usage limit');
             }
 
-            const userUsageQuery = adminDb
+            const userUsageQuery = db
                 .collection('couponUsages')
                 .where('couponId', '==', coupon.id)
                 .where('userId', '==', userId);
@@ -76,7 +95,7 @@ export async function POST(request) {
             }
 
             if (coupon.newUsersOnly) {
-                const userRegsQuery = adminDb
+                const userRegsQuery = db
                     .collection('registrations')
                     .where('userId', '==', userId)
                     .limit(1);
@@ -111,7 +130,7 @@ export async function POST(request) {
                 usedCount: FieldValue.increment(1)
             });
 
-            const usageRef = adminDb.collection('couponUsages').doc();
+            const usageRef = db.collection('couponUsages').doc();
             transaction.set(usageRef, {
                 couponId: coupon.id,
                 couponCode: coupon.code,

@@ -1,18 +1,32 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-if (!getApps().length) {
-    initializeApp({
-        credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-    });
+let adminDb = null;
+
+async function getAdminDb() {
+    if (adminDb) return adminDb;
+
+    const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+    const { getFirestore } = await import('firebase-admin/firestore');
+
+    if (!getApps().length) {
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKey) {
+            throw new Error('Missing Firebase Admin credentials');
+        }
+
+        privateKey = privateKey.replace(/\\n/g, '\n');
+
+        initializeApp({
+            credential: cert({ projectId, clientEmail, privateKey }),
+        });
+    }
+
+    adminDb = getFirestore();
+    return adminDb;
 }
-
-const adminDb = getFirestore();
 
 export async function POST(request) {
     try {
@@ -25,7 +39,9 @@ export async function POST(request) {
             }, { status: 400 });
         }
 
-        const couponQuery = await adminDb
+        const db = await getAdminDb();
+
+        const couponQuery = await db
             .collection('coupons')
             .where('code', '==', couponCode.toUpperCase())
             .limit(1)
@@ -65,7 +81,7 @@ export async function POST(request) {
             }, { status: 400 });
         }
 
-        const userUsageQuery = await adminDb
+        const userUsageQuery = await db
             .collection('couponUsages')
             .where('couponId', '==', coupon.id)
             .where('userId', '==', userId)
@@ -91,7 +107,7 @@ export async function POST(request) {
         }
 
         if (coupon.newUsersOnly) {
-            const userRegsQuery = await adminDb
+            const userRegsQuery = await db
                 .collection('registrations')
                 .where('userId', '==', userId)
                 .limit(1)
