@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2 } from 'lucide-react';
-import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+import { getEventName } from '@/lib/wcaEvents';
+import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
 
 const COUNTRIES = [
@@ -495,7 +496,7 @@ function ProfilePage() {
                               <div key={result.id} className="p-4 rounded-lg bg-black/40 border border-white/5 hover:border-blue-500/20 transition-all group">
                                 <div className="flex items-start justify-between mb-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-lg">{getEventIcon(result.eventId)}</span>
+                                    <span className="text-lg"><EventIcon eventId={result.eventId} size={20} /></span>
                                     <div>
                                       <p className="text-xs font-bold text-zinc-300">{getEventName(result.eventId)}</p>
                                       <p className="text-[10px] text-zinc-600 font-mono">{result.eventId}</p>
