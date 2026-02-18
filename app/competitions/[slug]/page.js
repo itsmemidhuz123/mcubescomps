@@ -184,7 +184,7 @@ function CompetitionDetail() {
               ) : myResult.status === 'completed' ? (
                 <div className="space-y-2">
                   <Badge className="bg-green-600 text-lg px-4 py-2">✓ Completed</Badge>
-                  <p className="text-gray-400">You've completed all 5 solves!</p>
+                  <p className="text-gray-400">You&apos;ve completed all 5 solves!</p>
                 </div>
               ) : (
                 <Button 
