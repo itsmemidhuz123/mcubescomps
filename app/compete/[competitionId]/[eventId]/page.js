@@ -245,9 +245,21 @@ function TimerPage() {
         }
 
         // Load scramble
-        const scrambles = compData?.scrambles?.[params.eventId];
-        if (scrambles && scrambles.length >= nextAttempt) {
-            setCurrentScramble(scrambles[nextAttempt - 1]);
+        const scramblesData = compData?.scrambles?.[params.eventId];
+        console.log('Scrambles data for', params.eventId, ':', scramblesData);
+        if (scramblesData) {
+            let scramblesArray = [];
+            if (Array.isArray(scramblesData)) {
+                scramblesArray = scramblesData;
+            } else if (typeof scramblesData === 'object') {
+                scramblesArray = Object.entries(scramblesData)
+                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                    .map(([, v]) => v);
+            }
+            console.log('Parsed scrambles array:', scramblesArray, 'Next attempt:', nextAttempt);
+            if (scramblesArray.length >= nextAttempt && scramblesArray[nextAttempt - 1]) {
+                setCurrentScramble(scramblesArray[nextAttempt - 1]);
+            }
         }
     }
 
@@ -1135,7 +1147,9 @@ function TimerPage() {
                         ) : (
                             <div className="text-center">
                                 <p className="text-sm text-gray-400 mb-2">Scramble #{currentAttempt}</p>
-                                <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700">{currentScramble || 'Loading...'}</p>
+                                <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700">
+                                    {currentScramble || 'No scramble available. Contact admin.'}
+                                </p>
                             </div>
                         )}
                     </CardContent>
