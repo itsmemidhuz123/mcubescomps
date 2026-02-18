@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { Star } from 'lucide-react';
 
 const COUNTRIES = [
   'India', 'United States', 'China', 'United Kingdom', 'Australia',
@@ -97,142 +97,147 @@ function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <Trophy className="h-16 w-16 text-blue-500" />
+    <div className="min-h-screen w-full bg-[#0a0a0a] text-white flex">
+      {/* Left Side - Form */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-12 lg:px-24 py-12">
+        <div className="w-full max-w-md mx-auto space-y-8">
+          
+          {/* Header */}
+          <div className="space-y-2">
+            <div className="h-12 w-12 relative mb-6">
+              <Image 
+                src="https://themcubes.in/wp-content/uploads/2025/12/app_icon.jpg" 
+                alt="MCUBES" 
+                fill
+                className="rounded-xl object-cover"
+              />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Create an account</h1>
+            <p className="text-gray-400">
+              Start your journey to becoming a speedcubing champion.
+            </p>
           </div>
-          <CardTitle className="text-3xl font-bold text-white">Join MCUBES</CardTitle>
-          <CardDescription className="text-gray-400 text-lg">
-            Create your account to compete
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded text-sm">
+              <div className="p-3 text-sm bg-red-500/10 border border-red-500/20 rounded-lg text-red-500">
                 {error}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-white">First Name *</Label>
+                <Label htmlFor="firstName">First name</Label>
                 <Input
                   id="firstName"
                   name="firstName"
+                  placeholder="John"
                   value={formData.firstName}
                   onChange={handleChange}
                   required
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-white">Last Name *</Label>
+                <Label htmlFor="lastName">Last name</Label>
                 <Input
                   id="lastName"
                   name="lastName"
+                  placeholder="Doe"
                   value={formData.lastName}
                   onChange={handleChange}
                   required
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-white">Email *</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
+                placeholder="name@example.com"
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="country" className="text-white">Country *</Label>
+              <Label htmlFor="country">Country</Label>
               <Select value={formData.country} onValueChange={(value) => setFormData({...formData, country: value})}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder="Select your country" />
+                <SelectTrigger className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11">
+                  <SelectValue placeholder="Select country" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-[#1a1a1a] border-gray-800 text-white">
                   {COUNTRIES.map(country => (
-                    <SelectItem key={country} value={country}>{country}</SelectItem>
+                    <SelectItem key={country} value={country} className="focus:bg-gray-800 focus:text-white">
+                      {country}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="wcaId" className="text-white">WCA ID (Optional)</Label>
+              <Label htmlFor="wcaId">WCA ID <span className="text-gray-500 font-normal">(Optional)</span></Label>
               <Input
                 id="wcaId"
                 name="wcaId"
+                placeholder="e.g. 2019JOHN01"
                 value={formData.wcaId}
                 onChange={handleChange}
-                placeholder="e.g., 2019JOHN01"
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
               />
-              <p className="text-xs text-gray-400">Enter your official WCA ID if you have one</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">Password *</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 name="password"
                 type="password"
+                placeholder="Create a password"
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
               />
+              <p className="text-xs text-gray-500">Must be at least 6 characters</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-white">Confirm Password *</Label>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
+                placeholder="Confirm your password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 required
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-[#1a1a1a] border-gray-800 focus:border-purple-500 h-11"
               />
             </div>
 
-            <Button
-              type="submit"
+            <Button 
+              type="submit" 
+              className="w-full bg-purple-600 hover:bg-purple-700 h-11 text-base font-medium"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-6"
             >
-              {loading ? 'Creating account...' : 'Create Account'}
+              {loading ? 'Creating account...' : 'Get started'}
             </Button>
-          </form>
-
-          <div className="mt-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-600" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-gray-800 px-2 text-gray-400">Or sign up with</span>
-              </div>
-            </div>
 
             <Button
               type="button"
+              variant="outline"
+              className="w-full bg-transparent border-gray-700 hover:bg-gray-800 h-11"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              variant="outline"
-              className="w-full mt-4 border-gray-600 hover:bg-gray-700 text-white"
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -242,15 +247,48 @@ function RegisterPage() {
               </svg>
               Sign up with Google
             </Button>
-          </div>
+          </form>
 
-          <div className="mt-6 text-center text-sm">
-            <Link href="/auth/login" className="text-blue-500 hover:text-blue-400">
-              Already have an account? Sign in
+          {/* Footer */}
+          <p className="text-center text-sm text-gray-400">
+            Already have an account?{' '}
+            <Link href="/auth/login" className="text-purple-500 hover:text-purple-400 font-semibold">
+              Log in
             </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* Right Side - Image/Visual */}
+      <div className="hidden lg:block lg:w-1/2 relative bg-[#121212]">
+        <div className="absolute inset-0">
+          <Image
+            src="https://images.unsplash.com/photo-1574169208507-84376144848b?q=80&w=2079&auto=format&fit=crop"
+            alt="Cubing Competition"
+            fill
+            className="object-cover opacity-60 grayscale hover:grayscale-0 transition-all duration-700"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/50 to-transparent" />
+        </div>
+        
+        <div className="absolute bottom-0 left-0 right-0 p-12 space-y-6">
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Star key={star} className="w-6 h-6 text-yellow-500 fill-yellow-500" />
+            ))}
           </div>
-        </CardContent>
-      </Card>
+          
+          <h2 className="text-4xl font-bold leading-tight">
+            &quot;MCUBES has completely transformed how I track my progress and compete. The best platform for speedcubers.&quot;
+          </h2>
+          
+          <div className="space-y-1">
+            <p className="font-semibold text-xl">Join 5,000+ Cubers</p>
+            <p className="text-gray-400">Competing daily from over 50 countries</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
