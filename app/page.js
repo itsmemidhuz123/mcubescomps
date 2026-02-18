@@ -270,43 +270,21 @@ function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gray-900 text-white">
+      <section className="py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white dark:from-blue-700 dark:to-violet-700">
         <div className="container mx-auto px-4 max-w-6xl text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to set your new PR?</h2>
-            <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
+            <p className="text-blue-50 dark:text-blue-100 text-lg mb-8 max-w-2xl mx-auto">
               Join thousands of cubers competing in our daily and weekly events. Free registration, official WCA events, and instant rankings.
             </p>
             <Button 
               size="lg"
               onClick={() => router.push('/auth/register')}
-              className="bg-white text-gray-900 hover:bg-gray-100 px-8 h-12 text-base font-semibold"
+              className="bg-white text-blue-600 hover:bg-gray-100 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800 px-8 h-12 text-base font-semibold"
             >
               Get Started for Free
             </Button>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-12">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-violet-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                M
-              </div>
-              <span className="text-lg font-bold text-gray-900">MCUBES</span>
-            </div>
-            <div className="flex gap-8 text-sm font-medium text-gray-500">
-              <Link href="/competitions" className="hover:text-gray-900 transition-colors">Competitions</Link>
-              <Link href="/rankings" className="hover:text-gray-900 transition-colors">Rankings</Link>
-              <Link href="/timer" className="hover:text-gray-900 transition-colors">Timer</Link>
-            </div>
-            <p className="text-gray-400 text-sm">
-              © 2026 MCUBES. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

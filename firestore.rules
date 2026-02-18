@@ -84,6 +84,29 @@ service cloud.firestore {
       // Delete: Only Admin
       allow delete: if isAdmin();
     }
+
+    // Solves collection
+    // Contains competition attempt data; only owner can read, only owner can create.
+    // Updates are restricted to admins to prevent tampering after submission.
+    match /solves/{solveId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Scramble reveal tracking
+    // Used to mark attempts as revealed/submitted; only owner can read/write their reveal docs.
+    match /scrambleReveals/{revealId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId
+        )
+      );
+      allow delete: if isAdmin();
+    }
     
     // Payments collection
     // IMPORTANT: This contains sensitive financial data
