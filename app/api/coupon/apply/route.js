@@ -1,39 +1,69 @@
 import { NextResponse } from 'next/server';
 
+let adminApp = null;
 let adminDb = null;
 let FieldValue = null;
 
-async function getAdminDb() {
-    if (adminDb) return { db: adminDb, FieldValue };
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
 
-    const { initializeApp, getApps, cert } = await import('firebase-admin/app');
-    const { getFirestore, FieldValue: FV } = await import('firebase-admin/firestore');
-
-    FieldValue = FV;
-
-    if (!getApps().length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            throw new Error('Missing Firebase Admin credentials');
-        }
-
-        privateKey = privateKey.replace(/\\n/g, '\n');
-
-        initializeApp({
-            credential: cert({ projectId, clientEmail, privateKey }),
-        });
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
     }
 
-    adminDb = getFirestore();
-    return { db: adminDb, FieldValue };
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function initializeAdmin() {
+    if (adminDb) return { db: adminDb, FieldValue };
+
+    try {
+        const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+        const { getFirestore, FieldValue: FV } = await import('firebase-admin/firestore');
+
+        FieldValue = FV;
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing env vars:', {
+                projectId: !!projectId,
+                clientEmail: !!clientEmail,
+                privateKey: !!privateKeyRaw
+            });
+            throw new Error('Missing Firebase environment variables');
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (!adminApp) {
+            if (getApps().length === 0) {
+                adminApp = initializeApp({
+                    credential: cert({
+                        projectId,
+                        clientEmail,
+                        privateKey
+                    })
+                });
+            } else {
+                adminApp = getApps()[0];
+            }
+        }
+
+        adminDb = getFirestore(adminApp);
+        return { db: adminDb, FieldValue };
+    } catch (error) {
+        console.error('Firebase Admin initialization error:', error.message);
+        throw error;
+    }
 }
 
 export async function POST(request) {
     try {
-        const { couponCode, userId, competitionId, originalAmount } = await request.json();
+        const body = await request.json();
+        const { couponCode, userId, competitionId, originalAmount } = body;
 
         if (!couponCode || !userId || originalAmount === undefined) {
             return NextResponse.json({
@@ -42,7 +72,7 @@ export async function POST(request) {
             }, { status: 400 });
         }
 
-        const { db, FieldValue } = await getAdminDb();
+        const { db, FieldValue } = await initializeAdmin();
 
         const result = await db.runTransaction(async (transaction) => {
             const couponQuery = db

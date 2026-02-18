@@ -1,36 +1,68 @@
 import { NextResponse } from 'next/server';
 
+let adminApp = null;
 let adminDb = null;
 
-async function getAdminDb() {
-    if (adminDb) return adminDb;
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
 
-    const { initializeApp, getApps, cert } = await import('firebase-admin/app');
-    const { getFirestore } = await import('firebase-admin/firestore');
-
-    if (!getApps().length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            throw new Error('Missing Firebase Admin credentials');
-        }
-
-        privateKey = privateKey.replace(/\\n/g, '\n');
-
-        initializeApp({
-            credential: cert({ projectId, clientEmail, privateKey }),
-        });
+    // If already has actual newlines, return as-is
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
     }
 
-    adminDb = getFirestore();
-    return adminDb;
+    // Convert \n string literals to actual newlines
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function initializeAdmin() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+        const { getFirestore } = await import('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing env vars:', {
+                projectId: !!projectId,
+                clientEmail: !!clientEmail,
+                privateKey: !!privateKeyRaw
+            });
+            throw new Error('Missing Firebase environment variables');
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (!adminApp) {
+            if (getApps().length === 0) {
+                adminApp = initializeApp({
+                    credential: cert({
+                        projectId,
+                        clientEmail,
+                        privateKey
+                    })
+                });
+            } else {
+                adminApp = getApps()[0];
+            }
+        }
+
+        adminDb = getFirestore(adminApp);
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin initialization error:', error.message);
+        throw error;
+    }
 }
 
 export async function POST(request) {
     try {
-        const { couponCode, userId, competitionId, originalAmount } = await request.json();
+        const body = await request.json();
+        const { couponCode, userId, competitionId, originalAmount } = body;
 
         if (!couponCode || !userId || originalAmount === undefined) {
             return NextResponse.json({
@@ -39,7 +71,7 @@ export async function POST(request) {
             }, { status: 400 });
         }
 
-        const db = await getAdminDb();
+        const db = await initializeAdmin();
 
         const couponQuery = await db
             .collection('coupons')
@@ -166,7 +198,7 @@ export async function POST(request) {
         console.error('Coupon validation error:', error);
         return NextResponse.json({
             valid: false,
-            error: 'Failed to validate coupon'
+            error: error.message || 'Failed to validate coupon'
         }, { status: 500 });
     }
 }
