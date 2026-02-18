@@ -203,31 +203,125 @@ function CompetitionDetail() {
             return;
         }
 
+        if (!user) {
+            setCouponError('Please sign in to apply coupon');
+            return;
+        }
+
         setCouponLoading(true);
         setCouponError('');
         setAppliedCoupon(null);
 
         try {
-            const response = await fetch('/api/coupon/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    couponCode: couponCode.trim(),
-                    userId: user?.uid,
-                    competitionId: params.competitionId,
-                    originalAmount: totalPrice
-                })
-            });
+            const couponQuery = query(
+                collection(db, 'coupons'),
+                where('code', '==', couponCode.trim().toUpperCase()),
+                where('active', '==', true)
+            );
 
-            const data = await response.json();
+            const couponSnapshot = await getDocs(couponQuery);
 
-            if (data.valid) {
-                setAppliedCoupon(data);
-                setCouponCode('');
-            } else {
-                setCouponError(data.error || 'Invalid coupon');
+            if (couponSnapshot.empty) {
+                setCouponError('Invalid coupon code');
+                setCouponLoading(false);
+                return;
             }
+
+            const couponDoc = couponSnapshot.docs[0];
+            const coupon = { id: couponDoc.id, ...couponDoc.data() };
+
+            if (coupon.expiresAt) {
+                const expiryDate = coupon.expiresAt.toDate ? coupon.expiresAt.toDate() : new Date(coupon.expiresAt);
+                if (new Date() > expiryDate) {
+                    setCouponError('This coupon has expired');
+                    setCouponLoading(false);
+                    return;
+                }
+            }
+
+            if (coupon.usageLimitTotal && (coupon.usedCount || 0) >= coupon.usageLimitTotal) {
+                setCouponError('This coupon has reached its usage limit');
+                setCouponLoading(false);
+                return;
+            }
+
+            const usageQuery = query(
+                collection(db, 'couponUsages'),
+                where('couponId', '==', coupon.id),
+                where('userId', '==', user.uid)
+            );
+            const usageSnapshot = await getDocs(usageQuery);
+
+            if (usageSnapshot.size >= (coupon.usageLimitPerUser || 1)) {
+                setCouponError('You have already used this coupon');
+                setCouponLoading(false);
+                return;
+            }
+
+            if (coupon.applicableCompetitionIds?.length > 0) {
+                if (!coupon.applicableCompetitionIds.includes(params.competitionId)) {
+                    setCouponError('This coupon is not valid for this competition');
+                    setCouponLoading(false);
+                    return;
+                }
+            }
+
+            if (coupon.newUsersOnly) {
+                const regsQuery = query(
+                    collection(db, 'registrations'),
+                    where('userId', '==', user.uid)
+                );
+                const regsSnapshot = await getDocs(regsQuery);
+                if (!regsSnapshot.empty) {
+                    setCouponError('This coupon is only valid for new users');
+                    setCouponLoading(false);
+                    return;
+                }
+            }
+
+            let discountAmount = 0;
+            let finalAmount = totalPrice;
+
+            switch (coupon.type) {
+                case 'full':
+                    discountAmount = totalPrice;
+                    finalAmount = 0;
+                    break;
+                case 'flat':
+                    discountAmount = Math.min(coupon.value, totalPrice);
+                    finalAmount = Math.max(0, totalPrice - coupon.value);
+                    break;
+                case 'percentage':
+                    discountAmount = Math.round(totalPrice * (coupon.value / 100) * 100) / 100;
+                    finalAmount = Math.max(0, totalPrice - discountAmount);
+                    break;
+                default:
+                    setCouponError('Invalid coupon type');
+                    setCouponLoading(false);
+                    return;
+            }
+
+            setAppliedCoupon({
+                valid: true,
+                coupon: {
+                    id: coupon.id,
+                    code: coupon.code,
+                    type: coupon.type,
+                    value: coupon.value,
+                },
+                originalAmount: totalPrice,
+                discountAmount,
+                finalAmount,
+                message: coupon.type === 'full'
+                    ? 'Coupon applied - Free entry!'
+                    : coupon.type === 'flat'
+                        ? `Coupon applied - ₹${coupon.value} off!`
+                        : `Coupon applied - ${coupon.value}% off!`
+            });
+            setCouponCode('');
+
         } catch (error) {
+            console.error('Coupon validation error:', error);
             setCouponError('Failed to validate coupon');
         } finally {
             setCouponLoading(false);
@@ -382,21 +476,23 @@ function CompetitionDetail() {
         setProcessing(true);
 
         try {
-            const applyResponse = await fetch('/api/coupon/apply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    couponCode: appliedCoupon.coupon.code,
-                    userId: user.uid,
-                    competitionId: params.competitionId,
-                    originalAmount: totalPrice
-                })
+            await addDoc(collection(db, 'couponUsages'), {
+                couponId: appliedCoupon.coupon.id,
+                couponCode: appliedCoupon.coupon.code,
+                userId: user.uid,
+                competitionId: params.competitionId,
+                originalAmount: totalPrice,
+                discountAmount: appliedCoupon.discountAmount,
+                finalAmount: appliedCoupon.finalAmount,
+                usedAt: new Date().toISOString()
             });
 
-            const applyData = await applyResponse.json();
-
-            if (!applyData.success) {
-                throw new Error(applyData.error || 'Failed to apply coupon');
+            try {
+                await updateDoc(doc(db, 'coupons', appliedCoupon.coupon.id), {
+                    usedCount: increment(1)
+                });
+            } catch (e) {
+                console.log('Could not update coupon usedCount:', e);
             }
 
             await addDoc(collection(db, 'registrations'), {
@@ -420,8 +516,8 @@ function CompetitionDetail() {
                 competitionId: params.competitionId,
                 competitionName: competition.name,
                 originalAmount: totalPrice,
-                discountAmount: totalPrice,
-                finalAmount: 0,
+                discountAmount: appliedCoupon.discountAmount,
+                finalAmount: appliedCoupon.finalAmount,
                 couponCode: appliedCoupon.coupon.code,
                 currency: competition.currency || 'INR',
                 paymentMethod: 'COUPON',
@@ -473,10 +569,10 @@ function CompetitionDetail() {
                 body: JSON.stringify({
                     amount: totalPrice,
                     currency: payInUSD ? 'USD' : 'INR',
-                    userId: user.uid,
-                    competitionId: params.competitionId,
-                    events: selectedEvents,
-                    couponCode: appliedCoupon?.coupon?.code || null
+                    couponCode: appliedCoupon?.coupon?.code || null,
+                    couponId: appliedCoupon?.coupon?.id || null,
+                    discountAmount: appliedCoupon?.discountAmount || 0,
+                    finalAmount: appliedCoupon ? appliedCoupon.finalAmount : totalPrice
                 })
             });
 
@@ -504,7 +600,26 @@ function CompetitionDetail() {
                 throw new Error(order.error || 'Failed to create order');
             }
 
-            if (order.isFreeOrder && order.coupon) {
+            if (order.isFreeOrder && appliedCoupon) {
+                try {
+                    await addDoc(collection(db, 'couponUsages'), {
+                        couponId: appliedCoupon.coupon.id,
+                        couponCode: appliedCoupon.coupon.code,
+                        userId: user.uid,
+                        competitionId: params.competitionId,
+                        originalAmount: totalPrice,
+                        discountAmount: appliedCoupon.discountAmount,
+                        finalAmount: 0,
+                        usedAt: new Date().toISOString()
+                    });
+
+                    await updateDoc(doc(db, 'coupons', appliedCoupon.coupon.id), {
+                        usedCount: increment(1)
+                    });
+                } catch (e) {
+                    console.log('Could not record coupon usage:', e);
+                }
+
                 await addDoc(collection(db, 'registrations'), {
                     userId: user.uid,
                     userEmail: user.email,
@@ -515,7 +630,7 @@ function CompetitionDetail() {
                     events: selectedEvents,
                     type: 'PAID',
                     status: 'CONFIRMED',
-                    couponCode: order.coupon.couponCode,
+                    couponCode: appliedCoupon.coupon.code,
                     createdAt: new Date().toISOString()
                 });
 
@@ -525,10 +640,10 @@ function CompetitionDetail() {
                     userName: userProfile?.displayName || 'Unknown',
                     competitionId: params.competitionId,
                     competitionName: competition.name,
-                    originalAmount: order.coupon.originalAmount,
-                    discountAmount: order.coupon.discountAmount,
+                    originalAmount: totalPrice,
+                    discountAmount: appliedCoupon.discountAmount,
                     finalAmount: 0,
-                    couponCode: order.coupon.couponCode,
+                    couponCode: appliedCoupon.coupon.code,
                     currency: competition.currency || 'INR',
                     paymentMethod: 'COUPON',
                     status: 'SUCCESS',
@@ -572,6 +687,27 @@ function CompetitionDetail() {
                     });
 
                     if (verifyResponse.ok) {
+                        if (appliedCoupon) {
+                            try {
+                                await addDoc(collection(db, 'couponUsages'), {
+                                    couponId: appliedCoupon.coupon.id,
+                                    couponCode: appliedCoupon.coupon.code,
+                                    userId: user.uid,
+                                    competitionId: params.competitionId,
+                                    originalAmount: totalPrice,
+                                    discountAmount: appliedCoupon.discountAmount,
+                                    finalAmount: appliedCoupon.finalAmount,
+                                    usedAt: new Date().toISOString()
+                                });
+
+                                await updateDoc(doc(db, 'coupons', appliedCoupon.coupon.id), {
+                                    usedCount: increment(1)
+                                });
+                            } catch (e) {
+                                console.log('Could not record coupon usage:', e);
+                            }
+                        }
+
                         await addDoc(collection(db, 'registrations'), {
                             userId: user.uid,
                             userEmail: user.email,
