@@ -4,15 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trophy, Mail } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
+import Image from 'next/image';
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signInWithGoogle } = useAuth();
@@ -48,74 +50,103 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <Trophy className="h-16 w-16 text-blue-500" />
+    <div className="min-h-screen flex">
+      {/* Left side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-lg">
+              <Image
+                src="https://themcubes.in/wp-content/uploads/2025/12/app_icon.jpg"
+                alt="MCUBES"
+                fill
+                className="object-cover"
+              />
+            </div>
           </div>
-          <CardTitle className="text-3xl font-bold text-white">MCUBES</CardTitle>
-          <CardDescription className="text-gray-400 text-lg">
-            Sign in to compete
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Welcome Text */}
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold text-gray-900">Welcome back</h1>
+            <p className="text-gray-600">Welcome back! Please enter your details.</p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded">
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-white">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-gray-700 border-gray-600 text-white"
+                className="h-11 bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Password
+              </Label>
               <Input
                 id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-gray-700 border-gray-600 text-white"
+                className="h-11 bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
               />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={setRememberMe}
+                  className="border-gray-300"
+                />
+                <label
+                  htmlFor="remember"
+                  className="text-sm text-gray-700 cursor-pointer"
+                >
+                  Remember for 30 days
+                </label>
+              </div>
+              <Link
+                href="/auth/reset-password"
+                className="text-sm font-medium text-purple-600 hover:text-purple-700"
+              >
+                Forgot password
+              </Link>
             </div>
 
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-6"
+              className="w-full h-11 bg-purple-600 hover:bg-purple-700 text-white font-medium shadow-sm"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </Button>
-          </form>
-
-          <div className="mt-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-600" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-gray-800 px-2 text-gray-400">Or continue with</span>
-              </div>
-            </div>
 
             <Button
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
               variant="outline"
-              className="w-full mt-4 border-gray-600 hover:bg-gray-700 text-white"
+              className="w-full h-11 border-gray-300 hover:bg-gray-50 text-gray-700 font-medium"
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -125,21 +156,79 @@ function LoginPage() {
               </svg>
               Sign in with Google
             </Button>
-          </div>
+          </form>
 
-          <div className="mt-6 text-center text-sm">
-            <Link href="/auth/register" className="text-blue-500 hover:text-blue-400">
-              Don't have an account? Sign up
+          {/* Sign up link */}
+          <div className="text-center text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link
+              href="/auth/register"
+              className="font-medium text-purple-600 hover:text-purple-700"
+            >
+              Sign up
             </Link>
           </div>
+        </div>
+      </div>
 
-          <div className="mt-2 text-center text-sm">
-            <Link href="/auth/reset-password" className="text-gray-400 hover:text-gray-300">
-              Forgot password?
-            </Link>
+      {/* Right side - Hero Image with Testimonial */}
+      <div className="hidden lg:flex flex-1 relative bg-gradient-to-br from-gray-100 to-gray-200">
+        <div className="absolute inset-0 flex items-center justify-center p-12">
+          <div className="relative w-full h-full max-w-2xl max-h-[800px] rounded-3xl overflow-hidden shadow-2xl">
+            {/* Background Image */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700">
+              <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00em0wLTEwYzAtMi4yMS0xLjc5LTQtNC00cy00IDEuNzktNCA0IDEuNzkgNCA0IDQgNC0xLjc5IDQtNHptMC0xMGMwLTIuMjEtMS43OS00LTQtNHMtNCAxLjc5LTQgNCAxLjc5IDQgNCA0IDQtMS43OSA0LTR6TTI0IDM0YzAtMi4yMS0xLjc5LTQtNC00cy00IDEuNzktNCA0IDEuNzkgNCA0IDQgNC0xLjc5IDQtNHptMC0xMGMwLTIuMjEtMS43OS00LTQtNHMtNCAxLjc5LTQgNCAxLjc5IDQgNCA0IDQtMS43OSA0LTR6bTAtMTBjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00ek0xMiAzNGMwLTIuMjEtMS43OS00LTQtNHMtNCAxLjc5LTQgNCAxLjc5IDQgNCA0IDQtMS43OSA0LTR6bTAtMTBjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')]"></div>
+            </div>
+
+            {/* Cube Icon Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-64 h-64 opacity-10">
+                <svg viewBox="0 0 100 100" className="w-full h-full text-white">
+                  <path
+                    d="M50 10 L90 30 L90 70 L50 90 L10 70 L10 30 Z M50 10 L50 50 M90 30 L50 50 M10 30 L50 50 M50 50 L50 90 M50 50 L90 70 M50 50 L10 70"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Testimonial Overlay */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-12">
+              <div className="space-y-6">
+                <blockquote className="text-2xl font-semibold text-white leading-relaxed">
+                  "MCUBES has transformed how we organize speedcubing competitions. The platform is intuitive, reliable, and loved by our community."
+                </blockquote>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-white text-lg">Alex Chen</div>
+                    <div className="text-gray-300 text-sm">Competition Organizer</div>
+                    <div className="text-gray-400 text-sm">World Cube Association</div>
+                  </div>
+                  
+                  <div className="flex gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation Arrows */}
+              <div className="flex gap-2 mt-8">
+                <button className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center text-white transition-colors">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center text-white transition-colors">
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
