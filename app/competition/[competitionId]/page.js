@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer, Tag, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
@@ -38,6 +39,13 @@ function CompetitionDetail() {
     const [participantCount, setParticipantCount] = useState(0);
     const [payInUSD, setPayInUSD] = useState(false);
 
+    const [couponCode, setCouponCode] = useState('');
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+    const [couponError, setCouponError] = useState('');
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [finalPrice, setFinalPrice] = useState(0);
+
     useEffect(() => {
         if (params.competitionId) {
             fetchCompetition();
@@ -54,6 +62,34 @@ function CompetitionDetail() {
     useEffect(() => {
         calculatePrice();
     }, [selectedEvents, competition, payInUSD]);
+
+    useEffect(() => {
+        if (appliedCoupon) {
+            let calculatedDiscount = 0;
+            let calculatedFinal = totalPrice;
+
+            switch (appliedCoupon.coupon.type) {
+                case 'full':
+                    calculatedDiscount = totalPrice;
+                    calculatedFinal = 0;
+                    break;
+                case 'flat':
+                    calculatedDiscount = Math.min(appliedCoupon.coupon.value, totalPrice);
+                    calculatedFinal = Math.max(0, totalPrice - appliedCoupon.coupon.value);
+                    break;
+                case 'percentage':
+                    calculatedDiscount = Math.round(totalPrice * (appliedCoupon.coupon.value / 100) * 100) / 100;
+                    calculatedFinal = Math.max(0, totalPrice - calculatedDiscount);
+                    break;
+            }
+
+            setDiscountAmount(calculatedDiscount);
+            setFinalPrice(calculatedFinal);
+        } else {
+            setDiscountAmount(0);
+            setFinalPrice(totalPrice);
+        }
+    }, [totalPrice, appliedCoupon]);
 
     // Load Razorpay script
     useEffect(() => {
@@ -159,6 +195,49 @@ function CompetitionDetail() {
         }
 
         setTotalPrice(Math.round(price * 100) / 100);
+    }
+
+    async function handleApplyCoupon() {
+        if (!couponCode.trim()) {
+            setCouponError('Please enter a coupon code');
+            return;
+        }
+
+        setCouponLoading(true);
+        setCouponError('');
+        setAppliedCoupon(null);
+
+        try {
+            const response = await fetch('/api/coupon/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    couponCode: couponCode.trim(),
+                    userId: user?.uid,
+                    competitionId: params.competitionId,
+                    originalAmount: totalPrice
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.valid) {
+                setAppliedCoupon(data);
+                setCouponCode('');
+            } else {
+                setCouponError(data.error || 'Invalid coupon');
+            }
+        } catch (error) {
+            setCouponError('Failed to validate coupon');
+        } finally {
+            setCouponLoading(false);
+        }
+    }
+
+    function handleRemoveCoupon() {
+        setAppliedCoupon(null);
+        setDiscountAmount(0);
+        setFinalPrice(totalPrice);
     }
 
     function getRegistrationStatus() {
@@ -279,6 +358,96 @@ function CompetitionDetail() {
         }
     }
 
+    async function handleFreeCouponRegistration() {
+        if (!user) {
+            router.push('/auth/login');
+            return;
+        }
+
+        if (userProfile?.status === 'SUSPENDED') {
+            alert('Your account is suspended. You cannot register for competitions.');
+            return;
+        }
+
+        if (selectedEvents.length === 0) {
+            alert('Please select at least one event');
+            return;
+        }
+
+        if (!appliedCoupon) {
+            alert('No coupon applied');
+            return;
+        }
+
+        setProcessing(true);
+
+        try {
+            const applyResponse = await fetch('/api/coupon/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    couponCode: appliedCoupon.coupon.code,
+                    userId: user.uid,
+                    competitionId: params.competitionId,
+                    originalAmount: totalPrice
+                })
+            });
+
+            const applyData = await applyResponse.json();
+
+            if (!applyData.success) {
+                throw new Error(applyData.error || 'Failed to apply coupon');
+            }
+
+            await addDoc(collection(db, 'registrations'), {
+                userId: user.uid,
+                userEmail: user.email,
+                userName: userProfile?.displayName || 'Unknown',
+                wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                competitionId: params.competitionId,
+                competitionName: competition.name,
+                events: selectedEvents,
+                type: 'PAID',
+                status: 'CONFIRMED',
+                couponCode: appliedCoupon.coupon.code,
+                createdAt: new Date().toISOString()
+            });
+
+            await addDoc(collection(db, 'payments'), {
+                userId: user.uid,
+                userEmail: user.email,
+                userName: userProfile?.displayName || 'Unknown',
+                competitionId: params.competitionId,
+                competitionName: competition.name,
+                originalAmount: totalPrice,
+                discountAmount: totalPrice,
+                finalAmount: 0,
+                couponCode: appliedCoupon.coupon.code,
+                currency: competition.currency || 'INR',
+                paymentMethod: 'COUPON',
+                status: 'SUCCESS',
+                createdAt: new Date().toISOString()
+            });
+
+            try {
+                await updateDoc(doc(db, 'competitions', params.competitionId), {
+                    participantCount: increment(1)
+                });
+            } catch (e) {
+                console.log('Could not update participant count');
+            }
+
+            alert('Registration successful with coupon! Free entry applied.');
+            checkRegistration();
+            fetchParticipantCount();
+        } catch (error) {
+            console.error('Free coupon registration error:', error);
+            alert('Registration failed: ' + error.message);
+        } finally {
+            setProcessing(false);
+        }
+    }
+
     async function handlePayment() {
         if (!user) {
             router.push('/auth/login');
@@ -306,7 +475,8 @@ function CompetitionDetail() {
                     currency: payInUSD ? 'USD' : 'INR',
                     userId: user.uid,
                     competitionId: params.competitionId,
-                    events: selectedEvents
+                    events: selectedEvents,
+                    couponCode: appliedCoupon?.coupon?.code || null
                 })
             });
 
@@ -332,6 +502,52 @@ function CompetitionDetail() {
 
             if (!order.id) {
                 throw new Error(order.error || 'Failed to create order');
+            }
+
+            if (order.isFreeOrder && order.coupon) {
+                await addDoc(collection(db, 'registrations'), {
+                    userId: user.uid,
+                    userEmail: user.email,
+                    userName: userProfile?.displayName || 'Unknown',
+                    wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                    competitionId: params.competitionId,
+                    competitionName: competition.name,
+                    events: selectedEvents,
+                    type: 'PAID',
+                    status: 'CONFIRMED',
+                    couponCode: order.coupon.couponCode,
+                    createdAt: new Date().toISOString()
+                });
+
+                await addDoc(collection(db, 'payments'), {
+                    userId: user.uid,
+                    userEmail: user.email,
+                    userName: userProfile?.displayName || 'Unknown',
+                    competitionId: params.competitionId,
+                    competitionName: competition.name,
+                    originalAmount: order.coupon.originalAmount,
+                    discountAmount: order.coupon.discountAmount,
+                    finalAmount: 0,
+                    couponCode: order.coupon.couponCode,
+                    currency: competition.currency || 'INR',
+                    paymentMethod: 'COUPON',
+                    status: 'SUCCESS',
+                    createdAt: new Date().toISOString()
+                });
+
+                try {
+                    await updateDoc(doc(db, 'competitions', params.competitionId), {
+                        participantCount: increment(1)
+                    });
+                } catch (e) {
+                    console.log('Could not update participant count');
+                }
+
+                alert('Payment successful! Registration complete with free coupon.');
+                checkRegistration();
+                fetchParticipantCount();
+                setProcessing(false);
+                return;
             }
 
             const options = {
@@ -367,6 +583,7 @@ function CompetitionDetail() {
                             type: 'PAID',
                             status: 'CONFIRMED',
                             paymentId: response.razorpay_payment_id,
+                            couponCode: appliedCoupon?.coupon?.code || null,
                             createdAt: new Date().toISOString()
                         });
 
@@ -376,7 +593,10 @@ function CompetitionDetail() {
                             userName: userProfile?.displayName || 'Unknown',
                             competitionId: params.competitionId,
                             competitionName: competition.name,
-                            amount: totalPrice,
+                            originalAmount: totalPrice,
+                            discountAmount: appliedCoupon?.discountAmount || 0,
+                            finalAmount: appliedCoupon ? appliedCoupon.finalAmount : totalPrice,
+                            couponCode: appliedCoupon?.coupon?.code || null,
                             currency: competition.currency || 'INR',
                             paymentId: response.razorpay_payment_id,
                             orderId: response.razorpay_order_id,
@@ -670,58 +890,142 @@ function CompetitionDetail() {
 
                                     {/* Pricing Display */}
                                     {competition.type === 'PAID' && selectedEvents.length > 0 && (
-                                        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="font-semibold">Pricing Breakdown:</span>
-
-                                                <div className="flex items-center gap-2">
-                                                    <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">INR</Label>
-                                                    <Switch
-                                                        id="currency-mode"
-                                                        checked={payInUSD}
-                                                        onCheckedChange={setPayInUSD}
-                                                    />
-                                                    <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">USD</Label>
+                                        <>
+                                            <div className="bg-purple-50 border border-purple-200 rounded-lg mb-4 p-4">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <Tag className="h-5 w-5 text-purple-600" />
+                                                    <span className="font-semibold text-purple-800">Have a coupon code?</span>
                                                 </div>
-                                            </div>
 
-                                            {competition.pricingModel === 'flat' ? (
-                                                <p className="text-sm">Flat Registration Fee</p>
-                                            ) : (
-                                                <ul className="text-sm space-y-1 list-disc list-inside">
-                                                    <li>Base Fee (includes 1 event): {payInUSD ? '$' : '₹'}{
-                                                        (() => {
-                                                            const base = Number(competition.basePrice) || 0;
-                                                            const compCur = competition.currency || 'INR';
-                                                            if (payInUSD && compCur === 'INR') return (base / 90).toFixed(2);
-                                                            if (!payInUSD && compCur === 'USD') return (base * 90).toFixed(0);
-                                                            return base;
-                                                        })()
-                                                    }</li>
-                                                    <li>Extra Events: {Math.max(0, selectedEvents.length - 1)} x {payInUSD ? '$' : '₹'}{
-                                                        (() => {
-                                                            const pe = Number(competition.perEventPrice) || 0;
-                                                            const compCur = competition.currency || 'INR';
-                                                            if (payInUSD && compCur === 'INR') return (pe / 90).toFixed(2);
-                                                            if (!payInUSD && compCur === 'USD') return (pe * 90).toFixed(0);
-                                                            return pe;
-                                                        })()
-                                                    }</li>
-                                                </ul>
-                                            )}
+                                                {appliedCoupon ? (
+                                                    <div className="flex items-center justify-between bg-green-100 border border-green-300 rounded-lg px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <CheckCircle className="h-5 w-5 text-green-600" />
+                                                            <div>
+                                                                <p className="font-semibold text-green-800">{appliedCoupon.coupon.code}</p>
+                                                                <p className="text-sm text-green-700">{appliedCoupon.message}</p>
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={handleRemoveCoupon}
+                                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                        >
+                                                            <XCircle className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            placeholder="Enter coupon code"
+                                                            value={couponCode}
+                                                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                                            className="flex-1 border-purple-300 focus:border-purple-500"
+                                                            onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                                                        />
+                                                        <Button
+                                                            onClick={handleApplyCoupon}
+                                                            disabled={couponLoading || !couponCode.trim()}
+                                                            variant="outline"
+                                                            className="border-purple-500 text-purple-700 hover:bg-purple-100"
+                                                        >
+                                                            {couponLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+                                                        </Button>
+                                                    </div>
+                                                )}
 
-                                            <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-end">
-                                                <span className="text-sm text-blue-600">Total Amount:</span>
-                                                <div className="text-right">
-                                                    <span className="font-bold text-2xl">
-                                                        {payInUSD ? '$' : '₹'}{totalPrice}
-                                                    </span>
-                                                    <p className="text-xs text-blue-500 mt-1 opacity-80">
-                                                        {payInUSD ? 'Paid via INR Gateway (Converted)' : 'Standard Rate'}
+                                                {couponError && (
+                                                    <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                                                        <AlertCircle className="h-4 w-4" />
+                                                        {couponError}
                                                     </p>
+                                                )}
+                                            </div>
+
+                                            <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <span className="font-semibold">Pricing Breakdown:</span>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">INR</Label>
+                                                        <Switch
+                                                            id="currency-mode"
+                                                            checked={payInUSD}
+                                                            onCheckedChange={setPayInUSD}
+                                                        />
+                                                        <Label htmlFor="currency-mode" className="text-xs font-medium text-blue-700">USD</Label>
+                                                    </div>
+                                                </div>
+
+                                                {competition.pricingModel === 'flat' ? (
+                                                    <p className="text-sm">Flat Registration Fee</p>
+                                                ) : (
+                                                    <ul className="text-sm space-y-1 list-disc list-inside">
+                                                        <li>Base Fee (includes 1 event): {payInUSD ? '$' : '₹'}{
+                                                            (() => {
+                                                                const base = Number(competition.basePrice) || 0;
+                                                                const compCur = competition.currency || 'INR';
+                                                                if (payInUSD && compCur === 'INR') return (base / 90).toFixed(2);
+                                                                if (!payInUSD && compCur === 'USD') return (base * 90).toFixed(0);
+                                                                return base;
+                                                            })()
+                                                        }</li>
+                                                        <li>Extra Events: {Math.max(0, selectedEvents.length - 1)} x {payInUSD ? '$' : '₹'}{
+                                                            (() => {
+                                                                const pe = Number(competition.perEventPrice) || 0;
+                                                                const compCur = competition.currency || 'INR';
+                                                                if (payInUSD && compCur === 'INR') return (pe / 90).toFixed(2);
+                                                                if (!payInUSD && compCur === 'USD') return (pe * 90).toFixed(0);
+                                                                return pe;
+                                                            })()
+                                                        }</li>
+                                                    </ul>
+                                                )}
+
+                                                <div className="mt-3 pt-3 border-t border-blue-200">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-sm text-blue-600">Original Amount:</span>
+                                                        <span className="font-semibold">{payInUSD ? '$' : '₹'}{totalPrice}</span>
+                                                    </div>
+
+                                                    {appliedCoupon && discountAmount > 0 && (
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="text-sm text-green-600 flex items-center gap-1">
+                                                                <Tag className="h-4 w-4" />
+                                                                Discount:
+                                                            </span>
+                                                            <span className="font-semibold text-green-600">
+                                                                -{payInUSD ? '$' : '₹'}{discountAmount}
+                                                            </span>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex justify-between items-end">
+                                                        <span className="font-semibold text-blue-800">Final Amount:</span>
+                                                        <div className="text-right">
+                                                            <span className="font-bold text-2xl">
+                                                                {appliedCoupon && finalPrice === 0 ? (
+                                                                    <span className="text-green-600">FREE</span>
+                                                                ) : (
+                                                                    `${payInUSD ? '$' : '₹'}${finalPrice}`
+                                                                )}
+                                                            </span>
+                                                            {appliedCoupon && finalPrice === 0 && (
+                                                                <p className="text-xs text-green-600 mt-1 font-semibold">
+                                                                    Coupon Applied - Free Entry!
+                                                                </p>
+                                                            )}
+                                                            {!appliedCoupon && (
+                                                                <p className="text-xs text-blue-500 mt-1 opacity-80">
+                                                                    {payInUSD ? 'Paid via INR Gateway (Converted)' : 'Standard Rate'}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </>
                                     )}
 
                                     {competition.type === 'FREE' ? (
@@ -732,6 +1036,15 @@ function CompetitionDetail() {
                                         >
                                             {processing ? 'Registering...' : 'Register (Free)'}
                                         </Button>
+                                    ) : appliedCoupon && finalPrice === 0 ? (
+                                        <Button
+                                            onClick={handleFreeCouponRegistration}
+                                            disabled={processing || selectedEvents.length === 0}
+                                            className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg"
+                                        >
+                                            <CheckCircle className="h-5 w-5 mr-2" />
+                                            {processing ? 'Registering...' : 'Register (Free with Coupon)'}
+                                        </Button>
                                     ) : (
                                         <Button
                                             onClick={() => handlePayment()}
@@ -739,7 +1052,7 @@ function CompetitionDetail() {
                                             className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg"
                                         >
                                             <DollarSign className="h-5 w-5 mr-2" />
-                                            {processing ? 'Processing...' : `Pay ${payInUSD ? '$' : '₹'}${totalPrice} & Register`}
+                                            {processing ? 'Processing...' : `Pay ${payInUSD ? '$' : '₹'}${finalPrice} & Register`}
                                         </Button>
                                     )}
                                 </>
