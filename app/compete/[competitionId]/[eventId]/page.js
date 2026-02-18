@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer, Shield } from 'lucide-react';
-import { getEventName, getEventIcon } from '@/lib/wcaEvents';
+import { getEventName } from '@/lib/wcaEvents';
+import EventIcon from '@/lib/EventIcon';
 import { AntiCheatDetector, getDeviceFingerprint, getUserIP } from '@/lib/antiCheat';
 
 // Helper to format time from milliseconds
@@ -673,7 +674,7 @@ function TimerPage() {
                     <Card className="bg-gray-800 border-gray-700">
                         <CardContent className="py-8">
                             <div className="text-center mb-8">
-                                <h1 className="text-3xl font-bold mb-2">{getEventIcon(params.eventId)} {getEventName(params.eventId)}</h1>
+                                <h1 className="text-3xl font-bold mb-2"><EventIcon eventId={params.eventId} size={28} /> {getEventName(params.eventId)}</h1>
                                 <p className="text-gray-400">{competition.name}</p>
                             </div>
 
@@ -1045,7 +1046,7 @@ function TimerPage() {
                             Exit
                         </Button>
                         <div className="text-center">
-                            <h2 className="text-xl font-bold">{getEventIcon(params.eventId)} {getEventName(params.eventId)}</h2>
+                            <h2 className="text-xl font-bold"><EventIcon eventId={params.eventId} size={24} /> {getEventName(params.eventId)}</h2>
                             <p className="text-sm text-gray-400">Attempt {currentAttempt} of {competition.solveLimit || 5}</p>
                         </div>
                         <div className="flex gap-2">
