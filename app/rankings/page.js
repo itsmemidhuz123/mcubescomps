@@ -13,7 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trophy, Search, Medal, User, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
-import { getEventIcon, getEventName } from '@/lib/wcaEvents';
+import { getEventName } from '@/lib/wcaEvents';
+import EventIcon from '@/lib/EventIcon';
 
 // Rankings Page - Global UI Consistency Update
 // Matches "Bronze League" style: Clean table, sticky header, medal icons, user highlight.
@@ -137,9 +138,9 @@ function RankingsPage() {
         {/* Header Area */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100">
-                 {getEventIcon(selectedEvent) || <Trophy className="w-6 h-6 text-yellow-500" />}
-              </div>
+               <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100">
+                  <EventIcon eventId={selectedEvent} size={28} />
+               </div>
               <div>
                  <h1 className="text-2xl font-bold text-gray-900">{getEventName(selectedEvent)}</h1>
                  <p className="text-gray-500 text-sm">Global Rankings • {mode === 'single' ? 'Single' : 'Average of 5'}</p>
