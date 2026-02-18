@@ -89,7 +89,8 @@ service cloud.firestore {
     // Contains competition attempt data; only owner can read, only owner can create.
     // Updates are restricted to admins to prevent tampering after submission.
     match /solves/{solveId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Admin can read all (for flagged solves review), users can read their own
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
