@@ -160,7 +160,7 @@ function LoginPage() {
 
           {/* Sign up link */}
           <div className="text-center text-sm text-gray-600">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link
               href="/auth/register"
               className="font-medium text-purple-600 hover:text-purple-700"
@@ -198,7 +198,7 @@ function LoginPage() {
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-12">
               <div className="space-y-6">
                 <blockquote className="text-2xl font-semibold text-white leading-relaxed">
-                  "MCUBES has transformed how we organize speedcubing competitions. The platform is intuitive, reliable, and loved by our community."
+                  &quot;MCUBES has transformed how we organize speedcubing competitions. The platform is intuitive, reliable, and loved by our community.&quot;
                 </blockquote>
                 
                 <div className="flex items-center justify-between">

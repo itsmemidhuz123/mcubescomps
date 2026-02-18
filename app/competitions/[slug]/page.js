@@ -166,7 +166,7 @@ function CompetitionDetail() {
             {!myResult && (
               <Alert className="bg-blue-900/30 border-blue-700">
                 <AlertDescription className="text-blue-200">
-                  ⚠️ Once you start, you cannot restart or redo solves. Make sure you're ready!
+                  ⚠️ Once you start, you cannot restart or redo solves. Make sure you&apos;re ready!
                 </AlertDescription>
               </Alert>
             )}

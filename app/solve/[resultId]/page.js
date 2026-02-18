@@ -384,7 +384,7 @@ function SolvePage() {
           {phase === 'ready' && (
             <Alert className="bg-blue-50 border-blue-100">
               <AlertDescription className="text-blue-800 flex items-center justify-center">
-                ℹ️ Click "Start Inspection" to begin. You have 15 seconds to inspect the cube.
+                ℹ️ Click &quot;Start Inspection&quot; to begin. You have 15 seconds to inspect the cube.
               </AlertDescription>
             </Alert>
           )}
