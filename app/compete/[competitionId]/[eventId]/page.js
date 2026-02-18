@@ -1134,7 +1134,8 @@ function TimerPage() {
                             </div>
                         ) : (
                             <div className="text-center">
-                                <p className="text-2xl font-mono text-blue-400 break-words">{currentScramble}</p>
+                                <p className="text-sm text-gray-400 mb-2">Scramble #{currentAttempt}</p>
+                                <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700">{currentScramble || 'Loading...'}</p>
                             </div>
                         )}
                     </CardContent>
