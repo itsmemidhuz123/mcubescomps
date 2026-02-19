@@ -99,6 +99,12 @@ export default function ResultsManagementPage() {
         }
     }, [user, isAdmin, params.competitionId]);
 
+    useEffect(() => {
+        if (competition && user && isAdmin) {
+            fetchResults(competition);
+        }
+    }, [selectedRound, selectedEvent]);
+
     async function fetchCompetitionData() {
         setLoading(true);
         try {
@@ -130,55 +136,63 @@ export default function ResultsManagementPage() {
         const round = selectedRound || compData.currentRound || 1;
         const event = selectedEvent || compData.events?.[0];
 
-        // Fetch all and filter client-side (avoid index requirement)
-        const snapshot = await getDocs(collection(db, 'results'));
-        let resultsData = [];
+        try {
+            // Fetch all and filter client-side (avoid index requirement)
+            const snapshot = await getDocs(collection(db, 'results'));
+            let resultsData = [];
 
-        snapshot.docs.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data.competitionId === params.competitionId) {
-                resultsData.push({ id: docSnap.id, ...data });
-            }
-        });
-
-        // Filter by event first
-        if (event) {
-            resultsData = resultsData.filter(d => d.eventId === event);
-        }
-
-        // Filter by round - include results for current round
-        // Also include qualified users from previous round who were promoted
-        const currentRoundNum = round;
-        const prevRoundNum = round - 1;
-        resultsData = resultsData.filter(d => {
-            // Exact match for current round
-            if (d.roundNumber === currentRoundNum) return true;
-            // Legacy data without roundNumber - show in round 1
-            if ((d.roundNumber === undefined || d.roundNumber === null) && currentRoundNum === 1) return true;
-            // Users promoted from previous round - show in current round
-            if (d.qualifiedForNextRound && d.roundNumber === prevRoundNum) return true;
-            return false;
-        });
-
-        // Sort by average
-        resultsData.sort((a, b) => {
-            const aAvg = a.average || Infinity;
-            const bAvg = b.average || Infinity;
-            return aAvg - bAvg;
-        });
-
-        // Fetch user data
-        for (const result of resultsData) {
-            if (!users[result.userId]) {
-                const userDoc = await getDoc(doc(db, 'users', result.userId));
-                if (userDoc.exists()) {
-                    users[result.userId] = userDoc.data();
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.competitionId === params.competitionId) {
+                    resultsData.push({ id: docSnap.id, ...data });
                 }
-            }
-            result.user = users[result.userId] || {};
-        }
+            });
 
-        setResults(resultsData);
+            // Filter by event first
+            if (event) {
+                resultsData = resultsData.filter(d => d.eventId === event);
+            }
+
+            // Filter by round - show users competing in this round
+            const currentRoundNum = round;
+            resultsData = resultsData.filter(d => {
+                // Show in round 1 if no roundNumber set (legacy data)
+                if ((d.roundNumber === undefined || d.roundNumber === null)) {
+                    return currentRoundNum === 1;
+                }
+                // Exact match for current round
+                return d.roundNumber === currentRoundNum;
+            });
+
+            // Sort by average
+            resultsData.sort((a, b) => {
+                const aAvg = a.average || Infinity;
+                const bAvg = b.average || Infinity;
+                return aAvg - bAvg;
+            });
+
+            // Fetch user data
+            const usersCache = { ...users };
+            for (const result of resultsData) {
+                if (!usersCache[result.userId]) {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', result.userId));
+                        if (userDoc.exists()) {
+                            usersCache[result.userId] = userDoc.data();
+                        }
+                    } catch (e) {
+                        console.error('Error fetching user:', e);
+                    }
+                }
+                result.user = usersCache[result.userId] || {};
+            }
+
+            setUsers(usersCache);
+            setResults(resultsData);
+        } catch (error) {
+            console.error('Error fetching results:', error);
+            setResults([]);
+        }
     }
 
     async function fetchVerificationQueue() {
@@ -454,7 +468,7 @@ export default function ResultsManagementPage() {
                         });
                     }
 
-                    // Update results collection
+                    // Update results collection - mark as qualified but keep in current round
                     const promoteResultsQuery = query(
                         collection(db, 'results'),
                         where('competitionId', '==', params.competitionId),
@@ -464,7 +478,7 @@ export default function ResultsManagementPage() {
                     if (!promoteResultsSnap.empty) {
                         await updateDoc(doc(db, 'results', promoteResultsSnap.docs[0].id), {
                             qualifiedForNextRound: true,
-                            roundNumber: nextRound
+                            adminVerified: true
                         });
                     }
 
@@ -478,7 +492,6 @@ export default function ResultsManagementPage() {
                     if (!promoteRoundResultsSnap.empty) {
                         await updateDoc(doc(db, 'roundResults', promoteRoundResultsSnap.docs[0].id), {
                             qualifiedForNextRound: true,
-                            roundNumber: nextRound,
                             verified: true
                         });
                     }
