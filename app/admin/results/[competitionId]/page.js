@@ -101,9 +101,9 @@ export default function ResultsManagementPage() {
 
     useEffect(() => {
         if (competition && user && isAdmin) {
-            fetchResults(competition);
+            fetchResults(competition, selectedRound, selectedEvent);
         }
-    }, [selectedRound, selectedEvent]);
+    }, [selectedRound, selectedEvent, competition, user, isAdmin]);
 
     async function fetchCompetitionData() {
         setLoading(true);
@@ -121,7 +121,7 @@ export default function ResultsManagementPage() {
             setSelectedEvent(compData.events?.[0] || null);
 
             await Promise.all([
-                fetchResults(compData),
+                fetchResults(compData, compData.currentRound || 1, compData.events?.[0]),
                 fetchVerificationQueue()
             ]);
         } catch (error) {
@@ -132,11 +132,13 @@ export default function ResultsManagementPage() {
         }
     }
 
-    async function fetchResults(compData) {
-        const round = selectedRound || compData.currentRound || 1;
-        const event = selectedEvent || compData.events?.[0];
+    async function fetchResults(compData, forceRound = null, forceEvent = null) {
+        const round = forceRound !== null ? forceRound : (selectedRound || compData.currentRound || 1);
+        const event = forceEvent !== null ? forceEvent : (selectedEvent || compData.events?.[0]);
 
         try {
+            console.log('Fetching results for round:', round, 'event:', event);
+
             // Fetch all and filter client-side (avoid index requirement)
             const snapshot = await getDocs(collection(db, 'results'));
             let resultsData = [];
@@ -147,6 +149,8 @@ export default function ResultsManagementPage() {
                     resultsData.push({ id: docSnap.id, ...data });
                 }
             });
+
+            console.log('Total results found:', resultsData.length);
 
             // Filter by event first
             if (event) {
@@ -163,6 +167,8 @@ export default function ResultsManagementPage() {
                 // Exact match for current round
                 return d.roundNumber === currentRoundNum;
             });
+
+            console.log('Results after filtering:', resultsData.length);
 
             // Sort by average
             resultsData.sort((a, b) => {
@@ -189,6 +195,7 @@ export default function ResultsManagementPage() {
 
             setUsers(usersCache);
             setResults(resultsData);
+            console.log('Results set:', resultsData.length);
         } catch (error) {
             console.error('Error fetching results:', error);
             setResults([]);
@@ -341,7 +348,7 @@ export default function ResultsManagementPage() {
                     await deleteDoc(solveRef);
                     await logAuditAction('SOLVE_DELETED', null, { solveId });
                     alert('Solve deleted');
-                    fetchResults(competition);
+                    fetchResults(competition, selectedRound, selectedEvent);
                     return;
                 case 'override':
                     const ms = parseFloat(value) * 1000;
@@ -369,7 +376,7 @@ export default function ResultsManagementPage() {
             if (compDoc.exists()) {
                 const compData = { id: compDoc.id, ...compDoc.data() };
                 setCompetition(compData);
-                await fetchResults(compData);
+                await fetchResults(compData, selectedRound, selectedEvent);
             }
         } catch (error) {
             console.error('Error updating solve:', error);
@@ -507,7 +514,7 @@ export default function ResultsManagementPage() {
             if (compDoc.exists()) {
                 const compData = { id: compDoc.id, ...compDoc.data() };
                 setCompetition(compData);
-                await fetchResults(compData);
+                await fetchResults(compData, selectedRound, selectedEvent);
             }
 
             // Show success message
@@ -733,7 +740,7 @@ export default function ResultsManagementPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Select value={selectedRound?.toString()} onValueChange={(v) => { setSelectedRound(parseInt(v)); setTimeout(() => fetchResults(competition), 0); }}>
+                        <Select value={selectedRound?.toString()} onValueChange={(v) => { const newRound = parseInt(v); setSelectedRound(newRound); fetchResults(competition, newRound, selectedEvent); }}>
                             <SelectTrigger className="w-[150px]">
                                 <SelectValue placeholder="Select Round" />
                             </SelectTrigger>
