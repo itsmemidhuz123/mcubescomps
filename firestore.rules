@@ -152,6 +152,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     
+    // Tournament Participants
+    // Tracks user progress through tournament rounds
+    match /tournamentParticipants/{participantId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    
+    // Round Results
+    // Stores results for each round of a tournament
+    match /roundResults/{resultId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+    
+    // Tournament advancement logs
+    match /tournamentLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+    
+    // Video Submissions
+    match /videoSubmissions/{submissionId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+    
     // Default deny
     match /{document=**} {
       allow read, write: if false;
