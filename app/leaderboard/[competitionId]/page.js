@@ -643,7 +643,7 @@ function LeaderboardPage() {
                                                             )
                                                         )
                                                     ) : (
-                                                        <span className="text-gray-30">-</span>
+                                                        <span className="text-gray-300">-</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right text-gray-500 text-sm hidden sm:table-cell">
