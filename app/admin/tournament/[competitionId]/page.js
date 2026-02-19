@@ -799,7 +799,7 @@ export default function TournamentManagementPage() {
                                 <div className="space-y-6">
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                         <p className="text-sm text-blue-800">
-                                            <strong>Scramble Management:</strong> All scrambles are WCA-compliant and generated using the official cubing.js library.
+                                            <strong>Scramble Management:</strong> All scrambles should be WCA-compliant and entered manually when creating the competition.
                                             Scrambles are securely stored in Firebase and only visible to admins.
                                         </p>
                                     </div>
@@ -833,7 +833,7 @@ export default function TournamentManagementPage() {
                                                     <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
                                                         <p className="text-sm text-red-700">
                                                             <strong>Warning:</strong> No scrambles configured for the current round!
-                                                            Go to the main Admin panel to generate scrambles before starting the round.
+                                                            Please add scrambles by editing the competition in the Admin panel.
                                                         </p>
                                                     </div>
                                                 )}
