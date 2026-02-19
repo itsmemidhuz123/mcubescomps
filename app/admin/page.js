@@ -425,60 +425,40 @@ export default function AdminPanel() {
             const supportedEvents = formData.selectedEvents.filter(isEventSupported);
             const scrambleCount = formData.solveLimit || 5;
 
-            let scrambles;
+            // Prepare request payload
+            const payload = {
+                events: supportedEvents,
+                mode: formData.mode === CompetitionMode.TOURNAMENT ? 'tournament' : 'standard',
+                scrambleCount
+            };
 
+            // Add rounds if tournament mode
             if (formData.mode === CompetitionMode.TOURNAMENT && formData.rounds.length > 0) {
-                // Generate for tournament rounds
-                setScrambleGenProgress({ current: 0, total: supportedEvents.length * formData.rounds.length });
+                payload.rounds = formData.rounds;
+            }
 
-                scrambles = {};
-                let progress = 0;
+            // Call the API to generate WCA-compliant scrambles
+            const response = await fetch('/api/admin/generate-scrambles', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
 
-                for (const round of formData.rounds) {
-                    for (const eventId of supportedEvents) {
-                        if (!scrambles[eventId]) scrambles[eventId] = {};
+            const result = await response.json();
 
-                        const eventScrambles = {};
-                        for (let i = 0; i < scrambleCount; i++) {
-                            const scramble = await generateScramble(eventId);
-                            if (scramble) {
-                                eventScrambles[i] = scramble;
-                            }
-                        }
-
-                        scrambles[eventId][round.roundNumber] = eventScrambles;
-                        progress++;
-                        setScrambleGenProgress({ current: progress, total: supportedEvents.length * formData.rounds.length });
-                    }
-                }
-            } else {
-                // Generate for standard competition
-                setScrambleGenProgress({ current: 0, total: supportedEvents.length });
-
-                scrambles = {};
-                let progress = 0;
-
-                for (const eventId of supportedEvents) {
-                    const eventScrambles = {};
-                    for (let i = 0; i < scrambleCount; i++) {
-                        const scramble = await generateScramble(eventId);
-                        if (scramble) {
-                            eventScrambles[i] = scramble;
-                        }
-                    }
-                    scrambles[eventId] = eventScrambles;
-                    progress++;
-                    setScrambleGenProgress({ current: progress, total: supportedEvents.length });
-                }
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate scrambles');
             }
 
             setFormData(prev => ({
                 ...prev,
-                scrambles: scrambles
+                scrambles: result.scrambles
             }));
 
-            setGeneratedScrambles(scrambles);
-            alert(`Successfully generated scrambles for ${Object.keys(scrambles).length} events!`);
+            setGeneratedScrambles(result.scrambles);
+            alert(`Successfully generated WCA-compliant scrambles for ${result.eventCount} events!`);
         } catch (error) {
             console.error('Error generating scrambles:', error);
             alert('Error generating scrambles: ' + error.message);
