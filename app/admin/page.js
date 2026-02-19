@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -752,6 +752,10 @@ export default function AdminPanel() {
             <Tabs defaultValue="competitions" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="competitions">Competitions</TabsTrigger>
+                    <TabsTrigger value="results">
+                        <Trophy className="w-4 h-4 mr-2" />
+                        Results
+                    </TabsTrigger>
                     <TabsTrigger value="users">Users</TabsTrigger>
                     <TabsTrigger value="security" className="text-orange-600 data-[state=active]:text-orange-700">
                         <ShieldCheck className="w-4 h-4 mr-2" />
@@ -892,6 +896,77 @@ export default function AdminPanel() {
                                     </Table>
                                 </div>
                             )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="results" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Trophy className="h-5 w-5 text-indigo-600" />
+                                Results Management
+                            </CardTitle>
+                            <CardDescription>Manage competition results, verification, and qualifications</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Competition</TableHead>
+                                            <TableHead>Mode</TableHead>
+                                            <TableHead>Rounds</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {competitions.filter(c => c.isPublished).map(comp => (
+                                            <TableRow key={comp.id}>
+                                                <TableCell className="font-medium">{comp.name}</TableCell>
+                                                <TableCell>
+                                                    {comp.mode === CompetitionMode.TOURNAMENT ? (
+                                                        <Badge className="bg-indigo-100 text-indigo-700">
+                                                            <Layers className="h-3 w-3 mr-1" />
+                                                            Tournament
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">Standard</Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>{comp.rounds?.length || 1} rounds</TableCell>
+                                                <TableCell>
+                                                    {comp.tournamentStatus === TournamentStatus.COMPLETED ? (
+                                                        <Badge className="bg-green-100 text-green-700">Completed</Badge>
+                                                    ) : comp.tournamentStatus === TournamentStatus.ROUND_LIVE ? (
+                                                        <Badge className="bg-blue-100 text-blue-700">Live</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">{comp.tournamentStatus || 'Registration'}</Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => router.push(`/admin/results/${comp.id}`)}
+                                                    >
+                                                        <Trophy className="h-4 w-4 mr-2" />
+                                                        Manage Results
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {competitions.filter(c => c.isPublished).length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                                    No published competitions found
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
