@@ -30,7 +30,9 @@ import {
     Edit3,
     Trash2,
     Award,
-    Layers
+    Layers,
+    Copy,
+    Eye
 } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import {
@@ -43,6 +45,7 @@ import {
     calculateQualifiedCount,
     formatRoundDate
 } from '@/lib/tournament';
+import ScrambleDisplay from '@/components/ScrambleDisplay';
 
 export default function TournamentManagementPage() {
     const { user, isAdmin, loading: authLoading } = useAuth();
@@ -57,6 +60,7 @@ export default function TournamentManagementPage() {
     const [selectedRound, setSelectedRound] = useState(1);
     const [simulationData, setSimulationData] = useState(null);
     const [processing, setProcessing] = useState(false);
+    const [viewingScramble, setViewingScramble] = useState(null);
 
     useEffect(() => {
         if (!authLoading) {
@@ -410,8 +414,9 @@ export default function TournamentManagementPage() {
 
                 {/* Main Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+                    <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="scrambles">Scrambles</TabsTrigger>
                         <TabsTrigger value="verification">Verification</TabsTrigger>
                         <TabsTrigger value="advancement">Advancement</TabsTrigger>
                         <TabsTrigger value="participants">Participants</TabsTrigger>
@@ -783,7 +788,265 @@ export default function TournamentManagementPage() {
                             </CardContent>
                         </Card>
                     </TabsContent>
+
+                    <TabsContent value="scrambles" className="space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Round Scrambles</CardTitle>
+                                <CardDescription>View and manage WCA-compliant scrambles for each round</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-6">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <p className="text-sm text-blue-800">
+                                            <strong>Scramble Management:</strong> All scrambles are WCA-compliant and generated using the official cubing.js library.
+                                            Scrambles are securely stored in Firebase and only visible to admins.
+                                        </p>
+                                    </div>
+
+                                    {/* Current Round Scrambles Highlight */}
+                                    {(() => {
+                                        const currentRound = competition.rounds?.find(r => r.roundNumber === competition.currentRound);
+                                        if (!currentRound) return null;
+
+                                        const currentRoundHasScrambles = competition.scrambles &&
+                                            Object.values(competition.scrambles).some(eventScrambles =>
+                                                eventScrambles && eventScrambles[currentRound.roundNumber]
+                                            );
+
+                                        return (
+                                            <div className="border-2 border-indigo-500 rounded-lg p-4 bg-indigo-50/30">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <h3 className="font-semibold text-indigo-900 flex items-center gap-2 text-lg">
+                                                        <span className="w-8 h-8 rounded-full bg-indigo-600 text-white text-sm flex items-center justify-center">
+                                                            {currentRound.roundNumber}
+                                                        </span>
+                                                        {currentRound.name || `Round ${currentRound.roundNumber}`} - CURRENT ROUND
+                                                        {currentRound.isFinal && <Badge className="bg-yellow-500 text-white ml-2">FINAL</Badge>}
+                                                    </h3>
+                                                    <Badge className={currentRoundHasScrambles ? 'bg-green-100 text-green-700 text-sm' : 'bg-red-100 text-red-700 text-sm'}>
+                                                        {currentRoundHasScrambles ? '✓ Scrambles Ready' : '⚠ Missing Scrambles'}
+                                                    </Badge>
+                                                </div>
+
+                                                {!currentRoundHasScrambles && (
+                                                    <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+                                                        <p className="text-sm text-red-700">
+                                                            <strong>Warning:</strong> No scrambles configured for the current round!
+                                                            Go to the main Admin panel to generate scrambles before starting the round.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {competition.events?.map(eventId => {
+                                                        const eventScrambles = competition.scrambles?.[eventId]?.[currentRound.roundNumber];
+                                                        const scrambleCount = eventScrambles ? Object.keys(eventScrambles).length : 0;
+
+                                                        return (
+                                                            <div key={eventId} className={`p-3 rounded border-2 ${scrambleCount > 0 ? 'bg-white border-gray-200' : 'bg-red-50 border-red-200'}`}>
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="font-medium">{getEventName(eventId)}</span>
+                                                                    <Badge variant={scrambleCount > 0 ? "default" : "destructive"} className="text-xs">
+                                                                        {scrambleCount > 0 ? `${scrambleCount} scrambles` : 'Missing'}
+                                                                    </Badge>
+                                                                </div>
+                                                                {scrambleCount > 0 ? (
+                                                                    <div className="space-y-1">
+                                                                        {Object.entries(eventScrambles)
+                                                                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                                                            .map(([idx, scramble]) => (
+                                                                                <div key={idx} className="text-xs font-mono bg-gray-50 p-2 rounded border flex justify-between items-center">
+                                                                                    <span className="truncate flex-1 mr-2">
+                                                                                        <strong>#{parseInt(idx) + 1}</strong> {scramble}
+                                                                                    </span>
+                                                                                    <div className="flex gap-1">
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-6 px-2 shrink-0"
+                                                                                            onClick={() => setViewingScramble({ eventId, scramble, idx })}
+                                                                                        >
+                                                                                            <Eye className="h-3 w-3" />
+                                                                                        </Button>
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-6 px-2 shrink-0"
+                                                                                            onClick={() => {
+                                                                                                navigator.clipboard.writeText(scramble);
+                                                                                                alert('Scramble copied to clipboard!');
+                                                                                            }}
+                                                                                        >
+                                                                                            <Copy className="h-3 w-3" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs text-red-600 font-medium">⚠ No scrambles configured</p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <div className="border-t pt-4">
+                                        <h3 className="font-semibold mb-4">All Rounds</h3>
+
+                                        {competition.rounds?.map((round) => {
+                                            const isCurrentRound = round.roundNumber === competition.currentRound;
+                                            const hasScrambles = competition.scrambles &&
+                                                Object.values(competition.scrambles).some(eventScrambles =>
+                                                    eventScrambles && eventScrambles[round.roundNumber]
+                                                );
+
+                                            return (
+                                                <div key={round.roundNumber} className={`border rounded-lg p-4 mb-4 ${isCurrentRound ? 'ring-2 ring-indigo-500' : ''}`}>
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <h3 className="font-semibold flex items-center gap-2">
+                                                            <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center ${round.roundNumber === competition.currentRound ? 'bg-indigo-600' : 'bg-gray-400'
+                                                                }`}>
+                                                                {round.roundNumber}
+                                                            </span>
+                                                            {round.name || `Round ${round.roundNumber}`}
+                                                            {round.isFinal && <Badge className="bg-yellow-500 text-white ml-2">Final</Badge>}
+                                                        </h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge className={hasScrambles ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
+                                                                {hasScrambles ? 'Scrambles Set' : 'No Scrambles'}
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {competition.events?.map(eventId => {
+                                                            const eventScrambles = competition.scrambles?.[eventId]?.[round.roundNumber];
+                                                            const scrambleCount = eventScrambles ? Object.keys(eventScrambles).length : 0;
+
+                                                            return (
+                                                                <div key={eventId} className="bg-gray-50 p-3 rounded">
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <span className="font-medium text-sm">{getEventName(eventId)}</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Badge variant="outline" className="text-xs">
+                                                                                {scrambleCount} scrambles
+                                                                            </Badge>
+                                                                            {scrambleCount > 0 && (
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className="h-6 px-2"
+                                                                                    onClick={() => {
+                                                                                        const allScrambles = Object.entries(eventScrambles)
+                                                                                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                                                                            .map(([idx, scramble]) => `Attempt ${parseInt(idx) + 1}: ${scramble}`)
+                                                                                            .join('\n');
+                                                                                        navigator.clipboard.writeText(allScrambles);
+                                                                                        alert(`All ${getEventName(eventId)} scrambles copied!`);
+                                                                                    }}
+                                                                                >
+                                                                                    <Copy className="h-3 w-3" />
+                                                                                </Button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    {scrambleCount > 0 ? (
+                                                                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                                                                            {Object.entries(eventScrambles)
+                                                                                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                                                                .slice(0, 2) // Show first 2 only
+                                                                                .map(([idx, scramble]) => (
+                                                                                    <div key={idx} className="text-xs font-mono bg-white p-2 rounded border truncate">
+                                                                                        {parseInt(idx) + 1}. {scramble}
+                                                                                    </div>
+                                                                                ))}
+                                                                            {scrambleCount > 2 && (
+                                                                                <p className="text-xs text-gray-500 text-center">+{scrambleCount - 2} more scrambles</p>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-xs text-red-500">No scrambles configured</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
                 </Tabs>
+
+                {/* Scramble Viewer Modal */}
+                {viewingScramble && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg max-w-lg w-full p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold">
+                                    {getEventName(viewingScramble.eventId)} Scramble #{parseInt(viewingScramble.idx) + 1}
+                                </h3>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setViewingScramble(null)}
+                                >
+                                    ✕
+                                </Button>
+                            </div>
+
+                            <div className="flex flex-col items-center gap-4">
+                                {/* Scramble Visualization */}
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                    <ScrambleDisplay
+                                        eventId={viewingScramble.eventId}
+                                        scramble={viewingScramble.scramble}
+                                        visualization="2D"
+                                        width={250}
+                                        height={250}
+                                        checkered={true}
+                                    />
+                                </div>
+
+                                {/* Scramble Text */}
+                                <div className="w-full">
+                                    <p className="text-sm font-mono bg-gray-100 p-3 rounded break-words">
+                                        {viewingScramble.scramble}
+                                    </p>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-2 w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(viewingScramble.scramble);
+                                            alert('Scramble copied to clipboard!');
+                                        }}
+                                    >
+                                        <Copy className="h-4 w-4 mr-2" />
+                                        Copy Scramble
+                                    </Button>
+                                    <Button
+                                        className="flex-1"
+                                        onClick={() => setViewingScramble(null)}
+                                    >
+                                        Close
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
