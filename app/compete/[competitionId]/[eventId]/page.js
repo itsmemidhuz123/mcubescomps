@@ -8,10 +8,11 @@ import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer, Shield } from 'lucide-react';
+import { ArrowLeft, Eye, AlertTriangle, Check, Play, Square, Mail, Video, Clock, Timer, Shield, Layers } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import { AntiCheatDetector, getDeviceFingerprint, getUserIP } from '@/lib/antiCheat';
+import { CompetitionMode, TournamentStatus, getRoundStatus, canUserCompeteInRound } from '@/lib/tournament';
 
 // Helper to format time from milliseconds
 function formatTimeDisplay(ms) {
@@ -29,6 +30,7 @@ function TimerPage() {
     const [competition, setCompetition] = useState(null);
     const [eventConfig, setEventConfig] = useState(null);
     const [registration, setRegistration] = useState(null);
+    const [tournamentParticipant, setTournamentParticipant] = useState(null);
     const [currentAttempt, setCurrentAttempt] = useState(1);
     const [phase, setPhase] = useState('intro');
     const [inspectionTime, setInspectionTime] = useState(15000);
@@ -42,6 +44,8 @@ function TimerPage() {
     const [loading, setLoading] = useState(true);
     const [userIp, setUserIp] = useState(null);
     const [deviceInfo, setDeviceInfo] = useState(null);
+    const [roundLocked, setRoundLocked] = useState(false);
+    const [roundLockedReason, setRoundLockedReason] = useState('');
 
     // Cut-off tracking state
     const [passedCutOff, setPassedCutOff] = useState(false);
@@ -166,6 +170,82 @@ function TimerPage() {
                 alert('You are not registered for this event!');
                 router.push(`/competition/${params.competitionId}`);
                 return;
+            }
+
+            // Tournament mode checks
+            if (compData.mode === CompetitionMode.TOURNAMENT) {
+                const participantId = `${user.uid}_${params.competitionId}`;
+                const participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+
+                if (!participantDoc.exists()) {
+                    alert('Tournament participant record not found. Please re-register.');
+                    router.push(`/competition/${params.competitionId}`);
+                    return;
+                }
+
+                const participantData = participantDoc.data();
+                setTournamentParticipant({ id: participantDoc.id, ...participantData });
+
+                // Check if eliminated
+                if (participantData.eliminated) {
+                    setRoundLocked(true);
+                    setRoundLockedReason('You have been eliminated from this tournament.');
+                    setPhase('eliminated');
+                    setLoading(false);
+                    return;
+                }
+
+                // Check current round eligibility
+                const currentRound = compData.currentRound || 1;
+                const round = compData.rounds?.find(r => r.roundNumber === currentRound);
+
+                if (participantData.currentRound < currentRound) {
+                    setRoundLocked(true);
+                    setRoundLockedReason(`You did not qualify for Round ${currentRound}.`);
+                    setPhase('eliminated');
+                    setLoading(false);
+                    return;
+                }
+
+                // Check round status
+                if (round) {
+                    const roundStatus = getRoundStatus(round, compData);
+
+                    if (roundStatus === 'waiting') {
+                        setRoundLocked(true);
+                        setRoundLockedReason(`Round ${currentRound} starts on ${round.scheduledDate ? new Date(round.scheduledDate).toLocaleString() : 'a scheduled date'}.`);
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (roundStatus === 'verification') {
+                        setRoundLocked(true);
+                        setRoundLockedReason('Current round is under verification. Please wait for results to be verified.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (roundStatus === 'advancing') {
+                        setRoundLocked(true);
+                        setRoundLockedReason('Round advancement in progress. Please wait.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (roundStatus === 'completed') {
+                        setRoundLocked(true);
+                        setRoundLockedReason('This round has been completed.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (roundStatus === 'locked' || roundStatus === 'upcoming') {
+                        setRoundLocked(true);
+                        setRoundLockedReason(`Round ${currentRound} is not yet available.`);
+                        setLoading(false);
+                        return;
+                    }
+                }
             }
 
             await loadSolvesAndCheckDNF(compData, config);
@@ -610,7 +690,7 @@ function TimerPage() {
             const anyFlagged = solves.some(s => s.flagged);
             const totalAnomalyScore = solves.reduce((sum, s) => sum + (s.anomalyScore || 0), 0);
 
-            await addDoc(collection(db, 'results'), {
+            const resultData = {
                 userId: user.uid,
                 userEmail: user.email,
                 userName: userProfile?.displayName || 'Unknown',
@@ -626,7 +706,27 @@ function TimerPage() {
                 flagged: anyFlagged,
                 totalAnomalyScore: totalAnomalyScore,
                 createdAt: new Date().toISOString()
-            });
+            };
+
+            // Save to standard results collection
+            await addDoc(collection(db, 'results'), resultData);
+
+            // For tournament mode, also save to roundResults
+            if (competition?.mode === CompetitionMode.TOURNAMENT) {
+                const currentRound = competition.currentRound || 1;
+                const round = competition.rounds?.find(r => r.roundNumber === currentRound);
+                const requireVerification = round?.requireVerification !== false;
+
+                const roundResultData = {
+                    ...resultData,
+                    roundNumber: currentRound,
+                    verified: false,
+                    flagged: anyFlagged,
+                    videoUrl: null
+                };
+
+                await addDoc(collection(db, 'roundResults'), roundResultData);
+            }
         } catch (error) {
             console.error('Failed to save results:', error);
         }
@@ -676,6 +776,17 @@ function TimerPage() {
                             <div className="text-center mb-8">
                                 <h1 className="text-3xl font-bold mb-2"><EventIcon eventId={params.eventId} size={28} /> {getEventName(params.eventId)}</h1>
                                 <p className="text-gray-400">{competition.name}</p>
+                                {competition.mode === CompetitionMode.TOURNAMENT && (
+                                    <div className="mt-3 flex items-center justify-center gap-2">
+                                        <Badge className="bg-indigo-600 text-white">
+                                            <Layers className="h-3 w-3 mr-1" />
+                                            Tournament - Round {competition.currentRound || 1}
+                                        </Badge>
+                                        {competition.rounds?.find(r => r.roundNumber === (competition.currentRound || 1))?.isFinal && (
+                                            <Badge className="bg-yellow-600 text-white">Final Round</Badge>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-6">
@@ -805,6 +916,12 @@ function TimerPage() {
                                             <span className="text-green-400">✓</span>
                                             Results are automatically calculated and saved
                                         </li>
+                                        {competition?.mode === CompetitionMode.TOURNAMENT && (
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-indigo-400">🏆</span>
+                                                <strong>Tournament:</strong> Your results will be verified by admin before round advancement
+                                            </li>
+                                        )}
                                     </ul>
                                 </div>
 

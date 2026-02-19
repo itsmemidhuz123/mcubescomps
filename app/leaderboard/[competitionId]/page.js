@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Trophy, Medal, Search, Filter, Clock, Timer, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Search, Filter, Clock, Timer, AlertTriangle, Layers, CheckCircle, XCircle } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import {
@@ -28,15 +28,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { CompetitionMode } from '@/lib/tournament';
 
 function LeaderboardPage() {
     const router = useRouter();
     const params = useParams();
     const [competition, setCompetition] = useState(null);
     const [leaderboards, setLeaderboards] = useState({});
+    const [roundResults, setRoundResults] = useState({});
     const [registeredUsers, setRegisteredUsers] = useState([]);
+    const [tournamentParticipants, setTournamentParticipants] = useState([]);
     const [selectedEvent, setSelectedEvent] = useState(null);
-    const [sortBy, setSortBy] = useState('average'); // average or single
+    const [selectedRound, setSelectedRound] = useState(null);
+    const [sortBy, setSortBy] = useState('average');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
 
@@ -54,11 +58,19 @@ function LeaderboardPage() {
                 setCompetition({ id: compDoc.id, ...data });
                 setSelectedEvent(data.events?.[0]);
 
-                // Fetch registrations and leaderboards
-                await Promise.all([
-                    fetchRegisteredUsers(),
-                    fetchLeaderboards(data.events)
-                ]);
+                if (data.mode === CompetitionMode.TOURNAMENT) {
+                    setSelectedRound(data.currentRound || 1);
+                    await Promise.all([
+                        fetchTournamentParticipants(),
+                        fetchRoundResults(),
+                        fetchRegisteredUsers()
+                    ]);
+                } else {
+                    await Promise.all([
+                        fetchRegisteredUsers(),
+                        fetchLeaderboards(data.events)
+                    ]);
+                }
             }
         } catch (error) {
             console.error('Failed to fetch competition:', error);
@@ -78,7 +90,6 @@ function LeaderboardPage() {
             const users = [];
             for (const regDoc of regsSnapshot.docs) {
                 const regData = regDoc.data();
-                // Fetch user details
                 try {
                     const userDoc = await getDoc(doc(db, 'users', regData.userId));
                     const userData = userDoc.exists() ? userDoc.data() : {};
@@ -100,6 +111,65 @@ function LeaderboardPage() {
             setRegisteredUsers(users);
         } catch (error) {
             console.error('Failed to fetch registered users:', error);
+        }
+    }
+
+    async function fetchTournamentParticipants() {
+        try {
+            const participantsQuery = query(
+                collection(db, 'tournamentParticipants'),
+                where('competitionId', '==', params.competitionId)
+            );
+            const snapshot = await getDocs(participantsQuery);
+            const participantsData = [];
+
+            for (const docSnap of snapshot.docs) {
+                const data = docSnap.data();
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', data.userId));
+                    const userData = userDoc.exists() ? userDoc.data() : {};
+                    participantsData.push({
+                        id: docSnap.id,
+                        ...data,
+                        displayName: userData.displayName || data.userName || 'Unknown',
+                        photoURL: userData.photoURL,
+                        country: userData.country || 'Unknown'
+                    });
+                } catch (e) {
+                    participantsData.push({
+                        id: docSnap.id,
+                        ...data
+                    });
+                }
+            }
+
+            setTournamentParticipants(participantsData);
+        } catch (error) {
+            console.error('Failed to fetch tournament participants:', error);
+        }
+    }
+
+    async function fetchRoundResults() {
+        try {
+            const resultsQuery = query(
+                collection(db, 'roundResults'),
+                where('competitionId', '==', params.competitionId)
+            );
+            const snapshot = await getDocs(resultsQuery);
+            const resultsByRound = {};
+
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                const roundNum = data.roundNumber || 1;
+                if (!resultsByRound[roundNum]) {
+                    resultsByRound[roundNum] = [];
+                }
+                resultsByRound[roundNum].push({ id: docSnap.id, ...data });
+            });
+
+            setRoundResults(resultsByRound);
+        } catch (error) {
+            console.error('Failed to fetch round results:', error);
         }
     }
 
@@ -157,19 +227,101 @@ function LeaderboardPage() {
     function getCombinedLeaderboard() {
         if (!selectedEvent || !competition) return [];
 
+        // Tournament mode - use round results
+        if (competition.mode === CompetitionMode.TOURNAMENT) {
+            const roundNum = selectedRound || competition.currentRound || 1;
+            const results = roundResults[roundNum] || [];
+            const resultsForEvent = results.filter(r => r.eventId === selectedEvent);
+
+            // Get participant data
+            const participantMap = new Map(tournamentParticipants.map(p => [p.userId, p]));
+
+            // Create results map
+            const resultsMap = new Map(resultsForEvent.map(r => [r.userId, r]));
+
+            // Get users registered for this event
+            const eventUsers = registeredUsers.filter(u => u.events?.includes(selectedEvent));
+
+            const combined = eventUsers.map(user => {
+                const result = resultsMap.get(user.id);
+                const participant = participantMap.get(user.id);
+
+                if (result) {
+                    return {
+                        ...result,
+                        userName: result.userName || user.displayName || user.userName,
+                        wcaStyleId: result.wcaStyleId || user.wcaStyleId,
+                        country: result.country || user.country,
+                        photoURL: user.photoURL,
+                        hasResults: true,
+                        participantStatus: participant?.eliminated ? 'eliminated' :
+                            participant?.qualified ? 'qualified' : 'active',
+                        currentRound: participant?.currentRound || 1
+                    };
+                }
+
+                return {
+                    userId: user.id,
+                    userName: user.displayName || user.userName,
+                    wcaStyleId: user.wcaStyleId,
+                    country: user.country,
+                    photoURL: user.photoURL,
+                    average: null,
+                    bestSingle: null,
+                    times: [],
+                    hasResults: false,
+                    flagged: false,
+                    participantStatus: participant?.eliminated ? 'eliminated' :
+                        participant?.qualified ? 'qualified' : 'active',
+                    currentRound: participant?.currentRound || 1
+                };
+            });
+
+            // Sort
+            combined.sort((a, b) => {
+                if (a.hasResults && !b.hasResults) return -1;
+                if (!a.hasResults && b.hasResults) return 1;
+                if (!a.hasResults && !b.hasResults) {
+                    return (a.userName || '').localeCompare(b.userName || '');
+                }
+
+                if (sortBy === 'single') {
+                    const aTime = a.bestSingle === Infinity || a.bestSingle === 'DNF' ? Infinity : (a.bestSingle || Infinity);
+                    const bTime = b.bestSingle === Infinity || b.bestSingle === 'DNF' ? Infinity : (b.bestSingle || Infinity);
+                    return aTime - bTime;
+                } else {
+                    const aAvg = a.average === Infinity || a.average === 'DNF' || a.average === null ? Infinity : a.average;
+                    const bAvg = b.average === Infinity || b.average === 'DNF' || b.average === null ? Infinity : b.average;
+                    if (aAvg === bAvg) {
+                        const aTime = a.bestSingle === Infinity ? Infinity : (a.bestSingle || Infinity);
+                        const bTime = b.bestSingle === Infinity ? Infinity : (b.bestSingle || Infinity);
+                        return aTime - bTime;
+                    }
+                    return aAvg - bAvg;
+                }
+            });
+
+            if (searchQuery) {
+                return combined.filter(entry =>
+                    (entry.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (entry.wcaStyleId || '').toLowerCase().includes(searchQuery.toLowerCase())
+                );
+            }
+
+            return combined;
+        }
+
+        // Standard mode
         const results = leaderboards[selectedEvent] || [];
         const resultsMap = new Map(results.map(r => [r.userId, r]));
 
-        // Get users registered for this event
         const eventUsers = registeredUsers.filter(u => u.events?.includes(selectedEvent));
 
-        // Create combined list
         const combined = eventUsers.map(user => {
             const result = resultsMap.get(user.id);
             if (result) {
                 return result;
             }
-            // User registered but no results yet
             return {
                 userId: user.id,
                 userName: user.displayName || user.userName,
@@ -184,18 +336,13 @@ function LeaderboardPage() {
             };
         });
 
-        // Sort
         combined.sort((a, b) => {
-            // Users with results come first
             if (a.hasResults && !b.hasResults) return -1;
             if (!a.hasResults && b.hasResults) return 1;
-
-            // If neither has results, sort alphabetically
             if (!a.hasResults && !b.hasResults) {
                 return (a.userName || '').localeCompare(b.userName || '');
             }
 
-            // Both have results - sort by selected metric
             if (sortBy === 'single') {
                 const aTime = a.bestSingle === Infinity || a.bestSingle === 'DNF' ? Infinity : (a.bestSingle || Infinity);
                 const bTime = b.bestSingle === Infinity || b.bestSingle === 'DNF' ? Infinity : (b.bestSingle || Infinity);
@@ -204,7 +351,6 @@ function LeaderboardPage() {
                 const aAvg = a.average === Infinity || a.average === 'DNF' || a.average === null ? Infinity : a.average;
                 const bAvg = b.average === Infinity || b.average === 'DNF' || b.average === null ? Infinity : b.average;
                 if (aAvg === bAvg) {
-                    // Tiebreaker: best single
                     const aTime = a.bestSingle === Infinity ? Infinity : (a.bestSingle || Infinity);
                     const bTime = b.bestSingle === Infinity ? Infinity : (b.bestSingle || Infinity);
                     return aTime - bTime;
@@ -213,7 +359,6 @@ function LeaderboardPage() {
             }
         });
 
-        // Filter by search
         if (searchQuery) {
             return combined.filter(entry =>
                 (entry.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -231,9 +376,18 @@ function LeaderboardPage() {
         return `${seconds}s`;
     };
 
-    const getRankBadge = (index, hasResults, eliminatedByCutOff) => {
+    const getRankBadge = (index, hasResults, eliminatedByCutOff, participantStatus) => {
         if (!hasResults) return <Badge variant="outline" className="text-xs bg-gray-50 text-gray-400 border-gray-200">Registered</Badge>;
         if (eliminatedByCutOff) return <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-200">Cut-Off</Badge>;
+
+        // Tournament status badges
+        if (participantStatus === 'eliminated') {
+            return <Badge className="text-xs bg-red-100 text-red-700 border-red-200"><XCircle className="h-3 w-3 mr-1" />Eliminated</Badge>;
+        }
+        if (participantStatus === 'qualified') {
+            return <Badge className="text-xs bg-green-100 text-green-700 border-green-200"><CheckCircle className="h-3 w-3 mr-1" />Qualified</Badge>;
+        }
+
         if (index === 0) return <Medal className="h-6 w-6 text-yellow-500" />;
         if (index === 1) return <Medal className="h-6 w-6 text-gray-400" />;
         if (index === 2) return <Medal className="h-6 w-6 text-orange-600" />;
@@ -285,9 +439,50 @@ function LeaderboardPage() {
                         </div>
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900">{competition.name}</h1>
-                            <p className="text-gray-500">Leaderboard • {registeredUsers.length} Participants</p>
+                            <p className="text-gray-500 flex items-center gap-2">
+                                Leaderboard • {registeredUsers.length} Participants
+                                {competition.mode === CompetitionMode.TOURNAMENT && (
+                                    <Badge className="bg-indigo-100 text-indigo-700">
+                                        <Layers className="h-3 w-3 mr-1" />
+                                        Tournament
+                                    </Badge>
+                                )}
+                            </p>
                         </div>
                     </div>
+
+                    {/* Tournament Round Selector */}
+                    {competition.mode === CompetitionMode.TOURNAMENT && (
+                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="font-semibold text-indigo-900 flex items-center gap-2">
+                                    <Layers className="h-4 w-4" />
+                                    Round Selection
+                                </h3>
+                                <Badge className="bg-indigo-600 text-white">
+                                    Current: Round {competition.currentRound || 1}
+                                </Badge>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {competition.rounds?.map(round => (
+                                    <Button
+                                        key={round.roundNumber}
+                                        variant={selectedRound === round.roundNumber ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setSelectedRound(round.roundNumber)}
+                                        className={`
+                      ${selectedRound === round.roundNumber
+                                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}
+                    `}
+                                    >
+                                        {round.name || `Round ${round.roundNumber}`}
+                                        {round.isFinal && <span className="ml-1">(Final)</span>}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Event Tabs */}
                     <div className="flex flex-wrap gap-2 mb-6">
@@ -382,7 +577,7 @@ function LeaderboardPage() {
                                             >
                                                 <TableCell>
                                                     <div className="flex items-center justify-center">
-                                                        {getRankBadge(index, entry.hasResults, entry.eliminatedByCutOff)}
+                                                        {getRankBadge(index, entry.hasResults, entry.eliminatedByCutOff, entry.participantStatus)}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>

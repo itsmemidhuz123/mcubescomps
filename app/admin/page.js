@@ -16,8 +16,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2 } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
+import {
+    CompetitionMode,
+    TournamentStatus,
+    QualifyType,
+    getDefaultRound,
+    getDefaultTournamentSettings,
+    formatRoundDate
+} from '@/lib/tournament';
 
 // Helper to format milliseconds to MM:SS display
 function formatTimeInput(ms) {
@@ -84,7 +92,11 @@ export default function AdminPanel() {
         selectedEvents: [],
         eventSettings: {},
         scrambles: {},
-        isPublished: false
+        isPublished: false,
+        mode: CompetitionMode.STANDARD,
+        rounds: [getDefaultRound(1, false)],
+        currentRound: 1,
+        tournamentStatus: TournamentStatus.REGISTRATION
     });
 
     const [couponForm, setCouponForm] = useState({
@@ -380,7 +392,11 @@ export default function AdminPanel() {
             selectedEvents: [],
             eventSettings: {},
             scrambles: {},
-            isPublished: false
+            isPublished: false,
+            mode: CompetitionMode.STANDARD,
+            rounds: [getDefaultRound(1, false)],
+            currentRound: 1,
+            tournamentStatus: TournamentStatus.REGISTRATION
         });
         setEditingComp(null);
     };
@@ -403,7 +419,11 @@ export default function AdminPanel() {
             selectedEvents: comp.events || [],
             eventSettings: comp.eventSettings || {},
             scrambles: comp.scrambles || {},
-            isPublished: comp.isPublished || false
+            isPublished: comp.isPublished || false,
+            mode: comp.mode || CompetitionMode.STANDARD,
+            rounds: comp.rounds || [getDefaultRound(1, false)],
+            currentRound: comp.currentRound || 1,
+            tournamentStatus: comp.tournamentStatus || TournamentStatus.REGISTRATION
         });
     };
 
@@ -411,6 +431,11 @@ export default function AdminPanel() {
         e.preventDefault();
         if (formData.selectedEvents.length === 0) {
             alert('Please select at least one event');
+            return;
+        }
+
+        if (formData.mode === CompetitionMode.TOURNAMENT && (!formData.rounds || formData.rounds.length === 0)) {
+            alert('Tournament mode requires at least one round');
             return;
         }
 
@@ -432,8 +457,16 @@ export default function AdminPanel() {
                 eventSettings: formData.eventSettings,
                 scrambles: formData.scrambles,
                 isPublished: formData.isPublished,
+                mode: formData.mode,
                 updatedAt: new Date().toISOString()
             };
+
+            if (formData.mode === CompetitionMode.TOURNAMENT) {
+                compData.rounds = formData.rounds;
+                compData.currentRound = formData.currentRound || 1;
+                compData.tournamentStatus = formData.tournamentStatus || TournamentStatus.REGISTRATION;
+                compData.winners = editingComp?.winners || [];
+            }
 
             if (editingComp) {
                 await updateDoc(doc(db, 'competitions', editingComp.id), compData);
@@ -898,6 +931,270 @@ export default function AdminPanel() {
                                     <Input type="number" value={formData.solveLimit} onChange={e => setFormData({ ...formData, solveLimit: e.target.value })} required />
                                 </div>
 
+                                {/* TOURNAMENT MODE CONFIGURATION */}
+                                <div className="space-y-4 border p-4 rounded-md bg-indigo-50/50 dark:bg-indigo-950/20">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Layers className="h-5 w-5 text-indigo-500" />
+                                            <Label className="text-lg font-semibold text-indigo-900 dark:text-indigo-100">Competition Mode</Label>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="radio"
+                                                    id="mode-standard"
+                                                    name="mode"
+                                                    value={CompetitionMode.STANDARD}
+                                                    checked={formData.mode === CompetitionMode.STANDARD}
+                                                    onChange={() => setFormData({
+                                                        ...formData,
+                                                        mode: CompetitionMode.STANDARD,
+                                                        rounds: [getDefaultRound(1, false)]
+                                                    })}
+                                                    className="h-4 w-4"
+                                                />
+                                                <Label htmlFor="mode-standard" className="font-normal">Standard</Label>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="radio"
+                                                    id="mode-tournament"
+                                                    name="mode"
+                                                    value={CompetitionMode.TOURNAMENT}
+                                                    checked={formData.mode === CompetitionMode.TOURNAMENT}
+                                                    onChange={() => setFormData({
+                                                        ...formData,
+                                                        mode: CompetitionMode.TOURNAMENT,
+                                                        rounds: [
+                                                            getDefaultRound(1, false),
+                                                            { ...getDefaultRound(2, false), qualifyType: QualifyType.PERCENTAGE, qualifyValue: 50 },
+                                                            { ...getDefaultRound(3, true), qualifyType: QualifyType.FIXED, qualifyValue: 3 }
+                                                        ]
+                                                    })}
+                                                    className="h-4 w-4"
+                                                />
+                                                <Label htmlFor="mode-tournament" className="font-normal">Tournament (Multi-Round)</Label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        {formData.mode === CompetitionMode.STANDARD
+                                            ? 'Standard competition: All participants compete in a single round.'
+                                            : 'Tournament mode: Multiple rounds with qualification cuts. Admin controls advancement.'}
+                                    </p>
+
+                                    {formData.mode === CompetitionMode.TOURNAMENT && (
+                                        <div className="space-y-4 mt-4 animate-in fade-in">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Label className="font-semibold text-indigo-800 dark:text-indigo-200">Round Configuration</Label>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        const newRoundNumber = formData.rounds.length + 1;
+                                                        const isFinal = window.confirm('Should this be the final round?');
+                                                        setFormData({
+                                                            ...formData,
+                                                            rounds: [...formData.rounds, getDefaultRound(newRoundNumber, isFinal)]
+                                                        });
+                                                    }}
+                                                    className="text-indigo-600 border-indigo-300 hover:bg-indigo-50"
+                                                >
+                                                    <Plus className="h-4 w-4 mr-1" /> Add Round
+                                                </Button>
+                                            </div>
+
+                                            {formData.rounds.map((round, index) => (
+                                                <Card key={index} className="bg-white dark:bg-gray-800 border-indigo-200 dark:border-indigo-800">
+                                                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                                                        <CardTitle className="text-base flex items-center gap-2">
+                                                            <Settings2 className="h-4 w-4 text-indigo-500" />
+                                                            {round.name || `Round ${round.roundNumber}`}
+                                                            {round.isFinal && <Badge className="bg-yellow-500 text-white ml-2">Final</Badge>}
+                                                        </CardTitle>
+                                                        {formData.rounds.length > 1 && (
+                                                            <div className="flex gap-1">
+                                                                {index > 0 && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => {
+                                                                            const newRounds = [...formData.rounds];
+                                                                            [newRounds[index - 1], newRounds[index]] = [newRounds[index], newRounds[index - 1]];
+                                                                            newRounds.forEach((r, i) => r.roundNumber = i + 1);
+                                                                            setFormData({ ...formData, rounds: newRounds });
+                                                                        }}
+                                                                    >
+                                                                        <ChevronUp className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                                {index < formData.rounds.length - 1 && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => {
+                                                                            const newRounds = [...formData.rounds];
+                                                                            [newRounds[index], newRounds[index + 1]] = [newRounds[index + 1], newRounds[index]];
+                                                                            newRounds.forEach((r, i) => r.roundNumber = i + 1);
+                                                                            setFormData({ ...formData, rounds: newRounds });
+                                                                        }}
+                                                                    >
+                                                                        <ChevronDown className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="text-red-500 hover:text-red-700"
+                                                                    onClick={() => {
+                                                                        if (confirm('Remove this round?')) {
+                                                                            const newRounds = formData.rounds.filter((_, i) => i !== index);
+                                                                            newRounds.forEach((r, i) => r.roundNumber = i + 1);
+                                                                            setFormData({ ...formData, rounds: newRounds });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </CardHeader>
+                                                    <CardContent className="space-y-4">
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                            <div className="space-y-2">
+                                                                <Label className="text-xs text-gray-500">Round Name</Label>
+                                                                <Input
+                                                                    value={round.name || ''}
+                                                                    onChange={(e) => {
+                                                                        const newRounds = [...formData.rounds];
+                                                                        newRounds[index].name = e.target.value;
+                                                                        setFormData({ ...formData, rounds: newRounds });
+                                                                    }}
+                                                                    placeholder={`Round ${round.roundNumber}`}
+                                                                />
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label className="text-xs text-gray-500">Qualification Type</Label>
+                                                                <Select
+                                                                    value={round.qualifyType || QualifyType.PERCENTAGE}
+                                                                    onValueChange={(val) => {
+                                                                        const newRounds = [...formData.rounds];
+                                                                        newRounds[index].qualifyType = val;
+                                                                        setFormData({ ...formData, rounds: newRounds });
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger>
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value={QualifyType.PERCENTAGE}>Percentage (%)</SelectItem>
+                                                                        <SelectItem value={QualifyType.FIXED}>Fixed Number</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label className="text-xs text-gray-500">
+                                                                    {round.qualifyType === QualifyType.PERCENTAGE ? 'Qualify %' : 'Qualify Count'}
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={round.qualifyValue || 50}
+                                                                    onChange={(e) => {
+                                                                        const newRounds = [...formData.rounds];
+                                                                        newRounds[index].qualifyValue = parseInt(e.target.value) || 0;
+                                                                        setFormData({ ...formData, rounds: newRounds });
+                                                                    }}
+                                                                    min={1}
+                                                                    max={round.qualifyType === QualifyType.PERCENTAGE ? 100 : undefined}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            <div className="space-y-2">
+                                                                <Label className="text-xs text-gray-500">Scheduled Date (Optional)</Label>
+                                                                <Input
+                                                                    type="datetime-local"
+                                                                    value={round.scheduledDate ? new Date(round.scheduledDate).toISOString().slice(0, 16) : ''}
+                                                                    onChange={(e) => {
+                                                                        const newRounds = [...formData.rounds];
+                                                                        newRounds[index].scheduledDate = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                                        setFormData({ ...formData, rounds: newRounds });
+                                                                    }}
+                                                                />
+                                                            </div>
+
+                                                            <div className="flex items-center space-x-2 pt-6">
+                                                                <Checkbox
+                                                                    id={`verify-${index}`}
+                                                                    checked={round.requireVerification !== false}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const newRounds = [...formData.rounds];
+                                                                        newRounds[index].requireVerification = checked;
+                                                                        setFormData({ ...formData, rounds: newRounds });
+                                                                    }}
+                                                                />
+                                                                <Label htmlFor={`verify-${index}`} className="text-sm">
+                                                                    Require admin verification before advancement
+                                                                </Label>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`final-${index}`}
+                                                                checked={round.isFinal || false}
+                                                                onCheckedChange={(checked) => {
+                                                                    const newRounds = [...formData.rounds];
+                                                                    newRounds[index].isFinal = checked;
+                                                                    if (checked) {
+                                                                        newRounds[index].name = newRounds[index].name || 'Final';
+                                                                        newRounds[index].qualifyType = QualifyType.FIXED;
+                                                                        newRounds[index].qualifyValue = 3;
+                                                                    }
+                                                                    setFormData({ ...formData, rounds: newRounds });
+                                                                }}
+                                                            />
+                                                            <Label htmlFor={`final-${index}`} className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                                                                This is the Final Round (determines winners)
+                                                            </Label>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+
+                                            <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg text-sm text-indigo-800 dark:text-indigo-200">
+                                                <strong>Round Advancement Preview:</strong>
+                                                <ul className="mt-2 space-y-1">
+                                                    {formData.rounds.map((round, idx) => {
+                                                        const prevRound = idx > 0 ? formData.rounds[idx - 1] : null;
+                                                        let qualifyDesc = 'All registered';
+                                                        if (prevRound) {
+                                                            qualifyDesc = prevRound.qualifyType === QualifyType.PERCENTAGE
+                                                                ? `Top ${prevRound.qualifyValue}% from ${prevRound.name}`
+                                                                : `Top ${prevRound.qualifyValue} from ${prevRound.name}`;
+                                                        }
+                                                        return (
+                                                            <li key={idx} className="flex items-center gap-2">
+                                                                <Badge variant="outline" className="text-xs">{round.roundNumber}</Badge>
+                                                                <span>{round.name || `Round ${round.roundNumber}`}</span>
+                                                                <span className="text-indigo-600 dark:text-indigo-400">← {qualifyDesc}</span>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="flex items-center space-x-2 border p-4 rounded-md">
                                     <Switch
                                         id="published"
@@ -1085,6 +1382,7 @@ export default function AdminPanel() {
                                     <TableHead>Name</TableHead>
                                     <TableHead>Dates</TableHead>
                                     <TableHead>Type</TableHead>
+                                    <TableHead>Mode</TableHead>
                                     <TableHead>Events</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Actions</TableHead>
@@ -1105,12 +1403,33 @@ export default function AdminPanel() {
                                                 {comp.type} {comp.type === 'PAID' && `(${comp.currency})`}
                                             </Badge>
                                         </TableCell>
+                                        <TableCell>
+                                            {comp.mode === CompetitionMode.TOURNAMENT ? (
+                                                <Badge className="bg-indigo-600">
+                                                    <Layers className="h-3 w-3 mr-1" />
+                                                    Tournament ({comp.rounds?.length || 0} rounds)
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline">Standard</Badge>
+                                            )}
+                                        </TableCell>
                                         <TableCell>{comp.events?.length || 0} Events</TableCell>
                                         <TableCell>
                                             {comp.isPublished ? <Badge className="bg-green-600">Published</Badge> : <Badge variant="outline">Draft</Badge>}
                                         </TableCell>
                                         <TableCell>
                                             <Button variant="ghost" size="sm" onClick={() => loadCompForEdit(comp)}>Edit</Button>
+                                            {comp.mode === CompetitionMode.TOURNAMENT && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => router.push(`/admin/tournament/${comp.id}`)}
+                                                    className="text-indigo-600 hover:text-indigo-700"
+                                                >
+                                                    <Settings2 className="h-4 w-4 mr-1" />
+                                                    Manage
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}

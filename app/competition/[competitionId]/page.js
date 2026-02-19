@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,10 +12,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer, Tag, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer, Tag, CheckCircle, XCircle, Loader2, Layers } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
+import { CompetitionMode, TournamentStatus } from '@/lib/tournament';
 
 // Helper to format time from milliseconds
 function formatTimeDisplay(ms) {
@@ -433,6 +434,22 @@ function CompetitionDetail() {
                 createdAt: new Date().toISOString()
             });
 
+            if (competition.mode === CompetitionMode.TOURNAMENT) {
+                const participantId = `${user.uid}_${params.competitionId}`;
+                await setDoc(doc(db, 'tournamentParticipants', participantId), {
+                    competitionId: params.competitionId,
+                    userId: user.uid,
+                    userEmail: user.email,
+                    userName: userProfile?.displayName || 'Unknown',
+                    wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                    currentRound: 1,
+                    qualified: false,
+                    eliminated: false,
+                    registeredEvents: selectedEvents,
+                    createdAt: new Date().toISOString()
+                });
+            }
+
             try {
                 await updateDoc(doc(db, 'competitions', params.competitionId), {
                     participantCount: increment(1)
@@ -508,6 +525,22 @@ function CompetitionDetail() {
                 couponCode: appliedCoupon.coupon.code,
                 createdAt: new Date().toISOString()
             });
+
+            if (competition.mode === CompetitionMode.TOURNAMENT) {
+                const participantId = `${user.uid}_${params.competitionId}`;
+                await setDoc(doc(db, 'tournamentParticipants', participantId), {
+                    competitionId: params.competitionId,
+                    userId: user.uid,
+                    userEmail: user.email,
+                    userName: userProfile?.displayName || 'Unknown',
+                    wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                    currentRound: 1,
+                    qualified: false,
+                    eliminated: false,
+                    registeredEvents: selectedEvents,
+                    createdAt: new Date().toISOString()
+                });
+            }
 
             await addDoc(collection(db, 'payments'), {
                 userId: user.uid,
@@ -634,6 +667,22 @@ function CompetitionDetail() {
                     createdAt: new Date().toISOString()
                 });
 
+                if (competition.mode === CompetitionMode.TOURNAMENT) {
+                    const participantId = `${user.uid}_${params.competitionId}`;
+                    await setDoc(doc(db, 'tournamentParticipants', participantId), {
+                        competitionId: params.competitionId,
+                        userId: user.uid,
+                        userEmail: user.email,
+                        userName: userProfile?.displayName || 'Unknown',
+                        wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                        currentRound: 1,
+                        qualified: false,
+                        eliminated: false,
+                        registeredEvents: selectedEvents,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+
                 await addDoc(collection(db, 'payments'), {
                     userId: user.uid,
                     userEmail: user.email,
@@ -722,6 +771,22 @@ function CompetitionDetail() {
                             couponCode: appliedCoupon?.coupon?.code || null,
                             createdAt: new Date().toISOString()
                         });
+
+                        if (competition.mode === CompetitionMode.TOURNAMENT) {
+                            const participantId = `${user.uid}_${params.competitionId}`;
+                            await setDoc(doc(db, 'tournamentParticipants', participantId), {
+                                competitionId: params.competitionId,
+                                userId: user.uid,
+                                userEmail: user.email,
+                                userName: userProfile?.displayName || 'Unknown',
+                                wcaStyleId: userProfile?.wcaStyleId || 'N/A',
+                                currentRound: 1,
+                                qualified: false,
+                                eliminated: false,
+                                registeredEvents: selectedEvents,
+                                createdAt: new Date().toISOString()
+                            });
+                        }
 
                         await addDoc(collection(db, 'payments'), {
                             userId: user.uid,
@@ -843,7 +908,7 @@ function CompetitionDetail() {
                     <CardHeader>
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
+                                <div className="flex items-center gap-3 mb-2 flex-wrap">
                                     <Badge variant="outline">ONLINE</Badge>
                                     <Badge className={
                                         compStatus.status === 'live' ? 'bg-green-100 text-green-700' :
@@ -861,6 +926,12 @@ function CompetitionDetail() {
                                     <Badge className={competition.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}>
                                         {competition.type === 'FREE' ? 'FREE' : 'PAID'}
                                     </Badge>
+                                    {competition.mode === CompetitionMode.TOURNAMENT && (
+                                        <Badge className="bg-indigo-100 text-indigo-700">
+                                            <Layers className="h-3 w-3 mr-1" />
+                                            TOURNAMENT ({competition.rounds?.length || 0} Rounds)
+                                        </Badge>
+                                    )}
                                 </div>
                                 <CardTitle className="text-3xl text-gray-900 mb-2">{competition.name}</CardTitle>
                                 <CardDescription className="text-gray-600 text-lg">
