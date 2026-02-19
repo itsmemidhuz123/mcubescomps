@@ -27,9 +27,6 @@ import {
     formatRoundDate
 } from '@/lib/tournament';
 import {
-    useScrambowGenerator,
-    generateScrambleWithScrambow,
-    generateMultipleScrambles,
     isEventSupported,
     getUnsupportedEvents,
     SUPPORTED_EVENTS
@@ -406,7 +403,7 @@ export default function AdminPanel() {
         });
     };
 
-    // Auto-generate scrambles for all events and rounds using cubing.js
+    // Auto-generate scrambles for all events and rounds
     const handleGenerateScrambles = async () => {
         if (formData.selectedEvents.length === 0) {
             alert('Please select at least one event first');
@@ -426,50 +423,26 @@ export default function AdminPanel() {
             const supportedEvents = formData.selectedEvents.filter(isEventSupported);
             const scrambleCount = formData.solveLimit || 5;
 
-            let scrambles = {};
+            setScrambleGenProgress({ current: 0, total: 1 });
 
-            if (formData.mode === CompetitionMode.TOURNAMENT && formData.rounds.length > 0) {
-                // Generate for tournament rounds
-                setScrambleGenProgress({ current: 0, total: supportedEvents.length * formData.rounds.length });
+            const res = await fetch('/api/admin/generate-scrambles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    events: supportedEvents,
+                    rounds: formData.rounds,
+                    mode: formData.mode,
+                    scrambleCount,
+                }),
+            });
 
-                for (const round of formData.rounds) {
-                    for (const eventId of supportedEvents) {
-                        if (!scrambles[eventId]) scrambles[eventId] = {};
-
-                        const eventScrambles = {};
-                        for (let i = 0; i < scrambleCount; i++) {
-                            const scramble = generateScrambleWithScrambow(eventId);
-                            if (scramble) {
-                                eventScrambles[i] = scramble;
-                            }
-                            setScrambleGenProgress({
-                                current: (supportedEvents.indexOf(eventId) + 1) * (formData.rounds.indexOf(round) + 1),
-                                total: supportedEvents.length * formData.rounds.length
-                            });
-                        }
-
-                        scrambles[eventId][round.roundNumber] = eventScrambles;
-                    }
-                }
-            } else {
-                // Generate for standard competition
-                setScrambleGenProgress({ current: 0, total: supportedEvents.length });
-
-                for (const eventId of supportedEvents) {
-                    const eventScrambles = {};
-                    for (let i = 0; i < scrambleCount; i++) {
-                        const scramble = await generateScrambleWithCubing(eventId);
-                        if (scramble) {
-                            eventScrambles[i] = scramble;
-                        }
-                    }
-                    scrambles[eventId] = eventScrambles;
-                    setScrambleGenProgress({
-                        current: supportedEvents.indexOf(eventId) + 1,
-                        total: supportedEvents.length
-                    });
-                }
+            const data = await res.json();
+            if (!res.ok || !data?.success) {
+                throw new Error(data?.error || 'Failed to generate scrambles');
             }
+
+            const scrambles = data.scrambles || {};
+            setScrambleGenProgress({ current: 1, total: 1 });
 
             setFormData(prev => ({
                 ...prev,
