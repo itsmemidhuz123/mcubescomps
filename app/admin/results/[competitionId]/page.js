@@ -338,6 +338,14 @@ export default function ResultsManagementPage() {
             await logAuditAction(`SOLVE_${action.toUpperCase()}`, null, { solveId, value });
 
             await fetchUserSolves(selectedUser?.userId);
+
+            // Refresh results after verification
+            const compDoc = await getDoc(doc(db, 'competitions', params.competitionId));
+            if (compDoc.exists()) {
+                const compData = { id: compDoc.id, ...compDoc.data() };
+                setCompetition(compData);
+                await fetchResults(compData);
+            }
         } catch (error) {
             console.error('Error updating solve:', error);
             alert('Error: ' + error.message);
@@ -422,7 +430,23 @@ export default function ResultsManagementPage() {
             await logAuditAction(`USER_${action.toUpperCase()}`, userId, { value });
 
             await fetchUserSolves(userId);
-            await fetchResults(competition);
+
+            // Refresh competition data and results
+            const compDoc = await getDoc(doc(db, 'competitions', params.competitionId));
+            if (compDoc.exists()) {
+                const compData = { id: compDoc.id, ...compDoc.data() };
+                setCompetition(compData);
+                await fetchResults(compData);
+            }
+
+            // Show success message
+            if (action === 'promote') {
+                alert(`User promoted to Round ${selectedRound + 1} successfully!`);
+            } else if (action === 'approve_all') {
+                alert('All solves approved successfully!');
+            } else if (action === 'disqualify') {
+                alert('User disqualified!');
+            }
         } catch (error) {
             console.error('Error:', error);
             alert('Error: ' + error.message);
