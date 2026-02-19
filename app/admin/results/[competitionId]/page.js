@@ -394,10 +394,26 @@ export default function ResultsManagementPage() {
                     break;
                 case 'promote':
                     const participantDoc = await getDoc(participantRef);
+                    const nextRound = selectedRound + 1;
                     if (participantDoc.exists()) {
                         await updateDoc(participantRef, {
                             qualified: true,
-                            currentRound: selectedRound + 1
+                            qualifiedForNextRound: true,
+                            currentRound: nextRound,
+                            updatedAt: new Date().toISOString()
+                        });
+                    }
+                    // Also update the results
+                    const resultsQuery = query(
+                        collection(db, 'results'),
+                        where('competitionId', '==', params.competitionId),
+                        where('userId', '==', userId)
+                    );
+                    const resultsSnap = await getDocs(resultsQuery);
+                    if (!resultsSnap.empty) {
+                        await updateDoc(doc(db, 'results', resultsSnap.docs[0].id), {
+                            qualifiedForNextRound: true,
+                            roundNumber: nextRound
                         });
                     }
                     break;
@@ -1174,7 +1190,11 @@ export default function ResultsManagementPage() {
                             <div className="flex gap-2 w-full justify-between">
                                 <div className="flex gap-2">
                                     <Button variant="outline" onClick={() => {
-                                        handleUserAction(selectedUser?.userId, 'promote');
+                                        if (!selectedUser?.userId) {
+                                            alert('User not selected');
+                                            return;
+                                        }
+                                        handleUserAction(selectedUser.userId, 'promote');
                                     }}>
                                         <ArrowUpCircle className="h-4 w-4 mr-2" />
                                         Promote to Next Round
