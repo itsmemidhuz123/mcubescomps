@@ -146,8 +146,19 @@ export default function ResultsManagementPage() {
             resultsData = resultsData.filter(d => d.eventId === event);
         }
 
-        // Filter by round - include results where roundNumber matches OR is undefined/null
-        resultsData = resultsData.filter(d => d.roundNumber === round || d.roundNumber === undefined || d.roundNumber === null);
+        // Filter by round - include results for current round
+        // Also include qualified users from previous round who were promoted
+        const currentRoundNum = round;
+        const prevRoundNum = round - 1;
+        resultsData = resultsData.filter(d => {
+            // Exact match for current round
+            if (d.roundNumber === currentRoundNum) return true;
+            // Legacy data without roundNumber - show in round 1
+            if ((d.roundNumber === undefined || d.roundNumber === null) && currentRoundNum === 1) return true;
+            // Users promoted from previous round - show in current round
+            if (d.qualifiedForNextRound && d.roundNumber === prevRoundNum) return true;
+            return false;
+        });
 
         // Sort by average
         resultsData.sort((a, b) => {
@@ -403,6 +414,8 @@ export default function ResultsManagementPage() {
                 case 'promote':
                     const participantDoc = await getDoc(participantRef);
                     const nextRound = selectedRound + 1;
+
+                    // Update tournament participant
                     if (participantDoc.exists()) {
                         await updateDoc(participantRef, {
                             qualified: true,
@@ -411,7 +424,8 @@ export default function ResultsManagementPage() {
                             updatedAt: new Date().toISOString()
                         });
                     }
-                    // Also update the results
+
+                    // Update results collection
                     const resultsQuery = query(
                         collection(db, 'results'),
                         where('competitionId', '==', params.competitionId),
@@ -422,6 +436,21 @@ export default function ResultsManagementPage() {
                         await updateDoc(doc(db, 'results', resultsSnap.docs[0].id), {
                             qualifiedForNextRound: true,
                             roundNumber: nextRound
+                        });
+                    }
+
+                    // Also update roundResults collection
+                    const roundResultsQuery = query(
+                        collection(db, 'roundResults'),
+                        where('competitionId', '==', params.competitionId),
+                        where('userId', '==', userId)
+                    );
+                    const roundResultsSnap = await getDocs(roundResultsQuery);
+                    if (!roundResultsSnap.empty) {
+                        await updateDoc(doc(db, 'roundResults', roundResultsSnap.docs[0].id), {
+                            qualifiedForNextRound: true,
+                            roundNumber: nextRound,
+                            verified: true
                         });
                     }
                     break;
