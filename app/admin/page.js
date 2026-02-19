@@ -1598,6 +1598,15 @@ export default function AdminPanel() {
                                         </TableCell>
                                         <TableCell>
                                             <Button variant="ghost" size="sm" onClick={() => loadCompForEdit(comp)}>Edit</Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => router.push(`/admin/results/${comp.id}`)}
+                                                className="text-blue-600 hover:text-blue-700"
+                                            >
+                                                <Trophy className="h-4 w-4 mr-1" />
+                                                Results
+                                            </Button>
                                             {comp.mode === CompetitionMode.TOURNAMENT && (
                                                 <Button
                                                     variant="ghost"
