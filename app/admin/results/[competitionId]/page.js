@@ -384,28 +384,28 @@ export default function ResultsManagementPage() {
                     await batch.commit();
 
                     // Also update results collection
-                    const resultsQuery = query(
+                    const approveResultsQuery = query(
                         collection(db, 'results'),
                         where('competitionId', '==', params.competitionId),
                         where('userId', '==', userId)
                     );
-                    const resultsSnap = await getDocs(resultsQuery);
-                    if (!resultsSnap.empty) {
-                        await updateDoc(doc(db, 'results', resultsSnap.docs[0].id), {
+                    const approveResultsSnap = await getDocs(approveResultsQuery);
+                    if (!approveResultsSnap.empty) {
+                        await updateDoc(doc(db, 'results', approveResultsSnap.docs[0].id), {
                             adminVerified: true,
                             verified: true
                         });
                     }
 
                     // Also update roundResults collection
-                    const roundResultsQuery = query(
+                    const approveRoundResultsQuery = query(
                         collection(db, 'roundResults'),
                         where('competitionId', '==', params.competitionId),
                         where('userId', '==', userId)
                     );
-                    const roundResultsSnap = await getDocs(roundResultsQuery);
-                    if (!roundResultsSnap.empty) {
-                        await updateDoc(doc(db, 'roundResults', roundResultsSnap.docs[0].id), {
+                    const approveRoundResultsSnap = await getDocs(approveRoundResultsQuery);
+                    if (!approveRoundResultsSnap.empty) {
+                        await updateDoc(doc(db, 'roundResults', approveRoundResultsSnap.docs[0].id), {
                             adminVerified: true,
                             verified: true
                         });
@@ -455,28 +455,28 @@ export default function ResultsManagementPage() {
                     }
 
                     // Update results collection
-                    const resultsQuery = query(
+                    const promoteResultsQuery = query(
                         collection(db, 'results'),
                         where('competitionId', '==', params.competitionId),
                         where('userId', '==', userId)
                     );
-                    const resultsSnap = await getDocs(resultsQuery);
-                    if (!resultsSnap.empty) {
-                        await updateDoc(doc(db, 'results', resultsSnap.docs[0].id), {
+                    const promoteResultsSnap = await getDocs(promoteResultsQuery);
+                    if (!promoteResultsSnap.empty) {
+                        await updateDoc(doc(db, 'results', promoteResultsSnap.docs[0].id), {
                             qualifiedForNextRound: true,
                             roundNumber: nextRound
                         });
                     }
 
                     // Also update roundResults collection
-                    const roundResultsQuery = query(
+                    const promoteRoundResultsQuery = query(
                         collection(db, 'roundResults'),
                         where('competitionId', '==', params.competitionId),
                         where('userId', '==', userId)
                     );
-                    const roundResultsSnap = await getDocs(roundResultsQuery);
-                    if (!roundResultsSnap.empty) {
-                        await updateDoc(doc(db, 'roundResults', roundResultsSnap.docs[0].id), {
+                    const promoteRoundResultsSnap = await getDocs(promoteRoundResultsQuery);
+                    if (!promoteRoundResultsSnap.empty) {
+                        await updateDoc(doc(db, 'roundResults', promoteRoundResultsSnap.docs[0].id), {
                             qualifiedForNextRound: true,
                             roundNumber: nextRound,
                             verified: true
