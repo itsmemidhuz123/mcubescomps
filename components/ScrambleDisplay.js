@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 export default function ScrambleDisplay({
     eventId,
     scramble,
-    visualization = "2D",
+    visualization = "3D",
     width = 200,
     height = 200,
     checkered = true
@@ -69,8 +69,9 @@ export default function ScrambleDisplay({
             setHasError(false);
 
             try {
-                // Dynamically import the scramble-display module
-                const { ScrambleDisplay } = await import('https://cdn.cubing.net/v0/js/cubing/scramble-display');
+                // Load the scramble-display module from the CDN at runtime.
+                // webpackIgnore prevents Next/webpack from trying to bundle the URL.
+                await import(/* webpackIgnore: true */ 'https://cdn.cubing.net/v0/js/cubing/scramble-display');
 
                 // Clear previous display
                 if (scrambleDisplayRef.current) {
