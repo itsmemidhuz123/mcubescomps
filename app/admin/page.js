@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2 } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Shuffle, Copy, Check } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import {
     CompetitionMode,
@@ -26,6 +26,13 @@ import {
     getDefaultTournamentSettings,
     formatRoundDate
 } from '@/lib/tournament';
+import {
+    generateScrambles,
+    generateScramble,
+    isEventSupported,
+    getUnsupportedEvents,
+    SUPPORTED_EVENTS
+} from '@/lib/scrambleGenerator';
 
 // Helper to format milliseconds to MM:SS display
 function formatTimeInput(ms) {
@@ -111,6 +118,12 @@ export default function AdminPanel() {
         newUsersOnly: false
     });
     const [editingCoupon, setEditingCoupon] = useState(null);
+
+    // Scramble generation states
+    const [generatingScrambles, setGeneratingScrambles] = useState(false);
+    const [generatedScrambles, setGeneratedScrambles] = useState(null);
+    const [scrambleGenProgress, setScrambleGenProgress] = useState({ current: 0, total: 0 });
+    const [copiedScramble, setCopiedScramble] = useState(null);
 
     // Auth Protection
     useEffect(() => {
@@ -373,6 +386,143 @@ export default function AdminPanel() {
                 }
             };
         });
+    };
+
+    const handleRoundScrambleChange = (eventId, roundNumber, index, value) => {
+        setFormData(prev => {
+            const currentEventScrambles = prev.scrambles[eventId] || {};
+            const currentRoundScrambles = currentEventScrambles[roundNumber] || {};
+            return {
+                ...prev,
+                scrambles: {
+                    ...prev.scrambles,
+                    [eventId]: {
+                        ...currentEventScrambles,
+                        [roundNumber]: { ...currentRoundScrambles, [index]: value }
+                    }
+                }
+            };
+        });
+    };
+
+    // Auto-generate scrambles for all events and rounds
+    const handleGenerateScrambles = async () => {
+        if (formData.selectedEvents.length === 0) {
+            alert('Please select at least one event first');
+            return;
+        }
+
+        const unsupported = getUnsupportedEvents(formData.selectedEvents);
+        if (unsupported.length > 0) {
+            const proceed = confirm(`Warning: The following events are not supported for auto-generation: ${unsupported.join(', ')}.\n\nSupported events: ${SUPPORTED_EVENTS.filter(e => formData.selectedEvents.includes(e)).join(', ')}\n\nDo you want to generate scrambles for supported events only?`);
+            if (!proceed) return;
+        }
+
+        setGeneratingScrambles(true);
+        setGeneratedScrambles(null);
+
+        try {
+            const supportedEvents = formData.selectedEvents.filter(isEventSupported);
+            const scrambleCount = formData.solveLimit || 5;
+
+            let scrambles;
+
+            if (formData.mode === CompetitionMode.TOURNAMENT && formData.rounds.length > 0) {
+                // Generate for tournament rounds
+                setScrambleGenProgress({ current: 0, total: supportedEvents.length * formData.rounds.length });
+
+                scrambles = {};
+                let progress = 0;
+
+                for (const round of formData.rounds) {
+                    for (const eventId of supportedEvents) {
+                        if (!scrambles[eventId]) scrambles[eventId] = {};
+
+                        const eventScrambles = {};
+                        for (let i = 0; i < scrambleCount; i++) {
+                            const scramble = await generateScramble(eventId);
+                            if (scramble) {
+                                eventScrambles[i] = scramble;
+                            }
+                        }
+
+                        scrambles[eventId][round.roundNumber] = eventScrambles;
+                        progress++;
+                        setScrambleGenProgress({ current: progress, total: supportedEvents.length * formData.rounds.length });
+                    }
+                }
+            } else {
+                // Generate for standard competition
+                setScrambleGenProgress({ current: 0, total: supportedEvents.length });
+
+                scrambles = {};
+                let progress = 0;
+
+                for (const eventId of supportedEvents) {
+                    const eventScrambles = {};
+                    for (let i = 0; i < scrambleCount; i++) {
+                        const scramble = await generateScramble(eventId);
+                        if (scramble) {
+                            eventScrambles[i] = scramble;
+                        }
+                    }
+                    scrambles[eventId] = eventScrambles;
+                    progress++;
+                    setScrambleGenProgress({ current: progress, total: supportedEvents.length });
+                }
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                scrambles: scrambles
+            }));
+
+            setGeneratedScrambles(scrambles);
+            alert(`Successfully generated scrambles for ${Object.keys(scrambles).length} events!`);
+        } catch (error) {
+            console.error('Error generating scrambles:', error);
+            alert('Error generating scrambles: ' + error.message);
+        } finally {
+            setGeneratingScrambles(false);
+            setScrambleGenProgress({ current: 0, total: 0 });
+        }
+    };
+
+    // Copy scramble to clipboard
+    const copyScrambleToClipboard = (scramble, id) => {
+        navigator.clipboard.writeText(scramble).then(() => {
+            setCopiedScramble(id);
+            setTimeout(() => setCopiedScramble(null), 2000);
+        });
+    };
+
+    // Copy all scrambles for an event
+    const copyAllScramblesForEvent = (eventId, roundNumber = null) => {
+        let scramblesText = '';
+
+        if (formData.mode === CompetitionMode.TOURNAMENT && roundNumber) {
+            const roundScrambles = formData.scrambles[eventId]?.[roundNumber];
+            if (roundScrambles) {
+                scramblesText = Object.entries(roundScrambles)
+                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                    .map(([idx, scramble]) => `Attempt ${parseInt(idx) + 1}: ${scramble}`)
+                    .join('\n');
+            }
+        } else {
+            const eventScrambles = formData.scrambles[eventId];
+            if (eventScrambles) {
+                scramblesText = Object.entries(eventScrambles)
+                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                    .map(([idx, scramble]) => `Attempt ${parseInt(idx) + 1}: ${scramble}`)
+                    .join('\n');
+            }
+        }
+
+        if (scramblesText) {
+            navigator.clipboard.writeText(scramblesText).then(() => {
+                alert(`Copied all scrambles for ${getEventName(eventId)} to clipboard!`);
+            });
+        }
     };
 
     const resetForm = () => {
@@ -1345,25 +1495,186 @@ export default function AdminPanel() {
                                 {/* SCRAMBLES */}
                                 {formData.selectedEvents.length > 0 && (
                                     <div className="space-y-4 border-t pt-4">
-                                        <Label className="text-lg">Scrambles (5 per event required)</Label>
-                                        {formData.selectedEvents.map(eventId => (
-                                            <Card key={eventId} className="bg-slate-50 dark:bg-slate-900">
-                                                <CardHeader className="py-2">
-                                                    <CardTitle className="text-sm">{getEventName(eventId)}</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-2">
-                                                    {[0, 1, 2, 3, 4].map(i => (
-                                                        <Input
-                                                            key={i}
-                                                            placeholder={`Scramble ${i + 1}`}
-                                                            value={formData.scrambles[eventId]?.[i] || ''}
-                                                            onChange={(e) => handleScrambleChange(eventId, i, e.target.value)}
-                                                            className="font-mono text-xs"
-                                                        />
-                                                    ))}
-                                                </CardContent>
-                                            </Card>
-                                        ))}
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                            <div>
+                                                <Label className="text-lg">
+                                                    {formData.mode === CompetitionMode.TOURNAMENT
+                                                        ? 'Scrambles (5 per event per round)'
+                                                        : 'Scrambles (5 per event required)'}
+                                                </Label>
+                                                <p className="text-sm text-gray-500 mt-1">
+                                                    WCA-compliant scrambles auto-generated using cubing.js
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {formData.mode === CompetitionMode.TOURNAMENT && (
+                                                    <Badge className="bg-indigo-100 text-indigo-700">
+                                                        Round-specific scrambles
+                                                    </Badge>
+                                                )}
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleGenerateScrambles}
+                                                    disabled={generatingScrambles || formData.selectedEvents.length === 0}
+                                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                                >
+                                                    {generatingScrambles ? (
+                                                        <>
+                                                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                                            Generating... {scrambleGenProgress.current}/{scrambleGenProgress.total}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Shuffle className="h-4 w-4 mr-2" />
+                                                            Auto-Generate Scrambles
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        {/* Show unsupported events warning */}
+                                        {(() => {
+                                            const unsupported = getUnsupportedEvents(formData.selectedEvents);
+                                            if (unsupported.length > 0) {
+                                                const supported = formData.selectedEvents.filter(isEventSupported);
+                                                return (
+                                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                                        <p className="text-sm text-yellow-800">
+                                                            <strong>Note:</strong> Auto-generation not available for: {unsupported.map(getEventName).join(', ')}.
+                                                            {supported.length > 0 && (
+                                                                <span> Scrambles will be generated for: {supported.map(getEventName).join(', ')}.</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+
+                                        {formData.mode === CompetitionMode.TOURNAMENT ? (
+                                            // Tournament mode: scrambles per round
+                                            <div className="space-y-6">
+                                                {formData.rounds.map((round, roundIdx) => (
+                                                    <div key={round.roundNumber} className="border rounded-lg p-4 bg-indigo-50/30">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <h4 className="font-semibold text-indigo-900 flex items-center gap-2">
+                                                                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center">
+                                                                    {round.roundNumber}
+                                                                </span>
+                                                                {round.name || `Round ${round.roundNumber}`} Scrambles
+                                                            </h4>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {formData.selectedEvents.map(eventId => (
+                                                                <Card key={`${round.roundNumber}-${eventId}`} className="bg-white dark:bg-slate-900">
+                                                                    <CardHeader className="py-2 flex flex-row items-center justify-between">
+                                                                        <CardTitle className="text-sm">{getEventName(eventId)}</CardTitle>
+                                                                        {formData.scrambles[eventId]?.[round.roundNumber] && (
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                onClick={() => copyAllScramblesForEvent(eventId, round.roundNumber)}
+                                                                                className="h-6 px-2"
+                                                                            >
+                                                                                <Copy className="h-3 w-3 mr-1" />
+                                                                                Copy All
+                                                                            </Button>
+                                                                        )}
+                                                                    </CardHeader>
+                                                                    <CardContent className="space-y-2">
+                                                                        {[0, 1, 2, 3, 4].map(i => {
+                                                                            const scrambleId = `${eventId}-R${round.roundNumber}-${i}`;
+                                                                            const scrambleValue = formData.scrambles[eventId]?.[round.roundNumber]?.[i] || '';
+                                                                            return (
+                                                                                <div key={i} className="flex gap-2">
+                                                                                    <Input
+                                                                                        placeholder={`R${round.roundNumber} Scramble ${i + 1}`}
+                                                                                        value={scrambleValue}
+                                                                                        onChange={(e) => handleRoundScrambleChange(eventId, round.roundNumber, i, e.target.value)}
+                                                                                        className="font-mono text-xs flex-1"
+                                                                                    />
+                                                                                    {scrambleValue && (
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            onClick={() => copyScrambleToClipboard(scrambleValue, scrambleId)}
+                                                                                            className="px-2"
+                                                                                        >
+                                                                                            {copiedScramble === scrambleId ? (
+                                                                                                <Check className="h-3 w-3 text-green-600" />
+                                                                                            ) : (
+                                                                                                <Copy className="h-3 w-3" />
+                                                                                            )}
+                                                                                        </Button>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </CardContent>
+                                                                </Card>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            // Standard mode: single set of scrambles
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {formData.selectedEvents.map(eventId => (
+                                                    <Card key={eventId} className="bg-slate-50 dark:bg-slate-900">
+                                                        <CardHeader className="py-2 flex flex-row items-center justify-between">
+                                                            <CardTitle className="text-sm">{getEventName(eventId)}</CardTitle>
+                                                            {formData.scrambles[eventId] && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => copyAllScramblesForEvent(eventId)}
+                                                                    className="h-6 px-2"
+                                                                >
+                                                                    <Copy className="h-3 w-3 mr-1" />
+                                                                    Copy All
+                                                                </Button>
+                                                            )}
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-2">
+                                                            {[0, 1, 2, 3, 4].map(i => {
+                                                                const scrambleId = `${eventId}-${i}`;
+                                                                const scrambleValue = formData.scrambles[eventId]?.[i] || '';
+                                                                return (
+                                                                    <div key={i} className="flex gap-2">
+                                                                        <Input
+                                                                            placeholder={`Scramble ${i + 1}`}
+                                                                            value={scrambleValue}
+                                                                            onChange={(e) => handleScrambleChange(eventId, i, e.target.value)}
+                                                                            className="font-mono text-xs flex-1"
+                                                                        />
+                                                                        {scrambleValue && (
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                onClick={() => copyScrambleToClipboard(scrambleValue, scrambleId)}
+                                                                                className="px-2"
+                                                                            >
+                                                                                {copiedScramble === scrambleId ? (
+                                                                                    <Check className="h-3 w-3 text-green-600" />
+                                                                                ) : (
+                                                                                    <Copy className="h-3 w-3" />
+                                                                                )}
+                                                                            </Button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
