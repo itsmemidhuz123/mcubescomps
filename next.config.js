@@ -4,20 +4,13 @@ const nextConfig = {
         unoptimized: true,
     },
     experimental: {
-        // Remove if not using Server Components
-        serverComponentsExternalPackages: ['mongodb', 'cubing'],
+        serverComponentsExternalPackages: ['mongodb'],
     },
     webpack(config, { dev, isServer }) {
-        // Externalize cubing package for API routes to avoid webpack issues
-        if (isServer) {
-            config.externals = [...(config.externals || []), 'cubing'];
-        }
-
         if (dev) {
-            // Reduce CPU/memory from file watching
             config.watchOptions = {
-                poll: 2000, // check every 2 seconds
-                aggregateTimeout: 300, // wait before rebuilding
+                poll: 2000,
+                aggregateTimeout: 300,
                 ignored: ['**/node_modules'],
             };
         }
