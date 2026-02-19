@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Shuffle, Copy, Check } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Copy, Check } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import {
     CompetitionMode,
@@ -26,11 +26,6 @@ import {
     getDefaultTournamentSettings,
     formatRoundDate
 } from '@/lib/tournament';
-import {
-    isEventSupported,
-    getUnsupportedEvents,
-    SUPPORTED_EVENTS
-} from '@/lib/cubingScramble';
 
 // Helper to format milliseconds to MM:SS display
 function formatTimeInput(ms) {
@@ -117,10 +112,7 @@ export default function AdminPanel() {
     });
     const [editingCoupon, setEditingCoupon] = useState(null);
 
-    // Scramble generation states
-    const [generatingScrambles, setGeneratingScrambles] = useState(false);
-    const [generatedScrambles, setGeneratedScrambles] = useState(null);
-    const [scrambleGenProgress, setScrambleGenProgress] = useState({ current: 0, total: 0 });
+    // Scramble copy state
     const [copiedScramble, setCopiedScramble] = useState(null);
 
     // Auth Protection
@@ -401,63 +393,6 @@ export default function AdminPanel() {
                 }
             };
         });
-    };
-
-    // Auto-generate scrambles for all events and rounds
-    const handleGenerateScrambles = async () => {
-        if (formData.selectedEvents.length === 0) {
-            alert('Please select at least one event first');
-            return;
-        }
-
-        const unsupported = getUnsupportedEvents(formData.selectedEvents);
-        if (unsupported.length > 0) {
-            const proceed = confirm(`Warning: The following events are not supported for auto-generation: ${unsupported.join(', ')}.\n\nSupported events: ${SUPPORTED_EVENTS.filter(e => formData.selectedEvents.includes(e)).join(', ')}\n\nDo you want to generate scrambles for supported events only?`);
-            if (!proceed) return;
-        }
-
-        setGeneratingScrambles(true);
-        setGeneratedScrambles(null);
-
-        try {
-            const supportedEvents = formData.selectedEvents.filter(isEventSupported);
-            const scrambleCount = formData.solveLimit || 5;
-
-            setScrambleGenProgress({ current: 0, total: 1 });
-
-            const res = await fetch('/api/admin/generate-scrambles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    events: supportedEvents,
-                    rounds: formData.rounds,
-                    mode: formData.mode,
-                    scrambleCount,
-                }),
-            });
-
-            const data = await res.json();
-            if (!res.ok || !data?.success) {
-                throw new Error(data?.error || 'Failed to generate scrambles');
-            }
-
-            const scrambles = data.scrambles || {};
-            setScrambleGenProgress({ current: 1, total: 1 });
-
-            setFormData(prev => ({
-                ...prev,
-                scrambles: scrambles
-            }));
-
-            setGeneratedScrambles(scrambles);
-            alert(`Successfully generated scrambles for ${Object.keys(scrambles).length} events!`);
-        } catch (error) {
-            console.error('Error generating scrambles:', error);
-            alert('Error generating scrambles: ' + error.message);
-        } finally {
-            setGeneratingScrambles(false);
-            setScrambleGenProgress({ current: 0, total: 0 });
-        }
     };
 
     // Copy scramble to clipboard
@@ -1475,54 +1410,15 @@ export default function AdminPanel() {
                                                         : 'Scrambles (5 per event required)'}
                                                 </Label>
                                                 <p className="text-sm text-gray-500 mt-1">
-                                                    WCA-compliant scrambles auto-generated using cubing.js
+                                                    Enter WCA-compliant scrambles manually for each event
                                                 </p>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                {formData.mode === CompetitionMode.TOURNAMENT && (
-                                                    <Badge className="bg-indigo-100 text-indigo-700">
-                                                        Round-specific scrambles
-                                                    </Badge>
-                                                )}
-                                                <Button
-                                                    type="button"
-                                                    onClick={handleGenerateScrambles}
-                                                    disabled={generatingScrambles || formData.selectedEvents.length === 0}
-                                                    className="bg-green-600 hover:bg-green-700 text-white"
-                                                >
-                                                    {generatingScrambles ? (
-                                                        <>
-                                                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                                            Generating... {scrambleGenProgress.current}/{scrambleGenProgress.total}
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Shuffle className="h-4 w-4 mr-2" />
-                                                            Auto-Generate Scrambles
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            {formData.mode === CompetitionMode.TOURNAMENT && (
+                                                <Badge className="bg-indigo-100 text-indigo-700">
+                                                    Round-specific scrambles
+                                                </Badge>
+                                            )}
                                         </div>
-
-                                        {/* Show unsupported events warning */}
-                                        {(() => {
-                                            const unsupported = getUnsupportedEvents(formData.selectedEvents);
-                                            if (unsupported.length > 0) {
-                                                const supported = formData.selectedEvents.filter(isEventSupported);
-                                                return (
-                                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                                        <p className="text-sm text-yellow-800">
-                                                            <strong>Note:</strong> Auto-generation not available for: {unsupported.map(getEventName).join(', ')}.
-                                                            {supported.length > 0 && (
-                                                                <span> Scrambles will be generated for: {supported.map(getEventName).join(', ')}.</span>
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                );
-                                            }
-                                            return null;
-                                        })()}
 
                                         {formData.mode === CompetitionMode.TOURNAMENT ? (
                                             // Tournament mode: scrambles per round
