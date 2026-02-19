@@ -83,33 +83,43 @@ export default function LeaderboardPage() {
             if (competition.mode === CompetitionMode.TOURNAMENT) {
                 setSelectedRound(competition.currentRound || 1);
             }
-            setSelectedEvent(competition.events?.[0] || null);
+            const events = competition.events || [];
+            setSelectedEvent(events.length > 0 ? events[0] : null);
         }
     }, [competition]);
 
     async function fetchCompetition() {
         try {
+            console.log('Fetching competition:', params.competitionId);
             const compDoc = await getDoc(doc(db, 'competitions', params.competitionId));
-            if (compDoc.exists()) {
-                const data = compDoc.data();
-                setCompetition({ id: compDoc.id, ...data });
+            if (!compDoc.exists()) {
+                console.log('Competition not found');
+                setLoading(false);
+                return;
+            }
 
-                if (data.mode === CompetitionMode.TOURNAMENT) {
-                    setSelectedRound(data.currentRound || 1);
-                    await Promise.all([
-                        fetchTournamentParticipants(),
-                        fetchRoundResults(),
-                        fetchRegisteredUsers()
-                    ]);
-                } else {
-                    await Promise.all([
-                        fetchRegisteredUsers(),
-                        fetchLeaderboards(data.events)
-                    ]);
-                }
+            const data = compDoc.data();
+            console.log('Competition data:', data);
+            setCompetition({ id: compDoc.id, ...data });
+
+            const isTournament = data.mode === 'tournament' || data.mode === CompetitionMode.TOURNAMENT;
+
+            if (isTournament) {
+                setSelectedRound(data.currentRound || 1);
+                await Promise.all([
+                    fetchTournamentParticipants(),
+                    fetchRoundResults(),
+                    fetchRegisteredUsers()
+                ]);
+            } else {
+                await Promise.all([
+                    fetchRegisteredUsers(),
+                    fetchLeaderboards(data.events || [])
+                ]);
             }
         } catch (error) {
             console.error('Failed to fetch competition:', error);
+            alert('Error loading competition: ' + error.message);
         } finally {
             setLoading(false);
         }
@@ -172,7 +182,7 @@ export default function LeaderboardPage() {
 
     async function fetchRoundResults() {
         try {
-            const resultsQuery = query(collection(db, 'roundResults'), where('competitionId', '==', params.competitionId), orderBy('average', 'asc'));
+            const resultsQuery = query(collection(db, 'roundResults'), where('competitionId', '==', params.competitionId));
             const snapshot = await getDocs(resultsQuery);
             const resultsByRound = {};
             snapshot.docs.forEach(docSnap => {
@@ -190,8 +200,8 @@ export default function LeaderboardPage() {
     async function fetchLeaderboards(events) {
         try {
             const leaderboardData = {};
-            for (const eventId of events) {
-                const resultsQuery = query(collection(db, 'results'), where('competitionId', '==', params.competitionId), where('eventId', '==', eventId));
+            for (const eventId of events || []) {
+                const resultsQuery = query(collection(db, 'results'), where('competitionId', '==', params.competitionId));
                 const resultsSnapshot = await getDocs(resultsQuery);
                 const results = [];
                 for (const resultDoc of resultsSnapshot.docs) {
