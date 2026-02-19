@@ -182,14 +182,16 @@ export default function LeaderboardPage() {
 
     async function fetchRoundResults() {
         try {
-            const resultsQuery = query(collection(db, 'roundResults'), where('competitionId', '==', params.competitionId));
-            const snapshot = await getDocs(resultsQuery);
+            // Get all results and filter client-side
+            const snapshot = await getDocs(collection(db, 'roundResults'));
             const resultsByRound = {};
             snapshot.docs.forEach(docSnap => {
                 const data = docSnap.data();
-                const roundNum = data.roundNumber || 1;
-                if (!resultsByRound[roundNum]) resultsByRound[roundNum] = [];
-                resultsByRound[roundNum].push({ id: docSnap.id, ...data });
+                if (data.competitionId === params.competitionId) {
+                    const roundNum = data.roundNumber || 1;
+                    if (!resultsByRound[roundNum]) resultsByRound[roundNum] = [];
+                    resultsByRound[roundNum].push({ id: docSnap.id, ...data });
+                }
             });
             setRoundResults(resultsByRound);
         } catch (error) {
@@ -200,12 +202,13 @@ export default function LeaderboardPage() {
     async function fetchLeaderboards(events) {
         try {
             const leaderboardData = {};
+            // Get all results and filter client-side
+            const snapshot = await getDocs(collection(db, 'results'));
+            const allResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
             for (const eventId of events || []) {
-                const resultsQuery = query(collection(db, 'results'), where('competitionId', '==', params.competitionId));
-                const resultsSnapshot = await getDocs(resultsQuery);
                 const results = [];
-                for (const resultDoc of resultsSnapshot.docs) {
-                    const resultData = resultDoc.data();
+                for (const resultData of eventResults) {
                     try {
                         const userDoc = await getDoc(doc(db, 'users', resultData.userId));
                         const userData = userDoc.exists() ? userDoc.data() : {};
@@ -233,15 +236,19 @@ export default function LeaderboardPage() {
     async function openUserDetails(result) {
         setSelectedUserResult(result);
         try {
-            const solvesQuery = query(
-                collection(db, 'solves'),
-                where('competitionId', '==', params.competitionId),
-                where('userId', '==', result.userId),
-                where('eventId', '==', selectedEvent),
-                orderBy('attemptNumber', 'asc')
-            );
-            const snapshot = await getDocs(solvesQuery);
-            setUserSolves(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            // Get all solves for this competition and filter client-side (avoid index requirement)
+            const allSolves = [];
+            const snapshot = await getDocs(collection(db, 'solves'));
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.competitionId === params.competitionId &&
+                    data.userId === result.userId &&
+                    data.eventId === selectedEvent) {
+                    allSolves.push({ id: doc.id, ...data });
+                }
+            });
+            allSolves.sort((a, b) => (a.attemptNumber || 0) - (b.attemptNumber || 0));
+            setUserSolves(allSolves);
         } catch (error) {
             console.error('Error fetching solves:', error);
         }
