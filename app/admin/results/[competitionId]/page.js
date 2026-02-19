@@ -370,6 +370,7 @@ export default function ResultsManagementPage() {
 
             switch (action) {
                 case 'approve_all':
+                    // Approve all solves in solves collection
                     const solvesQuery = query(
                         collection(db, 'solves'),
                         where('competitionId', '==', params.competitionId),
@@ -381,6 +382,34 @@ export default function ResultsManagementPage() {
                         batch.update(solveDoc.ref, { adminVerified: true });
                     });
                     await batch.commit();
+
+                    // Also update results collection
+                    const resultsQuery = query(
+                        collection(db, 'results'),
+                        where('competitionId', '==', params.competitionId),
+                        where('userId', '==', userId)
+                    );
+                    const resultsSnap = await getDocs(resultsQuery);
+                    if (!resultsSnap.empty) {
+                        await updateDoc(doc(db, 'results', resultsSnap.docs[0].id), {
+                            adminVerified: true,
+                            verified: true
+                        });
+                    }
+
+                    // Also update roundResults collection
+                    const roundResultsQuery = query(
+                        collection(db, 'roundResults'),
+                        where('competitionId', '==', params.competitionId),
+                        where('userId', '==', userId)
+                    );
+                    const roundResultsSnap = await getDocs(roundResultsQuery);
+                    if (!roundResultsSnap.empty) {
+                        await updateDoc(doc(db, 'roundResults', roundResultsSnap.docs[0].id), {
+                            adminVerified: true,
+                            verified: true
+                        });
+                    }
                     break;
                 case 'disqualify':
                     const resultQuery = query(
