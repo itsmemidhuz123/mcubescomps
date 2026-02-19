@@ -13,6 +13,7 @@ import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import { AntiCheatDetector, getDeviceFingerprint, getUserIP } from '@/lib/antiCheat';
 import { CompetitionMode, TournamentStatus, getRoundStatus, canUserCompeteInRound } from '@/lib/tournament';
+import ScrambleDisplay from '@/components/ScrambleDisplay';
 
 // Helper to format time from milliseconds
 function formatTimeDisplay(ms) {
@@ -326,8 +327,19 @@ function TimerPage() {
         }
 
         // Load scramble
-        const scramblesData = compData?.scrambles?.[params.eventId];
-        console.log('Scrambles data for', params.eventId, ':', scramblesData);
+        const currentRound = compData.currentRound || 1;
+        let scramblesData;
+
+        // Tournament mode: scrambles are organized by round
+        if (compData.mode === CompetitionMode.TOURNAMENT) {
+            scramblesData = compData?.scrambles?.[params.eventId]?.[currentRound];
+        } else {
+            // Standard mode: flat scramble structure
+            scramblesData = compData?.scrambles?.[params.eventId];
+        }
+
+        console.log('Scrambles data for', params.eventId, 'Round', currentRound, ':', scramblesData);
+
         if (scramblesData) {
             let scramblesArray = [];
             if (Array.isArray(scramblesData)) {
@@ -595,7 +607,7 @@ function TimerPage() {
                         finalTime: null,
                         penalty: 'DNF',
                         reason: 'CUT_OFF_EXCEEDED',
-                        scramble: competition?.scrambles?.[params.eventId]?.[currentAttempt + i - 1] || '',
+                        scramble: getScrambleForAttempt(currentAttempt + i),
                         isRefreshDNF: false,
                         flagged: false,
                         flagReason: '',
@@ -635,9 +647,9 @@ function TimerPage() {
                     setPenalty('none');
                     setAntiCheatWarning('');
 
-                    const scrambles = competition?.scrambles?.[params.eventId];
-                    if (scrambles && scrambles.length >= nextAttempt) {
-                        setCurrentScramble(scrambles[nextAttempt - 1]);
+                    const nextScramble = getScrambleForAttempt(nextAttempt);
+                    if (nextScramble) {
+                        setCurrentScramble(nextScramble);
                     }
                 }, 1500);
             }
@@ -738,6 +750,33 @@ function TimerPage() {
         const seconds = Math.floor(totalMs / 1000);
         const centiseconds = Math.floor((totalMs % 1000) / 10);
         return `${seconds}.${centiseconds.toString().padStart(2, '0')}`;
+    };
+
+    // Helper to get scramble for a specific attempt (supports tournament rounds)
+    const getScrambleForAttempt = (attemptNumber) => {
+        if (!competition || !params.eventId) return '';
+
+        const currentRound = competition.currentRound || 1;
+        let scramblesData;
+
+        if (competition.mode === CompetitionMode.TOURNAMENT) {
+            scramblesData = competition?.scrambles?.[params.eventId]?.[currentRound];
+        } else {
+            scramblesData = competition?.scrambles?.[params.eventId];
+        }
+
+        if (!scramblesData) return '';
+
+        let scramblesArray = [];
+        if (Array.isArray(scramblesData)) {
+            scramblesArray = scramblesData;
+        } else if (typeof scramblesData === 'object') {
+            scramblesArray = Object.entries(scramblesData)
+                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                .map(([, v]) => v);
+        }
+
+        return scramblesArray[attemptNumber - 1] || '';
     };
 
     const formatInspection = (ms) => {
@@ -1265,9 +1304,28 @@ function TimerPage() {
                         ) : (
                             <div className="text-center">
                                 <p className="text-sm text-gray-400 mb-2">Scramble #{currentAttempt}</p>
-                                <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700">
-                                    {currentScramble || 'No scramble available. Contact admin.'}
-                                </p>
+
+                                {/* Scramble Text and Visualization */}
+                                <div className="flex flex-col md:flex-row items-center justify-center gap-6">
+                                    {/* Scramble Text */}
+                                    <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700 flex-1">
+                                        {currentScramble || 'No scramble available. Contact admin.'}
+                                    </p>
+
+                                    {/* Scramble Visualization */}
+                                    {currentScramble && (
+                                        <div className="bg-white rounded-lg p-2 shrink-0">
+                                            <ScrambleDisplay
+                                                eventId={params.eventId}
+                                                scramble={currentScramble}
+                                                visualization="2D"
+                                                width={180}
+                                                height={180}
+                                                checkered={true}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </CardContent>
