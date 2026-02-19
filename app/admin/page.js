@@ -27,8 +27,9 @@ import {
     formatRoundDate
 } from '@/lib/tournament';
 import {
-    useCubingScrambleGenerator,
-    generateScrambleWithCubing,
+    useScrambowGenerator,
+    generateScrambleWithScrambow,
+    generateMultipleScrambles,
     isEventSupported,
     getUnsupportedEvents,
     SUPPORTED_EVENTS
@@ -437,7 +438,7 @@ export default function AdminPanel() {
 
                         const eventScrambles = {};
                         for (let i = 0; i < scrambleCount; i++) {
-                            const scramble = await generateScrambleWithCubing(eventId);
+                            const scramble = generateScrambleWithScrambow(eventId);
                             if (scramble) {
                                 eventScrambles[i] = scramble;
                             }
