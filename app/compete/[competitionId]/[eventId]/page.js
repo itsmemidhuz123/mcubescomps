@@ -536,6 +536,9 @@ function TimerPage() {
                 }
             }
 
+            const isFlagged = antiCheatReport.flagged || isRefreshDNF;
+            const flagLevel = antiCheatReport.anomalyScore > 50 ? 'high' : antiCheatReport.anomalyScore > 20 ? 'medium' : antiCheatReport.anomalyScore > 0 ? 'low' : 'none';
+
             // Save solve to Firestore with anti-cheat data
             await addDoc(collection(db, 'solves'), {
                 userId: user.uid,
@@ -555,9 +558,15 @@ function TimerPage() {
                 reason: solveReason,
                 scramble: currentScramble,
                 isRefreshDNF: isRefreshDNF,
-                // Anti-cheat fields
-                flagged: antiCheatReport.flagged || isRefreshDNF,
+                // Anti-cheat fields - Updated schema
+                flagged: isFlagged,
+                autoFlag: antiCheatReport.flagged,
+                manualFlag: null,
+                flagLevel: flagLevel,
                 flagReason: antiCheatReport.flagReasons.join(', ') || (isRefreshDNF ? 'PAGE_REFRESH' : ''),
+                suspicionScore: antiCheatReport.anomalyScore || 0,
+                focusLossCount: antiCheatReport.violations.windowBlur ? 1 : 0,
+                tabSwitchCount: antiCheatReport.violations.tabSwitch ? 1 : 0,
                 visibilityViolation: antiCheatReport.violations.tabSwitch || false,
                 windowBlurViolation: antiCheatReport.violations.windowBlur || false,
                 multiTabViolation: antiCheatReport.violations.multiTab || false,
@@ -566,6 +575,10 @@ function TimerPage() {
                 pageRefreshViolation: antiCheatReport.violations.pageRefresh || isRefreshDNF,
                 suspiciousTimeViolation: antiCheatReport.violations.suspiciousTime || false,
                 anomalyScore: antiCheatReport.anomalyScore || 0,
+                // Admin fields
+                adminVerified: false,
+                adminNote: null,
+                disqualified: false,
                 createdAt: new Date().toISOString()
             });
 
@@ -701,6 +714,9 @@ function TimerPage() {
             // Check if any solve was flagged
             const anyFlagged = solves.some(s => s.flagged);
             const totalAnomalyScore = solves.reduce((sum, s) => sum + (s.anomalyScore || 0), 0);
+            const totalTabSwitches = solves.reduce((sum, s) => sum + (s.tabSwitchCount || 0), 0);
+            const totalFocusLoss = solves.reduce((sum, s) => sum + (s.focusLossCount || 0), 0);
+            const flagLevel = totalAnomalyScore > 50 ? 'high' : totalAnomalyScore > 20 ? 'medium' : totalAnomalyScore > 0 ? 'low' : 'none';
 
             const resultData = {
                 userId: user.uid,
@@ -715,8 +731,20 @@ function TimerPage() {
                 bestSingle: bestSingle === Infinity ? null : bestSingle,
                 average: average === Infinity ? null : average,
                 eliminatedByCutOff: eliminatedByCutOff,
+                // Anti-cheat fields
                 flagged: anyFlagged,
+                autoFlag: anyFlagged,
+                manualFlag: null,
+                flagLevel: flagLevel,
+                suspicionScore: totalAnomalyScore,
+                focusLossCount: totalFocusLoss,
+                tabSwitchCount: totalTabSwitches,
                 totalAnomalyScore: totalAnomalyScore,
+                // Admin fields
+                adminVerified: false,
+                adminNote: null,
+                disqualified: false,
+                qualifiedForNextRound: false,
                 createdAt: new Date().toISOString()
             };
 
