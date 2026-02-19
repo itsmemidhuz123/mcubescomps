@@ -130,47 +130,56 @@ export default function ResultsManagementPage() {
         const round = selectedRound || compData.currentRound || 1;
         const event = selectedEvent || compData.events?.[0];
 
-        const resultsQuery = query(
-            collection(db, 'results'),
-            where('competitionId', '==', params.competitionId),
-            where('roundNumber', '==', round),
-            orderBy('average', 'asc')
-        );
+        // Fetch all and filter client-side (avoid index requirement)
+        const snapshot = await getDocs(collection(db, 'results'));
+        let resultsData = [];
 
-        const snapshot = await getDocs(resultsQuery);
-        const resultsData = [];
-
-        for (const docSnap of snapshot.docs) {
+        snapshot.docs.forEach(docSnap => {
             const data = docSnap.data();
+            if (data.competitionId === params.competitionId) {
+                resultsData.push({ id: docSnap.id, ...data });
+            }
+        });
 
-            if (event && data.eventId !== event) continue;
+        // Filter by round and event
+        resultsData = resultsData.filter(d => d.roundNumber === round);
+        if (event) {
+            resultsData = resultsData.filter(d => d.eventId === event);
+        }
 
-            if (!users[data.userId]) {
-                const userDoc = await getDoc(doc(db, 'users', data.userId));
+        // Sort by average
+        resultsData.sort((a, b) => {
+            const aAvg = a.average || Infinity;
+            const bAvg = b.average || Infinity;
+            return aAvg - bAvg;
+        });
+
+        // Fetch user data
+        for (const result of resultsData) {
+            if (!users[result.userId]) {
+                const userDoc = await getDoc(doc(db, 'users', result.userId));
                 if (userDoc.exists()) {
-                    users[data.userId] = userDoc.data();
+                    users[result.userId] = userDoc.data();
                 }
             }
-
-            resultsData.push({
-                id: docSnap.id,
-                ...data,
-                user: users[data.userId] || {}
-            });
+            result.user = users[result.userId] || {};
         }
 
         setResults(resultsData);
     }
 
     async function fetchVerificationQueue() {
-        const queueQuery = query(
-            collection(db, 'videoSubmissions'),
-            where('competitionId', '==', params.competitionId),
-            orderBy('submittedAt', 'desc')
-        );
-
-        const snapshot = await getDocs(queueQuery);
-        setVerificationQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        // Fetch all and filter client-side
+        const snapshot = await getDocs(collection(db, 'videoSubmissions'));
+        const allSubmissions = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(d => d.competitionId === params.competitionId)
+            .sort((a, b) => {
+                const aTime = a.submittedAt?.toDate?.() || new Date(a.submittedAt || 0);
+                const bTime = b.submittedAt?.toDate?.() || new Date(b.submittedAt || 0);
+                return bTime - aTime;
+            });
+        setVerificationQueue(allSubmissions);
     }
 
     function getStats() {
@@ -343,15 +352,16 @@ export default function ResultsManagementPage() {
     }
 
     async function fetchUserSolves(userId) {
-        const solvesQuery = query(
-            collection(db, 'solves'),
-            where('competitionId', '==', params.competitionId),
-            where('userId', '==', userId),
-            orderBy('attemptNumber', 'asc')
-        );
-
-        const snapshot = await getDocs(solvesQuery);
-        const solves = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Fetch all and filter client-side (avoid index requirement)
+        const snapshot = await getDocs(collection(db, 'solves'));
+        const solves = [];
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.competitionId === params.competitionId && data.userId === userId) {
+                solves.push({ id: doc.id, ...data });
+            }
+        });
+        solves.sort((a, b) => (a.attemptNumber || 0) - (b.attemptNumber || 0));
         setUserSolves(solves);
     }
 
