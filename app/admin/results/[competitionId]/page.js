@@ -596,30 +596,68 @@ export default function ResultsManagementPage() {
 
         setProcessing(true);
         try {
-            const batch = writeBatch(db);
+            // First, check which participants exist
+            const qualifiedParticipants = [];
+            const eliminatedParticipants = [];
 
             for (const result of simulationData.qualified) {
                 const participantId = `${result.userId}_${params.competitionId}`;
-                const participantRef = doc(db, 'tournamentParticipants', participantId);
-                batch.update(participantRef, {
-                    qualified: true,
-                    qualifiedForNextRound: true,
-                    qualificationRank: simulationData.qualified.indexOf(result) + 1,
-                    updatedAt: new Date().toISOString()
+                const participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+                qualifiedParticipants.push({
+                    result,
+                    participantId,
+                    exists: participantDoc.exists()
                 });
-
-                const resultRef = doc(db, 'results', result.id);
-                batch.update(resultRef, { qualifiedForNextRound: true });
             }
 
             for (const result of simulationData.eliminated) {
                 const participantId = `${result.userId}_${params.competitionId}`;
-                const participantRef = doc(db, 'tournamentParticipants', participantId);
-                batch.update(participantRef, {
-                    eliminated: true,
-                    qualified: false,
-                    updatedAt: new Date().toISOString()
+                const participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+                eliminatedParticipants.push({
+                    result,
+                    participantId,
+                    exists: participantDoc.exists()
                 });
+            }
+
+            const batch = writeBatch(db);
+
+            for (const item of qualifiedParticipants) {
+                const participantRef = doc(db, 'tournamentParticipants', item.participantId);
+
+                if (item.exists) {
+                    batch.update(participantRef, {
+                        qualified: true,
+                        qualifiedForNextRound: true,
+                        qualificationRank: simulationData.qualified.indexOf(item.result) + 1,
+                        currentRound: selectedRound + 1,
+                        updatedAt: new Date().toISOString()
+                    });
+                } else {
+                    batch.set(participantRef, {
+                        userId: item.result.userId,
+                        competitionId: params.competitionId,
+                        qualified: true,
+                        qualifiedForNextRound: true,
+                        qualificationRank: simulationData.qualified.indexOf(item.result) + 1,
+                        currentRound: selectedRound + 1,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+
+                const resultRef = doc(db, 'results', item.result.id);
+                batch.update(resultRef, { qualifiedForNextRound: true });
+            }
+
+            for (const item of eliminatedParticipants) {
+                if (item.exists) {
+                    const participantRef = doc(db, 'tournamentParticipants', item.participantId);
+                    batch.update(participantRef, {
+                        eliminated: true,
+                        qualified: false,
+                        updatedAt: new Date().toISOString()
+                    });
+                }
             }
 
             const nextRound = selectedRound + 1;
