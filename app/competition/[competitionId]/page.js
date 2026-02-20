@@ -874,17 +874,17 @@ function CompetitionDetail() {
 
     if (loading || authLoading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-gray-500 text-xl">Loading...</div>
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
+                <div className="text-zinc-500 dark:text-zinc-400 text-xl">Loading...</div>
             </div>
         );
     }
 
     if (!competition) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
                 <div className="text-center">
-                    <div className="text-gray-500 text-xl mb-4">Competition not found</div>
+                    <div className="text-zinc-500 dark:text-zinc-400 text-xl mb-4">Competition not found</div>
                     <Button onClick={() => router.push('/competitions')}>Back to Competitions</Button>
                 </div>
             </div>
@@ -892,12 +892,12 @@ function CompetitionDetail() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
             <div className="container mx-auto px-4 py-8 max-w-5xl">
                 <Button
                     variant="ghost"
                     onClick={() => router.push('/competitions')}
-                    className="mb-6 text-gray-600 hover:text-gray-900"
+                    className="mb-6 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                 >
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Competitions
@@ -911,30 +911,30 @@ function CompetitionDetail() {
                                 <div className="flex items-center gap-3 mb-2 flex-wrap">
                                     <Badge variant="outline">ONLINE</Badge>
                                     <Badge className={
-                                        compStatus.status === 'live' ? 'bg-green-100 text-green-700' :
-                                            compStatus.status === 'upcoming' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                                        compStatus.status === 'live' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                                            compStatus.status === 'upcoming' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
                                     }>
                                         {compStatus.status?.toUpperCase()}
                                     </Badge>
                                     <Badge className={
-                                        regStatus.status === 'open' ? 'bg-blue-100 text-blue-700' :
-                                            regStatus.status === 'closed' ? 'bg-red-100 text-red-700' :
-                                                'bg-orange-100 text-orange-700'
+                                        regStatus.status === 'open' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+                                            regStatus.status === 'closed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                                                'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
                                     }>
                                         REG: {regStatus.status === 'open' ? 'OPEN' : regStatus.status === 'closed' ? 'CLOSED' : 'NOT YET'}
                                     </Badge>
-                                    <Badge className={competition.type === 'FREE' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}>
+                                    <Badge className={competition.type === 'FREE' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'}>
                                         {competition.type === 'FREE' ? 'FREE' : 'PAID'}
                                     </Badge>
                                     {competition.mode === CompetitionMode.TOURNAMENT && (
-                                        <Badge className="bg-indigo-100 text-indigo-700">
+                                        <Badge className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
                                             <Layers className="h-3 w-3 mr-1" />
                                             TOURNAMENT ({competition.rounds?.length || 0} Rounds)
                                         </Badge>
                                     )}
                                 </div>
-                                <CardTitle className="text-3xl text-gray-900 mb-2">{competition.name}</CardTitle>
-                                <CardDescription className="text-gray-600 text-lg">
+                                <CardTitle className="text-3xl text-zinc-900 dark:text-white mb-2">{competition.name}</CardTitle>
+                                <CardDescription className="text-zinc-600 dark:text-zinc-400 text-lg">
                                     <div className="flex items-center gap-2 mt-2">
                                         <Calendar className="h-4 w-4" />
                                         {formatDate(competition.competitionStartDate || competition.startDate)} - {formatDate(competition.competitionEndDate || competition.endDate)}
@@ -945,44 +945,44 @@ function CompetitionDetail() {
                     </CardHeader>
                     <CardContent>
                         {competition.description && (
-                            <p className="text-gray-600 mb-6">{competition.description}</p>
+                            <p className="text-zinc-600 dark:text-zinc-400 mb-6">{competition.description}</p>
                         )}
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                            <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
                                 <Trophy className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-                                <p className="text-2xl font-bold text-gray-900">{competition.events?.length || 0}</p>
-                                <p className="text-gray-500 text-sm">Events</p>
+                                <p className="text-2xl font-bold text-zinc-900 dark:text-white">{competition.events?.length || 0}</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Events</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                            <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
                                 <Clock className="h-6 w-6 mx-auto mb-2 text-purple-500" />
-                                <p className="text-2xl font-bold text-gray-900">Ao{competition.solveLimit || 5}</p>
-                                <p className="text-gray-500 text-sm">Format</p>
+                                <p className="text-2xl font-bold text-zinc-900 dark:text-white">Ao{competition.solveLimit || 5}</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Format</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                            <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
                                 <Users className="h-6 w-6 mx-auto mb-2 text-green-500" />
-                                <p className="text-2xl font-bold text-gray-900">{participantCount}</p>
-                                <p className="text-gray-500 text-sm">Participants</p>
+                                <p className="text-2xl font-bold text-zinc-900 dark:text-white">{participantCount}</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Participants</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                            <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
                                 <DollarSign className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
-                                <p className="text-2xl font-bold text-gray-900">
+                                <p className="text-2xl font-bold text-zinc-900 dark:text-white">
                                     {competition.type === 'FREE' ? 'FREE' : `${getCurrencySymbol(competition.currency)}${competition.flatPrice || competition.basePrice || 0}+`}
                                 </p>
-                                <p className="text-gray-500 text-sm">Entry Fee</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Entry Fee</p>
                             </div>
                         </div>
 
                         {/* Registration Status Messages */}
                         {!registration && regStatus.status === 'not_opened' && (
-                            <div className="bg-orange-50 border border-orange-200 text-orange-800 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-300 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
                                 <Clock className="h-5 w-5" />
                                 <span><strong>Registration Not Open Yet:</strong> {regStatus.message}</span>
                             </div>
                         )}
 
                         {!registration && regStatus.status === 'closed' && (
-                            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
                                 <AlertCircle className="h-5 w-5" />
                                 <span><strong>Registration Closed:</strong> {regStatus.message}</span>
                             </div>
@@ -1016,9 +1016,9 @@ function CompetitionDetail() {
                                     const hasMaxTime = settings?.applyMaxTime;
 
                                     return (
-                                        <div key={eventId} className="border rounded-lg p-4 bg-white">
+                                        <div key={eventId} className="border rounded-lg p-4 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
                                             <div className="flex items-center justify-between mb-2">
-                                                <h3 className="font-semibold text-gray-900">
+                                                <h3 className="font-semibold text-zinc-900 dark:text-white">
                                                     <EventIcon eventId={eventId} size={20} /> {getEventName(eventId)}
                                                 </h3>
                                                 <Badge variant="outline">{settings?.format || 'Ao5'}</Badge>
@@ -1027,7 +1027,7 @@ function CompetitionDetail() {
                                             {(hasCutOff || hasMaxTime) ? (
                                                 <div className="space-y-2 text-sm">
                                                     {hasCutOff && (
-                                                        <div className="flex items-center gap-2 text-orange-700 bg-orange-50 px-3 py-2 rounded">
+                                                        <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 px-3 py-2 rounded">
                                                             <Clock className="h-4 w-4" />
                                                             <span>
                                                                 <strong>Cut-Off:</strong> {formatTimeDisplay(settings.cutOffTime)} ({settings.cutOffAttempts} attempt{settings.cutOffAttempts > 1 ? 's' : ''} to beat)
@@ -1035,7 +1035,7 @@ function CompetitionDetail() {
                                                         </div>
                                                     )}
                                                     {hasMaxTime && (
-                                                        <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded">
+                                                        <div className="flex items-center gap-2 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded">
                                                             <Timer className="h-4 w-4" />
                                                             <span>
                                                                 <strong>Maximum Time:</strong> {formatTimeDisplay(settings.maxTimeLimit)} per solve
@@ -1044,7 +1044,7 @@ function CompetitionDetail() {
                                                     )}
                                                 </div>
                                             ) : (
-                                                <p className="text-sm text-gray-500">No time limits configured</p>
+                                                <p className="text-sm text-zinc-500 dark:text-zinc-400">No time limits configured</p>
                                             )}
                                         </div>
                                     );
@@ -1066,7 +1066,7 @@ function CompetitionDetail() {
                         <CardContent>
                             {!user ? (
                                 <div className="text-center py-8">
-                                    <p className="text-gray-500 mb-4">You need to sign in to register for this competition</p>
+                                    <p className="text-zinc-500 dark:text-zinc-400 mb-4">You need to sign in to register for this competition</p>
                                     <Button onClick={() => router.push('/auth/login')} className="bg-blue-600">
                                         Sign In to Register
                                     </Button>
@@ -1078,8 +1078,8 @@ function CompetitionDetail() {
                                             <div
                                                 key={eventId}
                                                 className={`flex items-center space-x-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${selectedEvents.includes(eventId)
-                                                        ? 'border-blue-500 bg-blue-50'
-                                                        : 'border-gray-200 hover:border-blue-200'
+                                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                                        : 'border-zinc-200 dark:border-zinc-700 hover:border-blue-200 dark:hover:border-blue-800'
                                                     }`}
                                                 onClick={() => handleEventToggle(eventId)}
                                             >
@@ -1088,7 +1088,7 @@ function CompetitionDetail() {
                                                     checked={selectedEvents.includes(eventId)}
                                                     onCheckedChange={() => handleEventToggle(eventId)}
                                                 />
-                                                <label htmlFor={eventId} className="cursor-pointer font-medium">
+                                                <label htmlFor={eventId} className="cursor-pointer font-medium text-zinc-900 dark:text-white">
                                                     <EventIcon eventId={eventId} size={20} /> {getEventName(eventId)}
                                                 </label>
                                             </div>
@@ -1270,14 +1270,14 @@ function CompetitionDetail() {
 
                 {/* Registered - Start Competition */}
                 {registration && (
-                    <Card className="mb-6 border-green-200 bg-green-50">
+                    <Card className="mb-6 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
                         <CardContent className="py-6">
                             <div className="text-center space-y-4">
                                 <Badge className="bg-green-600 text-white text-lg px-4 py-2">✓ Registered</Badge>
-                                <p className="text-gray-700">You are registered for {registration.events?.length || 0} event(s):</p>
+                                <p className="text-zinc-700 dark:text-zinc-300">You are registered for {registration.events?.length || 0} event(s):</p>
                                 <div className="flex flex-wrap justify-center gap-2">
                                     {(registration.events || []).map(eventId => (
-                                        <Badge key={eventId} variant="outline" className="bg-white">
+                                        <Badge key={eventId} variant="outline" className="bg-white dark:bg-zinc-800">
                                             <EventIcon eventId={eventId} size={18} /> {getEventName(eventId)}
                                         </Badge>
                                     ))}
@@ -1292,12 +1292,12 @@ function CompetitionDetail() {
                                         Start Competition
                                     </Button>
                                 ) : compStatus.status === 'upcoming' ? (
-                                    <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg inline-flex items-center gap-2">
+                                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg inline-flex items-center gap-2">
                                         <Lock className="h-5 w-5" />
                                         <span>{compStatus.message}</span>
                                     </div>
                                 ) : (
-                                    <p className="text-gray-600">{compStatus.message}</p>
+                                    <p className="text-zinc-600 dark:text-zinc-400">{compStatus.message}</p>
                                 )}
                             </div>
                         </CardContent>
@@ -1310,7 +1310,7 @@ function CompetitionDetail() {
                         <Button
                             onClick={() => router.push(`/leaderboard/${params.competitionId}`)}
                             variant="outline"
-                            className="border-yellow-500 text-yellow-600 hover:bg-yellow-50"
+                            className="border-yellow-500 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
                         >
                             <Trophy className="h-5 w-5 mr-2" />
                             View Leaderboard
