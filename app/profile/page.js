@@ -290,7 +290,7 @@ function ProfilePage() {
 
     return (
         <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 selection:bg-blue-500/30">
-            <div className="fixed inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-zinc-50 to-zinc-50 dark:from-blue-900/10 dark:via-zinc-950 dark:to-zinc-950 pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-zinc-50 to-zinc-50 dark:from-blue-900/10 dark:via-zinc-950 dark:to-zinc-950 pointer-events-none" />
 
             <div className="relative z-10">
 
