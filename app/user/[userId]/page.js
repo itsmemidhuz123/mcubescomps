@@ -133,9 +133,9 @@ export default function UserProfile() {
                     <div className="h-32 bg-gradient-to-r from-blue-600 to-violet-600"></div>
                     <CardContent className="relative pt-0 pb-8 px-8">
                         <div className="flex flex-col md:flex-row items-start gap-6 -mt-12">
-                            <Avatar className="h-32 w-32 border-4 border-white shadow-lg bg-white">
+                            <Avatar className="h-32 w-32 border-4 border-white dark:border-zinc-900 shadow-lg bg-white dark:bg-zinc-800">
                                 <AvatarImage src={profile.photoURL} />
-                                <AvatarFallback className="text-4xl font-bold text-gray-400">
+                                <AvatarFallback className="text-4xl font-bold text-zinc-400">
                                     {profile.displayName?.charAt(0)}
                                 </AvatarFallback>
                             </Avatar>
@@ -143,9 +143,9 @@ export default function UserProfile() {
                             <div className="flex-1 pt-14 md:pt-12 space-y-2">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div>
-                                        <h1 className="text-3xl font-bold text-gray-900">{profile.displayName}</h1>
-                                        <div className="flex items-center gap-2 text-gray-500 mt-1">
-                                            <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-sm text-gray-700">
+                                        <h1 className="text-3xl font-bold text-zinc-900 dark:text-white">{profile.displayName}</h1>
+                                        <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mt-1">
+                                            <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-sm text-zinc-700 dark:text-zinc-300">
                                                 {profile.wcaStyleId || profile.username || 'No ID'}
                                             </span>
                                             {profile.country && (
@@ -160,18 +160,18 @@ export default function UserProfile() {
                                     </div>
 
                                     <div className="flex gap-4 text-center">
-                                        <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                                            <div className="text-2xl font-bold text-blue-700">{stats.totalComps}</div>
-                                            <div className="text-xs text-blue-600 font-medium uppercase">Competitions</div>
+                                        <div className="bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-lg">
+                                            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{stats.totalComps}</div>
+                                            <div className="text-xs text-blue-600 dark:text-blue-400 font-medium uppercase">Competitions</div>
                                         </div>
-                                        <div className="bg-purple-50 px-4 py-2 rounded-lg">
-                                            <div className="text-2xl font-bold text-purple-700">{stats.totalEvents}</div>
-                                            <div className="text-xs text-purple-600 font-medium uppercase">Events</div>
+                                        <div className="bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-lg">
+                                            <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{stats.totalEvents}</div>
+                                            <div className="text-xs text-purple-600 dark:text-purple-400 font-medium uppercase">Events</div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 text-sm text-gray-500 pt-2">
+                                <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400 pt-2">
                                     <span className="flex items-center gap-1">
                                         <Calendar className="h-4 w-4" /> Joined {new Date(profile.createdAt).toLocaleDateString()}
                                     </span>
@@ -211,14 +211,14 @@ export default function UserProfile() {
                                                     <TableCell className="text-right font-mono font-medium">
                                                         {formatTime(data.single)}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-mono text-gray-500">
+                                                    <TableCell className="text-right font-mono text-zinc-500 dark:text-zinc-400">
                                                         -
                                                     </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                                                <TableCell colSpan={3} className="text-center py-8 text-zinc-500 dark:text-zinc-400">
                                                     No official solves yet
                                                 </TableCell>
                                             </TableRow>
@@ -232,7 +232,7 @@ export default function UserProfile() {
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
-                                    <History className="h-5 w-5 text-gray-500" />
+                                    <History className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
                                     Competition History
                                 </CardTitle>
                             </CardHeader>
@@ -240,9 +240,9 @@ export default function UserProfile() {
                                 <div className="space-y-4">
                                     {history.length > 0 ? (
                                         history.map((reg, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-4 bg-white border rounded-lg hover:border-blue-200 transition-colors">
+                                            <div key={idx} className="flex items-center justify-between p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
                                                 <div>
-                                                    <h4 className="font-semibold text-gray-900">{reg.competitionName}</h4>
+                                                    <h4 className="font-semibold text-zinc-900 dark:text-white">{reg.competitionName}</h4>
                                                     <div className="flex gap-2 mt-2">
                                                         {(reg.events || []).map(e => (
                                                             <Badge key={e} variant="secondary" className="text-xs">
@@ -252,17 +252,17 @@ export default function UserProfile() {
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <Badge variant={reg.status === 'CONFIRMED' ? 'default' : 'secondary'} className={reg.status === 'CONFIRMED' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}>
+                                                    <Badge variant={reg.status === 'CONFIRMED' ? 'default' : 'secondary'} className={reg.status === 'CONFIRMED' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40' : ''}>
                                                         {reg.status}
                                                     </Badge>
-                                                    <div className="text-xs text-gray-500 mt-1">
+                                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                                                         {new Date(reg.createdAt).toLocaleDateString()}
                                                     </div>
                                                 </div>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="text-center py-8 text-gray-500">No competitions joined yet</div>
+                                        <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">No competitions joined yet</div>
                                     )}
                                 </div>
                             </CardContent>
@@ -273,13 +273,13 @@ export default function UserProfile() {
                     <div className="space-y-6">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-sm uppercase tracking-wide text-gray-500">Badges & Achievements</CardTitle>
+                                <CardTitle className="text-sm uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Badges & Achievements</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <div className="aspect-square bg-yellow-50 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-yellow-100">
-                                        <Medal className="h-6 w-6 text-yellow-600 mb-1" />
-                                        <span className="text-[10px] font-medium text-yellow-800">Founder</span>
+                                    <div className="aspect-square bg-zinc-50 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-zinc-100 dark:border-zinc-700 opacity-50">
+                                        <Trophy className="h-6 w-6 text-zinc-400 dark:text-zinc-500 mb-1" />
+                                        <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Winner</span>
                                     </div>
                                     {/* Placeholders for future badges */}
                                     <div className="aspect-square bg-gray-50 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-gray-100 opacity-50">
