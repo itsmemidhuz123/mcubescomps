@@ -111,23 +111,23 @@ function CompetitionsPage() {
     const pastComps = filteredComps.filter(c => c.status === 'PAST');
 
     return (
-        <div className="min-h-screen bg-gray-50/50">
+        <div className="min-h-screen bg-zinc-50/50 dark:bg-zinc-950/50">
             <div className="container mx-auto px-4 py-8 max-w-6xl">
                 {/* Page Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Competitions</h1>
-                        <p className="text-gray-500 mt-1">Discover upcoming official-style online events.</p>
+                        <h1 className="text-3xl font-bold text-zinc-900 dark:text-white">Competitions</h1>
+                        <p className="text-zinc-500 dark:text-zinc-400 mt-1">Discover upcoming official-style online events.</p>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                             <Input
                                 placeholder="Search events..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 w-full md:w-64 bg-white"
+                                className="pl-9 w-full md:w-64 bg-white dark:bg-zinc-900"
                             />
                         </div>
                     </div>
@@ -138,7 +138,7 @@ function CompetitionsPage() {
                     <Button
                         variant={filter === 'all' ? 'default' : 'outline'}
                         onClick={() => setFilter('all')}
-                        className={`rounded-full px-6 ${filter === 'all' ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-white border-gray-200'}`}
+                        className={`rounded-full px-6 ${filter === 'all' ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-100' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'}`}
                         size="sm"
                     >
                         All Events
@@ -146,7 +146,7 @@ function CompetitionsPage() {
                     <Button
                         variant={filter === 'upcoming' ? 'default' : 'outline'}
                         onClick={() => setFilter('upcoming')}
-                        className={`rounded-full px-6 ${filter === 'upcoming' ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-white border-gray-200'}`}
+                        className={`rounded-full px-6 ${filter === 'upcoming' ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-100' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'}`}
                         size="sm"
                     >
                         Upcoming
@@ -154,7 +154,7 @@ function CompetitionsPage() {
                     <Button
                         variant={filter === 'completed' ? 'default' : 'outline'}
                         onClick={() => setFilter('completed')}
-                        className={`rounded-full px-6 ${filter === 'completed' ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-white border-gray-200'}`}
+                        className={`rounded-full px-6 ${filter === 'completed' ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-100' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'}`}
                         size="sm"
                     >
                         Completed
@@ -164,14 +164,14 @@ function CompetitionsPage() {
                 {loading ? (
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {[1, 2, 3, 4, 5, 6].map(i => (
-                            <div key={i} className="h-48 bg-gray-100 rounded-xl animate-pulse"></div>
+                            <div key={i} className="h-48 bg-zinc-100 dark:bg-zinc-800 rounded-xl animate-pulse"></div>
                         ))}
                     </div>
                 ) : filteredComps.length === 0 ? (
-                    <div className="text-center py-20 bg-white rounded-xl border border-gray-200 border-dashed">
+                    <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 border-dashed">
                         <div className="text-4xl mb-4">🔍</div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-1">No competitions found</h3>
-                        <p className="text-gray-500">Try adjusting your search or filters.</p>
+                        <h3 className="text-lg font-medium text-zinc-900 dark:text-white mb-1">No competitions found</h3>
+                        <p className="text-zinc-500 dark:text-zinc-400">Try adjusting your search or filters.</p>
                     </div>
                 ) : (
                     <div className="space-y-12">
@@ -180,7 +180,7 @@ function CompetitionsPage() {
                             <section>
                                 <div className="flex items-center gap-2 mb-6">
                                     <div className="h-6 w-1 bg-green-500 rounded-full"></div>
-                                    <h2 className="text-xl font-bold text-gray-900">Active & Upcoming</h2>
+                                    <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Active & Upcoming</h2>
                                 </div>
 
                                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -195,8 +195,8 @@ function CompetitionsPage() {
                         {pastComps.length > 0 && (
                             <section>
                                 <div className="flex items-center gap-2 mb-6">
-                                    <div className="h-6 w-1 bg-gray-300 rounded-full"></div>
-                                    <h2 className="text-xl font-bold text-gray-900">Past Events</h2>
+                                    <div className="h-6 w-1 bg-zinc-300 dark:bg-zinc-600 rounded-full"></div>
+                                    <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Past Events</h2>
                                 </div>
 
                                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -232,39 +232,39 @@ function CompetitionCard({ comp, router, isPast = false }) {
 
         if (!regOpen || !regClose) {
             // Legacy: no registration dates set
-            return { status: 'open', label: 'OPEN', className: 'bg-blue-100 text-blue-700' };
+            return { status: 'open', label: 'OPEN', className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' };
         }
 
         if (now < regOpen) {
-            return { status: 'not_opened', label: 'REG SOON', className: 'bg-orange-100 text-orange-700' };
+            return { status: 'not_opened', label: 'REG SOON', className: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' };
         }
 
         if (now > regClose) {
-            return { status: 'closed', label: 'REG CLOSED', className: 'bg-red-100 text-red-700' };
+            return { status: 'closed', label: 'REG CLOSED', className: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' };
         }
 
-        return { status: 'open', label: 'OPEN', className: 'bg-blue-100 text-blue-700' };
+        return { status: 'open', label: 'OPEN', className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' };
     };
 
     const regStatus = getRegStatus();
 
     return (
         <Card
-            className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 group overflow-hidden rounded-xl"
+            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all duration-300 group overflow-hidden rounded-xl"
         >
             <CardContent className="p-0">
                 <div className="p-5">
                     <div className="flex items-start justify-between mb-4">
                         <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+                            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">
                                 {formatDate(comp.competitionStartDate || comp.startDate)}
                             </span>
-                            <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-tight">
+                            <h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-tight">
                                 {comp.name}
                             </h3>
                         </div>
                         {isPast ? (
-                            <Badge variant="secondary" className="bg-gray-100 text-gray-500">ENDED</Badge>
+                            <Badge variant="secondary" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">ENDED</Badge>
                         ) : (
                             <Badge className={`${regStatus.className} border-none shadow-none`}>{regStatus.label}</Badge>
                         )}
@@ -272,12 +272,12 @@ function CompetitionCard({ comp, router, isPast = false }) {
 
                     <div className="flex flex-wrap gap-1.5 mb-6">
                         {(comp.events || []).slice(0, 5).map(eventId => (
-                            <span key={eventId} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-xs text-gray-600 font-medium">
+                            <span key={eventId} className="px-2 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-600 dark:text-zinc-400 font-medium">
                                 {eventId}
                             </span>
                         ))}
                         {(comp.events || []).length > 5 && (
-                            <span className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-xs text-gray-500 font-medium">
+                            <span className="px-2 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                                 +{comp.events.length - 5}
                             </span>
                         )}
@@ -287,7 +287,7 @@ function CompetitionCard({ comp, router, isPast = false }) {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
+                            className="flex-1 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                             onClick={() => router.push(isPast ? `/leaderboard/${comp.id}` : `/competition/${comp.id}`)}
                         >
                             {isPast ? 'Results' : 'Details'}
@@ -295,7 +295,7 @@ function CompetitionCard({ comp, router, isPast = false }) {
                         {!isPast && (
                             <Button
                                 size="sm"
-                                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
+                                className="flex-1 bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900"
                                 onClick={() => router.push(`/competition/${comp.id}`)}
                                 disabled={regStatus.status === 'closed'}
                             >
