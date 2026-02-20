@@ -122,7 +122,7 @@ export default function UserProfile() {
     if (!profile) return <div className="min-h-screen flex items-center justify-center">User not found</div>;
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
             <div className="container mx-auto px-4 max-w-5xl">
                 <Button variant="ghost" onClick={() => router.back()} className="mb-6">
                     <ArrowLeft className="h-4 w-4 mr-2" /> Back
@@ -282,9 +282,13 @@ export default function UserProfile() {
                                         <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Winner</span>
                                     </div>
                                     {/* Placeholders for future badges */}
-                                    <div className="aspect-square bg-gray-50 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-gray-100 opacity-50">
-                                        <Trophy className="h-6 w-6 text-gray-400 mb-1" />
-                                        <span className="text-[10px] font-medium text-gray-500">Winner</span>
+                                    <div className="aspect-square bg-zinc-50 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-zinc-100 dark:border-zinc-700 opacity-50">
+                                        <Trophy className="h-6 w-6 text-zinc-400 dark:text-zinc-500 mb-1" />
+                                        <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Winner</span>
+                                    </div>
+                                    <div className="aspect-square bg-zinc-50 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center p-2 text-center border border-zinc-100 dark:border-zinc-700 opacity-50">
+                                        <Trophy className="h-6 w-6 text-zinc-400 dark:text-zinc-500 mb-1" />
+                                        <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Winner</span>
                                     </div>
                                 </div>
                             </CardContent>
