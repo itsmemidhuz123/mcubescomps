@@ -418,40 +418,40 @@ export default function LeaderboardPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
                     <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
-                    <div className="text-gray-500 text-sm">Loading leaderboard...</div>
+                    <div className="text-zinc-500 dark:text-zinc-400 text-sm">Loading leaderboard...</div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900">
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white">
             <div className="container mx-auto px-4 py-8 max-w-6xl">
-                <Button variant="ghost" onClick={() => router.push(`/competition/${params.competitionId}`)} className="mb-6 text-gray-500 hover:text-gray-900 -ml-2">
+                <Button variant="ghost" onClick={() => router.push(`/competition/${params.competitionId}`)} className="mb-6 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white -ml-2">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Competition
                 </Button>
 
                 <div className="mb-8">
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div className="p-3 bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800">
                             <Trophy className="h-8 w-8 text-yellow-500" />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-bold text-gray-900">{competition?.name}</h1>
-                            <p className="text-gray-500 flex items-center gap-2">
+                            <h1 className="text-3xl font-bold text-zinc-900 dark:text-white">{competition?.name}</h1>
+                            <p className="text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
                                 Leaderboard • {registeredUsers.length} Participants
                                 {competition?.mode === CompetitionMode.TOURNAMENT && (
-                                    <Badge className="bg-indigo-100 text-indigo-700">
+                                    <Badge className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
                                         <Layers className="h-3 w-3 mr-1" />
                                         Tournament
                                     </Badge>
                                 )}
                                 {isRoundLocked && (
-                                    <Badge className="bg-red-100 text-red-700">
+                                    <Badge className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
                                         <Lock className="h-3 w-3 mr-1" />
                                         Official - Locked
                                     </Badge>
@@ -478,9 +478,9 @@ export default function LeaderboardPage() {
                     </div>
 
                     {competition?.mode === CompetitionMode.TOURNAMENT && (
-                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                        <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
                             <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-indigo-900 flex items-center gap-2">
+                                <h3 className="font-semibold text-indigo-900 dark:text-indigo-300 flex items-center gap-2">
                                     <Layers className="h-4 w-4" />
                                     Round Selection
                                 </h3>
@@ -491,14 +491,14 @@ export default function LeaderboardPage() {
                             <div className="flex flex-wrap gap-2">
                                 {competition.rounds?.map(round => (
                                     <Button key={round.roundNumber} variant={selectedRound === round.roundNumber ? 'default' : 'outline'} size="sm" onClick={() => setSelectedRound(round.roundNumber)}
-                                        className={selectedRound === round.roundNumber ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}>
+                                        className={selectedRound === round.roundNumber ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}>
                                         {round.name || `Round ${round.roundNumber}`}
                                         {round.isFinal && <span className="ml-1">(Final)</span>}
                                     </Button>
                                 ))}
                             </div>
                             {selectedRound && getCurrentRoundData() && (
-                                <div className="mt-3 text-sm text-indigo-700">
+                                <div className="mt-3 text-sm text-indigo-700 dark:text-indigo-300">
                                     Qualify: Top {getCurrentRoundData().qualifyType === 'percentage' ? `${getCurrentRoundData().qualifyValue}%` : getCurrentRoundData().qualifyValue} participants
                                     {currentLeaderboard.filter(r => r.hasResults && !r.disqualified).length > 0 && (
                                         <span className="ml-2">({getQualificationCount()} spots)</span>
@@ -511,7 +511,7 @@ export default function LeaderboardPage() {
                     <div className="flex flex-wrap gap-2 mb-6">
                         {(competition?.events || []).map(eventId => (
                             <Button key={eventId} variant={selectedEvent === eventId ? 'default' : 'outline'} onClick={() => setSelectedEvent(eventId)}
-                                className={selectedEvent === eventId ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}>
+                                className={selectedEvent === eventId ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}>
                                 <EventIcon eventId={eventId} size={20} /> <span className="ml-2">{getEventName(eventId)}</span>
                             </Button>
                         ))}
@@ -519,17 +519,35 @@ export default function LeaderboardPage() {
 
                     <div className="flex flex-col sm:flex-row gap-4 mb-6">
                         <div className="flex items-center gap-2">
-                            <div className="bg-white rounded-md border border-gray-200 p-1 shadow-sm">
+                            <div className="bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-700 p-1 shadow-sm">
                                 <Select value={sortBy} onValueChange={setSortBy}>
-                                    <SelectTrigger className="w-[180px] border-none shadow-none h-8">
-                                        <Filter className="h-3.5 w-3.5 mr-2 text-gray-400" />
-                                        <SelectValue />
+                                    <SelectTrigger className="w-[180px] text-sm border-0 focus:ring-0">
+                                        <Filter className="h-3.5 w-3.5 mr-2 text-zinc-400" />
+                                        <SelectValue placeholder="Sort by" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="average">Sort by Average</SelectItem>
-                                        <SelectItem value="single">Sort by Best Single</SelectItem>
+                                        <SelectItem value="single">Sort by Single</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-700 p-1 shadow-sm">
+                                <Select value={filterBy} onValueChange={setFilterBy}>
+                                    <SelectTrigger className="w-[180px] text-sm border-0 focus:ring-0">
+                                        <SelectValue placeholder="Filter" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Participants</SelectItem>
+                                        <SelectItem value="qualified">Qualified</SelectItem>
+                                        <SelectItem value="disqualified">Disqualified</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="relative flex-1 max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                                <Input placeholder="Search competitor..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 shadow-sm" />
                             </div>
                             <div className="bg-white rounded-md border border-gray-200 p-1 shadow-sm">
                                 <Select value={viewMode} onValueChange={setViewMode}>
