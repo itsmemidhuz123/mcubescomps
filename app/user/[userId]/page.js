@@ -29,6 +29,8 @@ export default function UserProfile() {
     useEffect(() => {
         if (params.userId) {
             fetchUserData();
+        } else {
+            setLoading(false);
         }
     }, [params.userId]);
 
@@ -45,15 +47,15 @@ export default function UserProfile() {
 
             // Filter out private info (email, payment history, admin status)
             const publicProfile = {
-                uid: userData.uid,
-                displayName: userData.displayName,
-                username: userData.username,
-                wcaStyleId: userData.wcaStyleId,
-                wcaId: userData.wcaId,
-                country: userData.country,
-                photoURL: userData.photoURL,
-                createdAt: userData.createdAt,
-                bio: userData.bio
+                uid: userData.uid || '',
+                displayName: userData.displayName || userData.username || 'Unknown User',
+                username: userData.username || '',
+                wcaStyleId: userData.wcaStyleId || '',
+                wcaId: userData.wcaId || '',
+                country: userData.country || 'Unknown',
+                photoURL: userData.photoURL || '',
+                createdAt: userData.createdAt || null,
+                bio: userData.bio || ''
             };
             setProfile(publicProfile);
 
@@ -77,7 +79,7 @@ export default function UserProfile() {
 
             // Calculate PBs
             const pbs = {};
-            const solves = solvesSnap.docs.map(d => d.data());
+            const solves = solvesSnap.docs.map(d => d.data()) || [];
 
             solves.forEach(solve => {
                 const eventId = solve.eventId;
@@ -96,9 +98,16 @@ export default function UserProfile() {
             });
 
             // Simple count stats
+            const uniqueEvents = solves.reduce((acc, curr) => {
+                if (curr && curr.eventId) {
+                    acc.add(curr.eventId);
+                }
+                return acc;
+            }, new Set());
+
             setStats({
                 totalComps: regsData.length,
-                totalEvents: solves.reduce((acc, curr) => acc.add(curr.eventId), new Set()).size,
+                totalEvents: uniqueEvents.size,
                 pbs
             });
 
@@ -116,6 +125,14 @@ export default function UserProfile() {
         const s = date.getSeconds();
         const cs = Math.floor(date.getMilliseconds() / 10);
         return `${m > 0 ? m + ':' : ''}${s}.${cs.toString().padStart(2, '0')}`;
+    };
+
+    const formatDate = (dateValue) => {
+        if (!dateValue) return 'N/A';
+        if (typeof dateValue.toDate === 'function') {
+            return dateValue.toDate().toLocaleDateString();
+        }
+        return new Date(dateValue).toLocaleDateString();
     };
 
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading Profile...</div>;
@@ -173,7 +190,7 @@ export default function UserProfile() {
 
                                 <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400 pt-2">
                                     <span className="flex items-center gap-1">
-                                        <Calendar className="h-4 w-4" /> Joined {new Date(profile.createdAt).toLocaleDateString()}
+                                        <Calendar className="h-4 w-4" /> Joined {formatDate(profile.createdAt)}
                                     </span>
                                 </div>
                             </div>
@@ -256,7 +273,7 @@ export default function UserProfile() {
                                                         {reg.status}
                                                     </Badge>
                                                     <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                                                        {new Date(reg.createdAt).toLocaleDateString()}
+                                                        {formatDate(reg.createdAt)}
                                                     </div>
                                                 </div>
                                             </div>
