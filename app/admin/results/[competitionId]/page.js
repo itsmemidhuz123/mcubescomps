@@ -34,6 +34,7 @@ import {
     AlertOctagon, Info, Send, UserCheck, UserX, ArrowUpCircle
 } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
+import EventIcon from '@/lib/EventIcon';
 import {
     CompetitionMode,
     TournamentStatus,
@@ -786,6 +787,21 @@ export default function ResultsManagementPage() {
                                 {competition?.rounds?.map(round => (
                                     <SelectItem key={round.roundNumber} value={round.roundNumber.toString()}>
                                         {round.name || `Round ${round.roundNumber}`}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select value={selectedEvent || ''} onValueChange={(v) => { setSelectedEvent(v); fetchResults(competition, selectedRound, v); }}>
+                            <SelectTrigger className="w-[150px]">
+                                <SelectValue placeholder="Select Event" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {(competition?.events || []).map(eventId => (
+                                    <SelectItem key={eventId} value={eventId}>
+                                        <div className="flex items-center gap-2">
+                                            <EventIcon eventId={eventId} size={16} />
+                                            {getEventName(eventId)}
+                                        </div>
                                     </SelectItem>
                                 ))}
                             </SelectContent>
