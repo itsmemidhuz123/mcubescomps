@@ -35,7 +35,7 @@ export function Navbar() {
     const isActive = (path) => pathname === path;
 
     return (
-        <header className="w-full border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md transition-colors duration-200">
+        <header className="relative z-30 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md transition-colors duration-200">
             <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                 {/* Logo */}
                 <Link href="/" className="flex items-center gap-2 group">
@@ -61,7 +61,7 @@ export function Navbar() {
                             href={link.href}
                             className={`text-sm font-medium transition-colors ${isActive(link.href)
                                     ? 'text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
                                 }`}
                         >
                             {link.label}
@@ -77,7 +77,7 @@ export function Navbar() {
                             variant="ghost"
                             size="icon"
                             onClick={toggleTheme}
-                            className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                            className="text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                         >
                             {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -88,16 +88,16 @@ export function Navbar() {
                         user ? (
                             <>
                                 {isAdmin && (
-                                    <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} title="Admin Panel" className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+                                    <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} title="Admin Panel" className="text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400">
                                         <Shield className="w-5 h-5" />
                                     </Button>
                                 )}
 
-                                <div className="h-6 w-[1px] bg-gray-200 dark:bg-gray-700 mx-1" />
+                                <div className="h-6 w-[1px] bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                                 <Button
                                     variant="ghost"
-                                    className="flex items-center gap-2 px-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    className="flex items-center gap-2 px-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                                     onClick={() => router.push('/profile')}
                                 >
                                     <Avatar className="w-7 h-7">
@@ -106,19 +106,19 @@ export function Navbar() {
                                             {userProfile?.displayName?.[0] || 'U'}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 max-w-[100px] truncate">
+                                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 max-w-[100px] truncate">
                                         {userProfile?.displayName || 'User'}
                                     </span>
                                 </Button>
 
-                                <Button variant="ghost" size="icon" onClick={() => signOut()} title="Logout" className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                                <Button variant="ghost" size="icon" onClick={() => signOut()} title="Logout" className="text-zinc-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
                                     <LogOut className="w-5 h-5" />
                                 </Button>
                             </>
                         ) : (
                             <>
                                 <Link href="/auth/login">
-                                    <Button variant="ghost" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Log in</Button>
+                                    <Button variant="ghost" className="text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white">Log in</Button>
                                 </Link>
                                 <Link href="/auth/register">
                                     <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">Sign up</Button>
@@ -136,7 +136,7 @@ export function Navbar() {
                             variant="ghost"
                             size="icon"
                             onClick={toggleTheme}
-                            className="text-gray-600 dark:text-gray-300"
+                            className="text-zinc-600 dark:text-zinc-300"
                         >
                             {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </Button>
@@ -144,11 +144,11 @@ export function Navbar() {
 
                     <Sheet open={isOpen} onOpenChange={setIsOpen}>
                         <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-gray-600 dark:text-gray-300">
+                            <Button variant="ghost" size="icon" className="text-zinc-600 dark:text-zinc-300">
                                 <Menu className="w-6 h-6" />
                             </Button>
                         </SheetTrigger>
-                        <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-white dark:bg-gray-950">
+                        <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-white dark:bg-zinc-900">
                             <div className="flex flex-col gap-6 py-6">
                                 <Link href="/" onClick={() => setIsOpen(false)} className="flex items-center gap-2">
                                     <div className="relative h-10 w-32">
@@ -172,8 +172,8 @@ export function Navbar() {
                                             href={link.href}
                                             onClick={() => setIsOpen(false)}
                                             className={`text-lg font-medium px-4 py-2 rounded-md transition-colors ${isActive(link.href)
-                                                    ? 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400'
-                                                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                                    : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                                                 }`}
                                         >
                                             {link.label}
@@ -181,7 +181,7 @@ export function Navbar() {
                                     ))}
                                 </div>
 
-                                <div className="border-t border-gray-100 dark:border-gray-800 pt-6">
+                                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-6">
                                     {user ? (
                                         <div className="flex flex-col gap-3">
                                             <div className="flex items-center gap-3 px-4 py-2">
@@ -192,29 +192,29 @@ export function Navbar() {
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div>
-                                                    <p className="font-medium text-gray-900 dark:text-white">{userProfile?.displayName}</p>
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+                                                    <p className="font-medium text-zinc-900 dark:text-white">{userProfile?.displayName}</p>
+                                                    <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{user.email}</p>
                                                 </div>
                                             </div>
 
-                                            <Button variant="outline" className="justify-start dark:border-gray-700 dark:text-gray-300" onClick={() => { router.push('/profile'); setIsOpen(false); }}>
+                                            <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/profile'); setIsOpen(false); }}>
                                                 <User className="mr-2 h-4 w-4" /> Profile
                                             </Button>
 
                                             {isAdmin && (
-                                                <Button variant="outline" className="justify-start dark:border-gray-700 dark:text-gray-300" onClick={() => { router.push('/admin'); setIsOpen(false); }}>
+                                                <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin'); setIsOpen(false); }}>
                                                     <Shield className="mr-2 h-4 w-4" /> Admin Panel
                                                 </Button>
                                             )}
 
-                                            <Button variant="ghost" className="justify-start text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => signOut()}>
+                                            <Button variant="ghost" className="justify-start text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => signOut()}>
                                                 <LogOut className="mr-2 h-4 w-4" /> Log out
                                             </Button>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-3">
                                             <Link href="/auth/login" onClick={() => setIsOpen(false)}>
-                                                <Button variant="outline" className="w-full dark:border-gray-700 dark:text-gray-300">Log in</Button>
+                                                <Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300">Log in</Button>
                                             </Link>
                                             <Link href="/auth/register" onClick={() => setIsOpen(false)}>
                                                 <Button className="w-full bg-blue-600 hover:bg-blue-700">Sign up</Button>
