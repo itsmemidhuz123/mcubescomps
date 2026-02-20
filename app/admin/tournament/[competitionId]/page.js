@@ -320,10 +320,10 @@ export default function TournamentManagementPage() {
 
     if (authLoading || loading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <p className="text-gray-500">Loading Tournament Management...</p>
+                    <p className="text-zinc-500 dark:text-zinc-400">Loading Tournament Management...</p>
                 </div>
             </div>
         );
@@ -335,7 +335,7 @@ export default function TournamentManagementPage() {
     const roundStatus = currentRound ? getRoundStatus(currentRound, competition) : 'unknown';
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
             <div className="container mx-auto p-6 space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
