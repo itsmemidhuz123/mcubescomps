@@ -44,7 +44,7 @@ const Footer = () => {
     ];
 
     return (
-        <footer className="bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 transition-colors duration-200">
+        <footer className="bg-zinc-100 dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-700 transition-colors duration-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8 lg:gap-12">
 
@@ -61,7 +61,7 @@ const Footer = () => {
                             </div>
                             <span className="text-xl font-bold text-zinc-900 dark:text-white">MCUBES</span>
                         </div>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-300 mb-6 max-w-xs">
+                        <p className="text-sm text-zinc-700 dark:text-zinc-200 mb-6 max-w-xs">
                             The ultimate platform for speedcubers to compete, track progress, and connect with the global cubing community.
                         </p>
                         <div className="flex gap-3">
@@ -73,10 +73,10 @@ const Footer = () => {
                                         href={social.href}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center justify-center transition-colors"
+                                        className="h-9 w-9 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 flex items-center justify-center transition-colors"
                                         aria-label={social.name}
                                     >
-                                        <Icon className="h-4 w-4 text-zinc-600 dark:text-zinc-300" />
+                                        <Icon className="h-4 w-4 text-zinc-700 dark:text-zinc-200" />
                                     </Link>
                                 );
                             })}
@@ -91,7 +91,7 @@ const Footer = () => {
                                 <li key={link.name}>
                                     <Link
                                         href={link.href}
-                                        className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
                                     >
                                         {link.name}
                                     </Link>
@@ -108,7 +108,7 @@ const Footer = () => {
                                 <li key={link.name}>
                                     <Link
                                         href={link.href}
-                                        className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
                                     >
                                         {link.name}
                                     </Link>
@@ -125,7 +125,7 @@ const Footer = () => {
                                 <li key={link.name}>
                                     <Link
                                         href={link.href}
-                                        className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
                                     >
                                         {link.name}
                                     </Link>
@@ -142,7 +142,7 @@ const Footer = () => {
                                 <li key={link.name}>
                                     <Link
                                         href={link.href}
-                                        className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
                                     >
                                         {link.name}
                                     </Link>
@@ -153,19 +153,19 @@ const Footer = () => {
                 </div>
 
                 {/* Bottom Section */}
-                <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-800">
+                <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-700">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p className="text-sm text-zinc-600 dark:text-zinc-300 text-center md:text-left">
+                        <p className="text-sm text-zinc-700 dark:text-zinc-200 text-center md:text-left">
                             © {currentYear} MCUBES. All rights reserved.
                         </p>
                         <div className="flex items-center gap-6">
-                            <Link href="/sitemap" className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+                            <Link href="/sitemap" className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
                                 Sitemap
                             </Link>
-                            <Link href="/accessibility" className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+                            <Link href="/accessibility" className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
                                 Accessibility
                             </Link>
-                            <Link href="/status" className="text-sm text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+                            <Link href="/status" className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
                                 Status
                             </Link>
                         </div>
