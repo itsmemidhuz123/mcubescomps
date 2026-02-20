@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,48 +62,50 @@ export default function UserProfile() {
             // 2. Fetch Registrations (for history)
             const regsQuery = query(
                 collection(db, 'registrations'),
-                where('userId', '==', params.userId),
-                orderBy('createdAt', 'desc')
+                where('userId', '==', params.userId)
             );
             const regsSnap = await getDocs(regsQuery);
             const regsData = regsSnap.docs.map(d => d.data());
 
-            setHistory(regsData);
-
-            // 3. Fetch Solves (for PBs)
-            const solvesQuery = query(
-                collection(db, 'solves'),
-                where('userId', '==', params.userId)
-            );
-            const solvesSnap = await getDocs(solvesQuery);
-
-            // Calculate PBs
-            const pbs = {};
-            const solves = solvesSnap.docs.map(d => d.data()) || [];
-
-            solves.forEach(solve => {
-                const eventId = solve.eventId;
-                if (!pbs[eventId]) pbs[eventId] = { single: Infinity, average: Infinity };
-
-                // Check Single
-                const time = Number(solve.time);
-                if (time > 0 && time < pbs[eventId].single) {
-                    pbs[eventId].single = time;
-                }
-
-                // Average is harder to calc from raw solves without grouping by round
-                // For now, we'll try to find if we stored average in the solve doc 
-                // (usually Ao5 is calculated at the end of a round)
-                // If not available, we skip average or need a complex aggregation
+            // Sort by createdAt on client side
+            regsData.sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+                const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+                return dateB - dateA;
             });
 
-            // Simple count stats
-            const uniqueEvents = solves.reduce((acc, curr) => {
-                if (curr && curr.eventId) {
-                    acc.add(curr.eventId);
+            setHistory(regsData);
+
+            // 3. Fetch Results (for PBs) - from results collection
+            const resultsQuery = query(
+                collection(db, 'results'),
+                where('userId', '==', params.userId)
+            );
+            const resultsSnap = await getDocs(resultsQuery);
+
+            // Calculate PBs from results
+            const pbs = {};
+            const resultsData = resultsSnap.docs.map(d => d.data()) || [];
+
+            resultsData.forEach(result => {
+                const eventId = result.eventId;
+                if (!pbs[eventId]) pbs[eventId] = { single: Infinity, average: Infinity };
+
+                // Check Single (bestSingle)
+                const single = Number(result.bestSingle);
+                if (single > 0 && single < pbs[eventId].single) {
+                    pbs[eventId].single = single;
                 }
-                return acc;
-            }, new Set());
+
+                // Check Average
+                const avg = Number(result.average);
+                if (avg > 0 && avg < pbs[eventId].average) {
+                    pbs[eventId].average = avg;
+                }
+            });
+
+            // Get unique events from results
+            const uniqueEvents = new Set(resultsData.map(r => r.eventId).filter(Boolean));
 
             setStats({
                 totalComps: regsData.length,
