@@ -150,12 +150,25 @@ export function AuthProvider({ children }) {
 
                             // Update Firestore with missing fields if needed
                             const needsUpdate = !profileData.permissions || profileData.roleLevel === undefined;
-                            if (needsUpdate) {
+
+                            // Check if user should be SUPER_ADMIN based on email
+                            const expectedRole = getRoleForEmail(firebaseUser.email);
+                            const shouldBeSuperAdmin = expectedRole === 'SUPER_ADMIN' && profileData.role !== 'SUPER_ADMIN';
+
+                            if (needsUpdate || shouldBeSuperAdmin) {
                                 try {
-                                    await updateDoc(doc(db, 'users', firebaseUser.uid), {
-                                        roleLevel: profileData.roleLevel,
-                                        permissions: profileData.permissions
-                                    });
+                                    const updates = {};
+                                    if (needsUpdate) {
+                                        updates.roleLevel = profileData.roleLevel;
+                                        updates.permissions = profileData.permissions;
+                                    }
+                                    if (shouldBeSuperAdmin) {
+                                        updates.role = 'SUPER_ADMIN';
+                                        updates.roleLevel = 4;
+                                        updates.permissions = getPermissionsForRole('SUPER_ADMIN');
+                                    }
+                                    await updateDoc(doc(db, 'users', firebaseUser.uid), updates);
+                                    profileData = { ...profileData, ...updates };
                                 } catch (e) {
                                     console.warn('Could not update user profile with roleLevel/permissions');
                                 }
