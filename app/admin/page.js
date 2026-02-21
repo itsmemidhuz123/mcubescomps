@@ -234,6 +234,38 @@ export default function AdminPanel() {
         }
     };
 
+    const handleDeleteCompetition = async (competitionId, competitionName) => {
+        if (!confirm(`Are you sure you want to delete "${competitionName}"? This will also delete all related data (registrations, results, solves). This action cannot be undone.`)) return;
+
+        try {
+            setLoadingData(true);
+
+            // Delete related data
+            const collectionsToClean = ['registrations', 'results', 'solves', 'roundResults', 'tournamentParticipants', 'videoSubmissions', 'scrambleReveals'];
+
+            for (const collectionName of collectionsToClean) {
+                const snapshot = await getDocs(query(collection(db, collectionName), where('competitionId', '==', competitionId)));
+                const batch = writeBatch(db);
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+            }
+
+            // Delete the competition
+            await deleteDoc(doc(db, 'competitions', competitionId));
+
+            // Update local state
+            setCompetitions(competitions.filter(c => c.id !== competitionId));
+            alert('Competition deleted successfully');
+        } catch (error) {
+            console.error('Error deleting competition:', error);
+            alert('Error deleting competition: ' + error.message);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
     const handleResolveFlag = async (solve, action) => {
         if (!confirm(`Are you sure you want to ${action} this solve?`)) return;
 
@@ -1737,6 +1769,15 @@ export default function AdminPanel() {
                                                     Manage
                                                 </Button>
                                             )}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleDeleteCompetition(comp.id, comp.name)}
+                                                className="text-red-600 hover:text-red-700"
+                                                title="Delete Competition"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
