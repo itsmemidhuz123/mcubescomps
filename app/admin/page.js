@@ -260,7 +260,11 @@ export default function AdminPanel() {
             alert('Competition deleted successfully');
         } catch (error) {
             console.error('Error deleting competition:', error);
-            alert('Error deleting competition: ' + error.message);
+            if (error.message.includes('permission')) {
+                alert('Error: Only SUPER_ADMIN can delete competitions. Your current role does not have permission.');
+            } else {
+                alert('Error deleting competition: ' + error.message);
+            }
         } finally {
             setLoadingData(false);
         }
