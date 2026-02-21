@@ -22,6 +22,37 @@ import {
 const LOGO_LIGHT = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/logo.png";
 const LOGO_DARK = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/MCUBES+logo+footer-01+(1).png";
 
+// Helper to check if user has moderator+ access (supports both new roleLevel and legacy role)
+function hasModeratorAccess(userProfile) {
+    if (!userProfile) return false;
+    // New system: check roleLevel
+    if (userProfile.roleLevel !== undefined) {
+        return userProfile.roleLevel >= 2;
+    }
+    // Legacy: check role field
+    const role = userProfile.role?.toUpperCase();
+    return role === 'MODERATOR' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+
+// Helper to check if user has admin+ access
+function hasAdminAccess(userProfile) {
+    if (!userProfile) return false;
+    if (userProfile.roleLevel !== undefined) {
+        return userProfile.roleLevel >= 3;
+    }
+    const role = userProfile.role?.toUpperCase();
+    return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+
+// Helper to check if user has super admin access
+function hasSuperAdminAccess(userProfile) {
+    if (!userProfile) return false;
+    if (userProfile.roleLevel !== undefined) {
+        return userProfile.roleLevel >= 4;
+    }
+    return userProfile.role?.toUpperCase() === 'SUPER_ADMIN';
+}
+
 export function Navbar() {
     const { user, userProfile, signOut, isAdmin, isSuperAdmin, isModerator, hasPermission, loading } = useAuth();
     const { theme, toggleTheme } = useTheme();
@@ -95,7 +126,7 @@ export function Navbar() {
                     {!loading && (
                         user ? (
                             <>
-                                {isModerator && (
+                                {hasModeratorAccess(userProfile) && (
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" size="icon" className="text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400">
@@ -104,30 +135,30 @@ export function Navbar() {
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="w-48">
                                             <DropdownMenuLabel className="text-xs text-zinc-500">
-                                                {userProfile?.role === 'SUPER_ADMIN' ? 'Super Admin' :
-                                                    userProfile?.role === 'ADMIN' ? 'Admin' :
-                                                        userProfile?.role === 'MODERATOR' ? 'Moderator' : 'Support'}
+                                                {hasSuperAdminAccess(userProfile) ? 'Super Admin' :
+                                                    hasAdminAccess(userProfile) ? 'Admin' :
+                                                        'Moderator'}
                                             </DropdownMenuLabel>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem onClick={() => router.push('/admin')}>
                                                 <Shield className="mr-2 h-4 w-4" /> Dashboard
                                             </DropdownMenuItem>
-                                            {isAdmin && (
+                                            {hasAdminAccess(userProfile) && (
                                                 <DropdownMenuItem onClick={() => router.push('/admin/create')}>
                                                     <Shield className="mr-2 h-4 w-4" /> Create Competition
                                                 </DropdownMenuItem>
                                             )}
-                                            {isAdmin && (
+                                            {hasAdminAccess(userProfile) && (
                                                 <DropdownMenuItem onClick={() => router.push('/admin/users')}>
                                                     <Users className="mr-2 h-4 w-4" /> Manage Users
                                                 </DropdownMenuItem>
                                             )}
-                                            {isSuperAdmin && (
+                                            {hasSuperAdminAccess(userProfile) && (
                                                 <DropdownMenuItem onClick={() => router.push('/admin/roles')}>
                                                     <Crown className="mr-2 h-4 w-4" /> Role Management
                                                 </DropdownMenuItem>
                                             )}
-                                            {isSuperAdmin && (
+                                            {hasSuperAdminAccess(userProfile) && (
                                                 <DropdownMenuItem onClick={() => router.push('/admin/settings')}>
                                                     <Settings className="mr-2 h-4 w-4" /> Settings
                                                 </DropdownMenuItem>
@@ -244,17 +275,17 @@ export function Navbar() {
                                                 <User className="mr-2 h-4 w-4" /> Profile
                                             </Button>
 
-                                            {isModerator && (
+                                            {hasModeratorAccess(userProfile) && (
                                                 <>
                                                     <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin'); setIsOpen(false); }}>
                                                         <Shield className="mr-2 h-4 w-4" /> Admin Dashboard
                                                     </Button>
-                                                    {isAdmin && (
+                                                    {hasAdminAccess(userProfile) && (
                                                         <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin/users'); setIsOpen(false); }}>
                                                             <Users className="mr-2 h-4 w-4" /> Manage Users
                                                         </Button>
                                                     )}
-                                                    {isSuperAdmin && (
+                                                    {hasSuperAdminAccess(userProfile) && (
                                                         <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin/roles'); setIsOpen(false); }}>
                                                             <Crown className="mr-2 h-4 w-4" /> Role Management
                                                         </Button>
