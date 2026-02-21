@@ -132,7 +132,7 @@ export function AuthProvider({ children }) {
                     const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
                     if (mounted) {
                         if (userDoc.exists()) {
-                            const profileData = { ...userDoc.data(), uid: firebaseUser.uid };
+                            let profileData = { ...userDoc.data(), uid: firebaseUser.uid };
 
                             // Ensure roleLevel exists for existing users (backwards compatibility)
                             if (profileData.roleLevel === undefined) {
