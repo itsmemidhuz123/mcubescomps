@@ -5,17 +5,25 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Menu, X, User, Moon, Sun } from 'lucide-react';
+import { LogOut, Shield, Menu, X, User, Moon, Sun, Users, Settings, Crown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Logo URLs
 const LOGO_LIGHT = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/logo.png";
 const LOGO_DARK = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/MCUBES+logo+footer-01+(1).png";
 
 export function Navbar() {
-    const { user, userProfile, signOut, isAdmin, loading } = useAuth();
+    const { user, userProfile, signOut, isAdmin, isSuperAdmin, isModerator, hasPermission, loading } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const router = useRouter();
     const pathname = usePathname();
@@ -87,10 +95,45 @@ export function Navbar() {
                     {!loading && (
                         user ? (
                             <>
-                                {isAdmin && (
-                                    <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} title="Admin Panel" className="text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400">
-                                        <Shield className="w-5 h-5" />
-                                    </Button>
+                                {isModerator && (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400">
+                                                <Shield className="w-5 h-5" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-48">
+                                            <DropdownMenuLabel className="text-xs text-zinc-500">
+                                                {userProfile?.role === 'SUPER_ADMIN' ? 'Super Admin' :
+                                                    userProfile?.role === 'ADMIN' ? 'Admin' :
+                                                        userProfile?.role === 'MODERATOR' ? 'Moderator' : 'Support'}
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onClick={() => router.push('/admin')}>
+                                                <Shield className="mr-2 h-4 w-4" /> Dashboard
+                                            </DropdownMenuItem>
+                                            {isAdmin && (
+                                                <DropdownMenuItem onClick={() => router.push('/admin/create')}>
+                                                    <Shield className="mr-2 h-4 w-4" /> Create Competition
+                                                </DropdownMenuItem>
+                                            )}
+                                            {isAdmin && (
+                                                <DropdownMenuItem onClick={() => router.push('/admin/users')}>
+                                                    <Users className="mr-2 h-4 w-4" /> Manage Users
+                                                </DropdownMenuItem>
+                                            )}
+                                            {isSuperAdmin && (
+                                                <DropdownMenuItem onClick={() => router.push('/admin/roles')}>
+                                                    <Crown className="mr-2 h-4 w-4" /> Role Management
+                                                </DropdownMenuItem>
+                                            )}
+                                            {isSuperAdmin && (
+                                                <DropdownMenuItem onClick={() => router.push('/admin/settings')}>
+                                                    <Settings className="mr-2 h-4 w-4" /> Settings
+                                                </DropdownMenuItem>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 )}
 
                                 <div className="h-6 w-[1px] bg-zinc-200 dark:bg-zinc-700 mx-1" />
@@ -201,10 +244,22 @@ export function Navbar() {
                                                 <User className="mr-2 h-4 w-4" /> Profile
                                             </Button>
 
-                                            {isAdmin && (
-                                                <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin'); setIsOpen(false); }}>
-                                                    <Shield className="mr-2 h-4 w-4" /> Admin Panel
-                                                </Button>
+                                            {isModerator && (
+                                                <>
+                                                    <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin'); setIsOpen(false); }}>
+                                                        <Shield className="mr-2 h-4 w-4" /> Admin Dashboard
+                                                    </Button>
+                                                    {isAdmin && (
+                                                        <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin/users'); setIsOpen(false); }}>
+                                                            <Users className="mr-2 h-4 w-4" /> Manage Users
+                                                        </Button>
+                                                    )}
+                                                    {isSuperAdmin && (
+                                                        <Button variant="outline" className="justify-start dark:border-zinc-700 dark:text-zinc-300" onClick={() => { router.push('/admin/roles'); setIsOpen(false); }}>
+                                                            <Crown className="mr-2 h-4 w-4" /> Role Management
+                                                        </Button>
+                                                    )}
+                                                </>
                                             )}
 
                                             <Button variant="ghost" className="justify-start text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => signOut()}>

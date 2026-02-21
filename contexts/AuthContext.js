@@ -17,6 +17,86 @@ import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firest
 import { auth, db } from '@/lib/firebase';
 import { generateWCAId } from '@/lib/wcaId';
 
+const ROLE_LEVELS = {
+    USER: 0,
+    SUPPORT: 1,
+    MODERATOR: 2,
+    ADMIN: 3,
+    SUPER_ADMIN: 4
+};
+
+const DEFAULT_PERMISSIONS = {
+    USER: {
+        canCreateCompetition: false,
+        canManageResults: false,
+        canVerifyVideo: false,
+        canPromoteRound: false,
+        canBanUser: false,
+        canViewPayments: false,
+        canAccessAuditLogs: false,
+        canAssignRoles: false,
+        canDeleteCompetition: false,
+        canAccessSettings: false
+    },
+    SUPPORT: {
+        canCreateCompetition: false,
+        canManageResults: false,
+        canVerifyVideo: false,
+        canPromoteRound: false,
+        canBanUser: false,
+        canViewPayments: true,
+        canAccessAuditLogs: false,
+        canAssignRoles: false,
+        canDeleteCompetition: false,
+        canAccessSettings: false
+    },
+    MODERATOR: {
+        canCreateCompetition: false,
+        canManageResults: true,
+        canVerifyVideo: true,
+        canPromoteRound: false,
+        canBanUser: false,
+        canViewPayments: false,
+        canAccessAuditLogs: false,
+        canAssignRoles: false,
+        canDeleteCompetition: false,
+        canAccessSettings: false
+    },
+    ADMIN: {
+        canCreateCompetition: true,
+        canManageResults: true,
+        canVerifyVideo: true,
+        canPromoteRound: true,
+        canBanUser: true,
+        canViewPayments: true,
+        canAccessAuditLogs: true,
+        canAssignRoles: false,
+        canDeleteCompetition: false,
+        canAccessSettings: false
+    },
+    SUPER_ADMIN: {
+        canCreateCompetition: true,
+        canManageResults: true,
+        canVerifyVideo: true,
+        canPromoteRound: true,
+        canBanUser: true,
+        canViewPayments: true,
+        canAccessAuditLogs: true,
+        canAssignRoles: true,
+        canDeleteCompetition: true,
+        canAccessSettings: true
+    }
+};
+
+function getRoleForEmail(email) {
+    const superAdminEmail = 'midhun.speedcuber@gmail.com';
+    return email?.toLowerCase() === superAdminEmail ? 'SUPER_ADMIN' : 'USER';
+}
+
+function getPermissionsForRole(role) {
+    return DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.USER;
+}
+
 const AuthContext = createContext({});
 
 export function AuthProvider({ children }) {
@@ -83,7 +163,7 @@ export function AuthProvider({ children }) {
                             localStorage.setItem('mcubes_profile', JSON.stringify(profileData));
                         } else {
                             // User doesn't exist in Firestore - create profile
-                            const isAdmin = firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com';
+                            const role = getRoleForEmail(firebaseUser.email);
                             const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
                             const wcaStyleId = await generateWCAId(displayName.split(' ')[0] || 'User', displayName.split(' ')[1] || 'Name');
 
@@ -95,7 +175,9 @@ export function AuthProvider({ children }) {
                                 email: firebaseUser.email,
                                 displayName: displayName,
                                 photoURL: firebaseUser.photoURL || '',
-                                role: isAdmin ? 'ADMIN' : 'USER',
+                                role: role,
+                                roleLevel: ROLE_LEVELS[role],
+                                permissions: getPermissionsForRole(role),
                                 wcaStyleId: wcaStyleId,
                                 wcaId: '',
                                 country: 'Unknown',
@@ -113,13 +195,15 @@ export function AuthProvider({ children }) {
                     }
                 } catch (firestoreError) {
                     console.warn('Could not fetch/create profile from Firestore:', firestoreError.message);
-                    // Create minimal profile for offline use
                     if (mounted && !userProfile) {
+                        const role = getRoleForEmail(firebaseUser.email);
                         const minimalProfile = {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
                             displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                            role: firebaseUser.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER'
+                            role: role,
+                            roleLevel: ROLE_LEVELS[role],
+                            permissions: getPermissionsForRole(role)
                         };
                         setUserProfile(minimalProfile);
                     }
@@ -151,7 +235,7 @@ export function AuthProvider({ children }) {
 
             const wcaStyleId = await generateWCAId(firstName, lastName);
 
-            const isAdmin = email.toLowerCase() === 'midhun.speedcuber@gmail.com';
+            const role = getRoleForEmail(email);
 
             const sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
             localStorage.setItem('mcubes_session_id', sessionId);
@@ -159,7 +243,9 @@ export function AuthProvider({ children }) {
             const userProfileData = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                role: isAdmin ? 'ADMIN' : 'USER',
+                role: role,
+                roleLevel: ROLE_LEVELS[role],
+                permissions: getPermissionsForRole(role),
                 wcaStyleId,
                 wcaId: wcaId || '',
                 displayName: `${firstName} ${lastName}`,
@@ -269,17 +355,18 @@ export function AuthProvider({ children }) {
         if (!user) throw new Error('Not authenticated');
 
         try {
-            // First check if document exists
             const userRef = doc(db, 'users', user.uid);
             const userDoc = await getDoc(userRef);
 
             if (!userDoc.exists()) {
-                // Create the document first
+                const role = getRoleForEmail(user.email);
                 const newProfile = {
                     uid: user.uid,
                     email: user.email,
                     displayName: updates.displayName || user.displayName || 'User',
-                    role: user.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' ? 'ADMIN' : 'USER',
+                    role: role,
+                    roleLevel: ROLE_LEVELS[role],
+                    permissions: getPermissionsForRole(role),
                     createdAt: new Date().toISOString(),
                     ...updates
                 };
@@ -288,7 +375,6 @@ export function AuthProvider({ children }) {
                 localStorage.setItem('mcubes_profile', JSON.stringify(newProfile));
                 return newProfile;
             } else {
-                // Update existing document
                 const currentData = userDoc.data();
                 const updatedProfile = { ...currentData, ...updates, uid: user.uid };
                 await setDoc(userRef, updatedProfile, { merge: true });
@@ -302,6 +388,36 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const updateUserRole = async (targetUserId, newRole) => {
+        if (!user) throw new Error('Not authenticated');
+        if (userProfile?.role !== 'SUPER_ADMIN') throw new Error('Only SUPER_ADMIN can assign roles');
+        if (!ROLE_LEVELS[newRole]) throw new Error('Invalid role');
+
+        const superAdminEmail = 'midhun.speedcuber@gmail.com';
+        const targetUserRef = doc(db, 'users', targetUserId);
+        const targetUserDoc = await getDoc(targetUserRef);
+
+        if (!targetUserDoc.exists()) throw new Error('User not found');
+
+        const targetData = targetUserDoc.data();
+
+        if (targetData.email?.toLowerCase() === superAdminEmail && newRole !== 'SUPER_ADMIN') {
+            throw new Error('Cannot change SUPER_ADMIN role');
+        }
+
+        const updatedData = {
+            role: newRole,
+            roleLevel: ROLE_LEVELS[newRole],
+            permissions: getPermissionsForRole(newRole),
+            roleUpdatedAt: serverTimestamp(),
+            roleUpdatedBy: user.uid
+        };
+
+        await updateDoc(targetUserRef, updatedData);
+
+        return { uid: targetUserId, ...updatedData };
+    };
+
     const value = {
         user,
         userProfile,
@@ -313,7 +429,14 @@ export function AuthProvider({ children }) {
         signOut,
         resetPassword,
         updateProfile,
-        isAdmin: userProfile?.role === 'ADMIN' || userProfile?.role === 'admin'
+        updateUserRole,
+        isAdmin: userProfile?.roleLevel >= ROLE_LEVELS.ADMIN,
+        isSuperAdmin: userProfile?.roleLevel >= ROLE_LEVELS.SUPER_ADMIN,
+        isModerator: userProfile?.roleLevel >= ROLE_LEVELS.MODERATOR,
+        isSupport: userProfile?.roleLevel >= ROLE_LEVELS.SUPPORT,
+        hasRole: (minRole) => userProfile?.roleLevel >= ROLE_LEVELS[minRole],
+        hasPermission: (permission) => userProfile?.permissions?.[permission] === true,
+        ROLE_LEVELS
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

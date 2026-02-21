@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents'
 
 function CreateCompetition() {
     const router = useRouter()
+    const { user, hasPermission, loading: authLoading } = useAuth()
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
         name: '',
@@ -37,6 +39,13 @@ function CreateCompetition() {
         scramble4: '',
         scramble5: ''
     })
+
+    useEffect(() => {
+        if (!authLoading) {
+            if (!user) router.push('/auth/login');
+            else if (!hasPermission('canCreateCompetition')) router.push('/');
+        }
+    }, [user, hasPermission, authLoading, router])
 
     const handleChange = (e) => {
         const { name, value } = e.target

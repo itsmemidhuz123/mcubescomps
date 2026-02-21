@@ -60,7 +60,7 @@ function formatTime(ms) {
 }
 
 export default function ResultsManagementPage() {
-    const { user, isAdmin, loading: authLoading } = useAuth();
+    const { user, isAdmin, isModerator, hasPermission, loading: authLoading } = useAuth();
     const router = useRouter();
     const params = useParams();
 
@@ -90,12 +90,12 @@ export default function ResultsManagementPage() {
     useEffect(() => {
         if (!authLoading) {
             if (!user) router.push('/auth/login');
-            else if (!isAdmin) router.push('/');
+            else if (!isModerator) router.push('/');
         }
-    }, [user, isAdmin, authLoading, router]);
+    }, [user, isModerator, authLoading, router]);
 
     useEffect(() => {
-        if (user && isAdmin && params.competitionId) {
+        if (user && isModerator && params.competitionId) {
             fetchCompetitionData();
         }
     }, [user, isAdmin, params.competitionId]);
