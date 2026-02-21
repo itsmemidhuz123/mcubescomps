@@ -134,6 +134,33 @@ export function AuthProvider({ children }) {
                         if (userDoc.exists()) {
                             const profileData = { ...userDoc.data(), uid: firebaseUser.uid };
 
+                            // Ensure roleLevel exists for existing users (backwards compatibility)
+                            if (profileData.roleLevel === undefined) {
+                                if (profileData.role === 'ADMIN' || profileData.role === 'admin') {
+                                    profileData.roleLevel = 3;
+                                } else {
+                                    profileData.roleLevel = 0;
+                                }
+                            }
+
+                            // Ensure permissions exist for existing users (backwards compatibility)
+                            if (!profileData.permissions) {
+                                profileData.permissions = getPermissionsForRole(profileData.role);
+                            }
+
+                            // Update Firestore with missing fields if needed
+                            const needsUpdate = !profileData.permissions || profileData.roleLevel === undefined;
+                            if (needsUpdate) {
+                                try {
+                                    await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                                        roleLevel: profileData.roleLevel,
+                                        permissions: profileData.permissions
+                                    });
+                                } catch (e) {
+                                    console.warn('Could not update user profile with roleLevel/permissions');
+                                }
+                            }
+
                             // SUSPENSION CHECK
                             if (profileData.status === 'SUSPENDED') {
                                 await firebaseSignOut(auth);
