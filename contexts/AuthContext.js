@@ -445,6 +445,35 @@ export function AuthProvider({ children }) {
         return { uid: targetUserId, ...updatedData };
     };
 
+    // Helper to check if user is SUPER_ADMIN (supports both new roleLevel and legacy/email-based)
+    const checkIsSuperAdmin = (profile) => {
+        if (!profile) return false;
+        const superAdminEmail = 'midhun.speedcuber@gmail.com';
+        if (profile.email?.toLowerCase() === superAdminEmail) return true;
+        if (profile.roleLevel !== undefined) return profile.roleLevel >= 4;
+        return profile.role?.toUpperCase() === 'SUPER_ADMIN';
+    };
+
+    // Helper to check if user is ADMIN or higher
+    const checkIsAdmin = (profile) => {
+        if (!profile) return false;
+        const superAdminEmail = 'midhun.speedcuber@gmail.com';
+        if (profile.email?.toLowerCase() === superAdminEmail) return true;
+        if (profile.roleLevel !== undefined) return profile.roleLevel >= 3;
+        const role = profile.role?.toUpperCase();
+        return role === 'ADMIN' || role === 'SUPER_ADMIN';
+    };
+
+    // Helper to check if user is MODERATOR or higher
+    const checkIsModerator = (profile) => {
+        if (!profile) return false;
+        const superAdminEmail = 'midhun.speedcuber@gmail.com';
+        if (profile.email?.toLowerCase() === superAdminEmail) return true;
+        if (profile.roleLevel !== undefined) return profile.roleLevel >= 2;
+        const role = profile.role?.toUpperCase();
+        return role === 'MODERATOR' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+    };
+
     const value = {
         user,
         userProfile,
@@ -457,10 +486,10 @@ export function AuthProvider({ children }) {
         resetPassword,
         updateProfile,
         updateUserRole,
-        isAdmin: userProfile?.roleLevel >= ROLE_LEVELS.ADMIN,
-        isSuperAdmin: userProfile?.roleLevel >= ROLE_LEVELS.SUPER_ADMIN,
-        isModerator: userProfile?.roleLevel >= ROLE_LEVELS.MODERATOR,
-        isSupport: userProfile?.roleLevel >= ROLE_LEVELS.SUPPORT,
+        isAdmin: checkIsAdmin(userProfile),
+        isSuperAdmin: checkIsSuperAdmin(userProfile),
+        isModerator: checkIsModerator(userProfile),
+        isSupport: userProfile?.roleLevel >= ROLE_LEVELS.SUPPORT || userProfile?.role?.toUpperCase() === 'SUPPORT',
         hasRole: (minRole) => userProfile?.roleLevel >= ROLE_LEVELS[minRole],
         hasPermission: (permission) => userProfile?.permissions?.[permission] === true,
         ROLE_LEVELS

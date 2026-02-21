@@ -22,9 +22,13 @@ import {
 const LOGO_LIGHT = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/logo.png";
 const LOGO_DARK = "https://mcubescomps.s3.ap-south-1.amazonaws.com/mcubescomps/users/MCUBES+logo+footer-01+(1).png";
 
+const SUPER_ADMIN_EMAIL = 'midhun.speedcuber@gmail.com';
+
 // Helper to check if user has moderator+ access (supports both new roleLevel and legacy role)
 function hasModeratorAccess(userProfile) {
     if (!userProfile) return false;
+    // Check for SUPER_ADMIN email directly
+    if (userProfile.email?.toLowerCase() === SUPER_ADMIN_EMAIL) return true;
     // New system: check roleLevel
     if (userProfile.roleLevel !== undefined) {
         return userProfile.roleLevel >= 2;
@@ -37,6 +41,7 @@ function hasModeratorAccess(userProfile) {
 // Helper to check if user has admin+ access
 function hasAdminAccess(userProfile) {
     if (!userProfile) return false;
+    if (userProfile.email?.toLowerCase() === SUPER_ADMIN_EMAIL) return true;
     if (userProfile.roleLevel !== undefined) {
         return userProfile.roleLevel >= 3;
     }
@@ -47,6 +52,7 @@ function hasAdminAccess(userProfile) {
 // Helper to check if user has super admin access
 function hasSuperAdminAccess(userProfile) {
     if (!userProfile) return false;
+    if (userProfile.email?.toLowerCase() === SUPER_ADMIN_EMAIL) return true;
     if (userProfile.roleLevel !== undefined) {
         return userProfile.roleLevel >= 4;
     }
