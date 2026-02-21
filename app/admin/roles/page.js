@@ -268,7 +268,7 @@ export default function RoleManagementPage() {
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => openRoleDialog(u)}
-                                                        disabled={u.email?.toLowerCase() === 'midhun.speedcuber@gmail.com' && u.role === 'SUPER_ADMIN'}
+                                                        disabled={u.email?.toLowerCase() === 'midhu.speedcuber@gmail.com' && u.role === 'SUPER_ADMIN'}
                                                     >
                                                         <UserCog className="h-4 w-4 mr-1" /> Change Role
                                                     </Button>
