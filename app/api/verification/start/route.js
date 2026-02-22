@@ -179,8 +179,7 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session response:', JSON.stringify(sessionData));
 
-        // Check both column names for backward compatibility
-        const currentStatus = userData.verification_status || userData.verificationstatus || 'UNVERIFIED';
+        // Check both column names for backward compatibility (already done above)
         const newAttemptCount = currentStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
         console.log('Updating user status to PENDING. Current status:', currentStatus);
