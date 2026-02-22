@@ -1,22 +1,56 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-let supabase = null;
+let adminDb = null;
 
-function getSupabase() {
-    if (supabase) return supabase;
-    supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY
-    );
-    return supabase;
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
+    }
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function getDb() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = require('firebase-admin/app');
+        const { getFirestore } = require('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing Firebase Admin env vars');
+            throw new Error('Missing Firebase environment variables');
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (getApps().length === 0) {
+            initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
+        }
+
+        adminDb = getFirestore();
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin init error:', error.message);
+        throw error;
+    }
 }
 
 export async function POST(request) {
     try {
-        const sb = getSupabase();
+        const db = await getDb();
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');
 
@@ -24,26 +58,24 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
-        const { data: user, error } = await sb
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
+        const userDoc = await db.collection('users').doc(userId).get();
 
-        if (error || !user) {
+        if (!userDoc.exists) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        if (user.verificationStatus === 'VERIFIED') {
+        const userData = userDoc.data();
+
+        if (userData.verificationStatus === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
         const maxAttempts = 3;
-        const attemptCount = user.verificationAttemptCount || 0;
+        const attemptCount = userData.verificationAttemptCount || 0;
 
         if (attemptCount >= maxAttempts) {
-            if (user.lastVerificationAttemptAt) {
-                const lastAttemptDate = new Date(user.lastVerificationAttemptAt);
+            if (userData.lastVerificationAttemptAt) {
+                const lastAttemptDate = userData.lastVerificationAttemptAt.toDate ? userData.lastVerificationAttemptAt.toDate() : new Date(userData.lastVerificationAttemptAt);
                 const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
@@ -89,19 +121,16 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session created successfully:', sessionData.session_id);
 
-        const newAttemptCount = user.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
+        const newAttemptCount = userData.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        await sb
-            .from('users')
-            .update({
-                diditSessionId: sessionData.session_id,
-                diditWorkflowId: workflowId,
-                verificationStatus: 'PENDING',
-                verificationAttemptCount: newAttemptCount,
-                lastVerificationAttemptAt: new Date().toISOString(),
-                verificationRequestedAt: new Date().toISOString()
-            })
-            .eq('id', userId);
+        await db.collection('users').doc(userId).update({
+            diditSessionId: sessionData.session_id,
+            diditWorkflowId: workflowId,
+            verificationStatus: 'PENDING',
+            verificationAttemptCount: newAttemptCount,
+            lastVerificationAttemptAt: new Date(),
+            verificationRequestedAt: new Date()
+        });
 
         return NextResponse.json({
             success: true,

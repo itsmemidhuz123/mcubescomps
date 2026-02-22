@@ -2,17 +2,51 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
-import { createClient } from '@supabase/supabase-js';
 
-let supabase = null;
+let adminDb = null;
 
-function getSupabase() {
-    if (supabase) return supabase;
-    supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY
-    );
-    return supabase;
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
+    }
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function getDb() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = require('firebase-admin/app');
+        const { getFirestore } = require('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing Firebase Admin env vars');
+            throw new Error('Missing Firebase environment variables');
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (getApps().length === 0) {
+            initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
+        }
+
+        adminDb = getFirestore();
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin init error:', error.message);
+        throw error;
+    }
 }
 
 function verifyWebhookSignature(payload, signature, secret) {
@@ -32,7 +66,7 @@ function hashString(str) {
 
 export async function POST(request) {
     try {
-        const sb = getSupabase();
+        const db = await getDb();
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
@@ -56,49 +90,35 @@ export async function POST(request) {
 
         const userId = vendor_data;
 
-        const { data: user, error: userError } = await sb
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
+        const userDoc = await db.collection('users').doc(userId).get();
 
-        if (userError || !user) {
+        if (!userDoc.exists) {
             console.error('User not found for webhook:', userId);
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
+
+        const userData = userDoc.data();
 
         if (status === 'approved') {
             const faceHash = result?.face?.hash || hashString(result?.face?.data || session_id);
             const documentHash = result?.document?.hash || hashString(result?.document?.data || session_id);
             const country = result?.country || null;
-            const fullName = result?.full_name || user.name || null;
+            const fullName = result?.full_name || userData.name || null;
 
-            const { data: existingFace } = await sb
-                .from('identityIndex')
-                .select('*')
-                .eq('id', faceHash)
-                .single();
+            const existingFaceDoc = await db.collection('identityIndex').doc(faceHash).get();
+            const existingDocDoc = await db.collection('identityIndex').doc(documentHash).get();
 
-            const { data: existingDoc } = await sb
-                .from('identityIndex')
-                .select('*')
-                .eq('id', documentHash)
-                .single();
-
-            if (existingFace || existingDoc) {
-                await sb
-                    .from('users')
-                    .update({
-                        verificationStatus: 'REJECTED',
-                        duplicateDetected: true,
-                        suspiciousVerification: true,
-                        lastVerificationResult: {
-                            status: status,
-                            rejectedAt: new Date().toISOString(),
-                            reason: 'DUPLICATE_IDENTITY'
-                        }
-                    })
-                    .eq('id', userId);
+            if (existingFaceDoc.exists || existingDocDoc.exists) {
+                await db.collection('users').doc(userId).update({
+                    verificationStatus: 'REJECTED',
+                    duplicateDetected: true,
+                    suspiciousVerification: true,
+                    lastVerificationResult: {
+                        status: status,
+                        rejectedAt: new Date(),
+                        reason: 'DUPLICATE_IDENTITY'
+                    }
+                });
 
                 return NextResponse.json({
                     success: true,
@@ -107,37 +127,34 @@ export async function POST(request) {
                 });
             }
 
-            await sb.from('identityIndex').insert({
-                id: faceHash,
+            await db.collection('identityIndex').doc(faceHash).set({
                 userId: userId,
-                type: 'FACE'
+                type: 'FACE',
+                createdAt: new Date()
             });
 
-            await sb.from('identityIndex').insert({
-                id: documentHash,
+            await db.collection('identityIndex').doc(documentHash).set({
                 userId: userId,
-                type: 'DOCUMENT'
+                type: 'DOCUMENT',
+                createdAt: new Date()
             });
 
-            await sb
-                .from('users')
-                .update({
-                    verificationStatus: 'VERIFIED',
-                    faceHash: faceHash,
-                    documentHash: documentHash,
-                    verificationCountry: country,
-                    verifiedAt: new Date().toISOString(),
-                    verificationLevel: 1,
-                    duplicateDetected: false,
-                    suspiciousVerification: false,
-                    lastVerificationResult: {
-                        status: status,
-                        approvedAt: new Date().toISOString(),
-                        fullName: fullName,
-                        country: country
-                    }
-                })
-                .eq('id', userId);
+            await db.collection('users').doc(userId).update({
+                verificationStatus: 'VERIFIED',
+                faceHash: faceHash,
+                documentHash: documentHash,
+                verificationCountry: country,
+                verifiedAt: new Date(),
+                verificationLevel: 1,
+                duplicateDetected: false,
+                suspiciousVerification: false,
+                lastVerificationResult: {
+                    status: status,
+                    approvedAt: new Date(),
+                    fullName: fullName,
+                    country: country
+                }
+            });
 
             return NextResponse.json({
                 success: true,
@@ -148,17 +165,14 @@ export async function POST(request) {
         } else if (status === 'declined' || status === 'rejected') {
             const rejectionReason = result?.reason || 'Unknown reason';
 
-            await sb
-                .from('users')
-                .update({
-                    verificationStatus: 'REJECTED',
-                    lastVerificationResult: {
-                        status: status,
-                        rejectedAt: new Date().toISOString(),
-                        reason: rejectionReason
-                    }
-                })
-                .eq('id', userId);
+            await db.collection('users').doc(userId).update({
+                verificationStatus: 'REJECTED',
+                lastVerificationResult: {
+                    status: status,
+                    rejectedAt: new Date(),
+                    reason: rejectionReason
+                }
+            });
 
             return NextResponse.json({
                 success: true,
