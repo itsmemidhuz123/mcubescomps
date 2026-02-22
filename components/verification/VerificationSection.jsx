@@ -62,6 +62,7 @@ export function VerificationSection({ compact = false }) {
             });
 
             const data = await res.json();
+            console.log('Verification response:', data);
 
             if (!res.ok) {
                 if (res.status === 429) {
@@ -69,49 +70,49 @@ export function VerificationSection({ compact = false }) {
                 } else {
                     setError(data.error || 'Failed to start verification');
                 }
+                setLoading(false);
                 return;
             }
 
             if (data.verificationUrl) {
-                console.log('Got verification URL:', data.verificationUrl);
-                console.log('Session token:', data.sessionToken);
-
-                // Open verification URL directly in popup or new tab
-                const width = 500;
-                const height = 700;
-                const left = window.screenX + (window.outerWidth - width) / 2;
-                const top = window.screenY + (window.outerHeight - height) / 2;
-
-                const popup = window.open(
-                    data.verificationUrl,
-                    'DiditVerification',
-                    `width=${width},height=${height},left=${left},top=${top},resizable,scrollbars`
-                );
-
-                // Check if popup was blocked
-                if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-                    // Popup blocked, open in new tab instead
-                    window.open(data.verificationUrl, '_blank');
-                }
-
-                // Poll to check if verification is complete
-                const checkInterval = setInterval(async () => {
-                    try {
-                        const statusRes = await fetch(`/api/verification/status?userId=${user.uid}`, {
-                            headers: { 'Authorization': `Bearer ${authToken}` }
+                // Try DIDIT SDK first, then fallback to redirect
+                const initDidit = () => {
+                    if (window.DiditSdk && window.DiditSdk.shared) {
+                        console.log('Using DIDIT SDK');
+                        window.DiditSdk.shared.onComplete = (result) => {
+                            console.log('Verification result:', result);
+                            if (result?.type === 'completed') {
+                                window.location.reload();
+                            }
+                        };
+                        window.DiditSdk.shared.startVerification({
+                            url: data.verificationUrl
                         });
-                        const statusData = await statusRes.json();
-
-                        if (statusData.verificationStatus === 'VERIFIED') {
-                            clearInterval(checkInterval);
-                            window.location.reload();
-                        }
-                    } catch (e) {
-                        // Ignore errors
+                        setLoading(false);
+                        return true;
                     }
-                }, 3000);
+                    return false;
+                };
 
-                setLoading(false);
+                // Try SDK immediately if loaded
+                if (!initDidit()) {
+                    // Load SDK then try
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/@didit-protocol/sdk-web/dist/didit-sdk.umd.min.js';
+                    script.onload = () => {
+                        console.log('DIDIT SDK loaded');
+                        if (!initDidit()) {
+                            // SDK still not working, redirect directly
+                            console.log('SDK failed, redirecting...');
+                            window.location.href = data.verificationUrl;
+                        }
+                    };
+                    script.onerror = () => {
+                        console.log('SDK load failed, redirecting...');
+                        window.location.href = data.verificationUrl;
+                    };
+                    document.head.appendChild(script);
+                }
             } else {
                 setError('No verification URL received');
                 setLoading(false);
@@ -119,7 +120,6 @@ export function VerificationSection({ compact = false }) {
         } catch (err) {
             console.error('Verification error:', err);
             setError('An unexpected error occurred');
-        } finally {
             setLoading(false);
         }
     };
