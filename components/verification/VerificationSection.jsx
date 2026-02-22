@@ -73,53 +73,48 @@ export function VerificationSection({ compact = false }) {
             }
 
             if (data.verificationUrl) {
-                if (window.DiditSdk) {
-                    window.DiditSdk.init({
-                        session_token: data.sessionToken,
-                        onSuccess: (session) => {
-                            console.log('Verification completed:', session);
-                            window.location.reload();
-                        },
-                        onError: (error) => {
-                            console.error('Verification error:', error);
-                            setError('Verification failed. Please try again.');
-                            setLoading(false);
-                        },
-                        onCancel: () => {
-                            console.log('Verification cancelled');
-                            setLoading(false);
-                        }
-                    });
+                console.log('Got verification URL:', data.verificationUrl);
+                console.log('Session token:', data.sessionToken);
 
-                    window.DiditSdk.startVerification({ url: data.verificationUrl });
-                } else {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/@didit-protocol/sdk-web/dist/didit-sdk.min.js';
-                    script.onload = () => {
-                        window.DiditSdk.init({
-                            session_token: data.sessionToken,
-                            onSuccess: (session) => {
-                                console.log('Verification completed:', session);
-                                window.location.reload();
-                            },
-                            onError: (error) => {
-                                console.error('Verification error:', error);
-                                setError('Verification failed. Please try again.');
-                                setLoading(false);
-                            },
-                            onCancel: () => {
-                                console.log('Verification cancelled');
-                                setLoading(false);
-                            }
-                        });
-                        window.DiditSdk.startVerification({ url: data.verificationUrl });
-                    };
-                    script.onerror = () => {
-                        setError('Failed to load verification SDK. Please refresh and try again.');
-                        setLoading(false);
-                    };
-                    document.body.appendChild(script);
+                // Open verification URL directly in popup or new tab
+                const width = 500;
+                const height = 700;
+                const left = window.screenX + (window.outerWidth - width) / 2;
+                const top = window.screenY + (window.outerHeight - height) / 2;
+
+                const popup = window.open(
+                    data.verificationUrl,
+                    'DiditVerification',
+                    `width=${width},height=${height},left=${left},top=${top},resizable,scrollbars`
+                );
+
+                // Check if popup was blocked
+                if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+                    // Popup blocked, open in new tab instead
+                    window.open(data.verificationUrl, '_blank');
                 }
+
+                // Poll to check if verification is complete
+                const checkInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                            headers: { 'Authorization': `Bearer ${authToken}` }
+                        });
+                        const statusData = await statusRes.json();
+
+                        if (statusData.verificationStatus === 'VERIFIED') {
+                            clearInterval(checkInterval);
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        // Ignore errors
+                    }
+                }, 3000);
+
+                setLoading(false);
+            } else {
+                setError('No verification URL received');
+                setLoading(false);
             }
         } catch (err) {
             console.error('Verification error:', err);

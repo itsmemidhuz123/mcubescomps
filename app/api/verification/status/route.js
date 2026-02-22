@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request) {
     try {
@@ -12,7 +12,7 @@ export async function GET(request) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
         }
 
-        const supabase = getSupabase();
+        const supabase = getSupabaseAdmin();
 
         const { data: userData, error: userError } = await supabase
             .from('users')
