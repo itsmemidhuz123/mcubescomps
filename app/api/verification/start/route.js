@@ -18,9 +18,10 @@ const db = getFirestore(app);
 
 export async function POST(request) {
     try {
-        const { userId, sessionToken } = await request.json();
+        const { userId } = await request.json();
 
-        if (!sessionToken) {
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
