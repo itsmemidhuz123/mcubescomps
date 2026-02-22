@@ -1,57 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-
-let adminDb = null;
-
-function parsePrivateKey(privateKey) {
-    if (!privateKey) return null;
-    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
-        return privateKey;
-    }
-    return privateKey.replace(/\\n/g, '\n');
-}
-
-async function initializeAdmin() {
-    if (adminDb) return adminDb;
-
-    try {
-        const { initializeApp, getApps, cert } = require('firebase-admin/app');
-        const { getFirestore } = require('firebase-admin/firestore');
-
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKeyRaw) {
-            console.error('Missing Firebase Admin env vars');
-            throw new Error('Missing Firebase environment variables');
-        }
-
-        const privateKey = parsePrivateKey(privateKeyRaw);
-
-        if (getApps().length === 0) {
-            initializeApp({
-                credential: cert({
-                    projectId,
-                    clientEmail,
-                    privateKey
-                })
-            });
-        }
-
-        adminDb = getFirestore();
-        return adminDb;
-    } catch (error) {
-        console.error('Firebase Admin init error:', error.message);
-        throw error;
-    }
-}
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request) {
     try {
-        const db = await initializeAdmin();
-
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
 
@@ -59,22 +12,22 @@ export async function GET(request) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
         }
 
-        const userDoc = await db.collection('users').doc(userId).get();
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
 
-        if (!userDoc.exists) {
+        if (!user) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        const userData = userDoc.data();
-
         return NextResponse.json({
-            verificationStatus: userData.verificationStatus || 'UNVERIFIED',
-            verifiedAt: userData.verifiedAt || null,
-            verificationLevel: userData.verificationLevel || null,
-            duplicateDetected: userData.duplicateDetected || false,
-            suspiciousVerification: userData.suspiciousVerification || false,
-            verificationAttemptCount: userData.verificationAttemptCount || 0,
-            lastVerificationResult: userData.lastVerificationResult || null
+            verificationStatus: user.verificationStatus || 'UNVERIFIED',
+            verifiedAt: user.verifiedAt || null,
+            verificationLevel: user.verificationLevel || null,
+            duplicateDetected: user.duplicateDetected || false,
+            suspiciousVerification: user.suspiciousVerification || false,
+            verificationAttemptCount: user.verificationAttemptCount || 0,
+            lastVerificationResult: user.lastVerificationResult || null
         });
 
     } catch (error) {
