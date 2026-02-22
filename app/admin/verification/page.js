@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,7 +18,7 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { ArrowLeft, Search, Shield, ShieldCheck, ShieldAlert, Users, AlertTriangle, RefreshCw, Loader2, CheckCircle, XCircle, Ban } from 'lucide-react';
+import { ArrowLeft, Search, Shield, ShieldCheck, ShieldAlert, Users, AlertTriangle, RefreshCw, Loader2, Ban } from 'lucide-react';
 import { VerificationStatusBadge } from '@/components/verification/VerifiedBadge';
 
 export default function VerificationCenterPage() {
@@ -24,7 +26,6 @@ export default function VerificationCenterPage() {
     const router = useRouter();
 
     const [users, setUsers] = useState([]);
-    const [auditLogs, setAuditLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
@@ -32,7 +33,6 @@ export default function VerificationCenterPage() {
     const [showActionDialog, setShowActionDialog] = useState(false);
     const [actionType, setActionType] = useState(null);
     const [processing, setProcessing] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         if (!authLoading) {
@@ -53,18 +53,16 @@ export default function VerificationCenterPage() {
     async function fetchData() {
         setLoading(true);
         try {
-            const authToken = await user.getIdToken();
+            let q = query(
+                collection(db, 'users'),
+                where('verificationStatus', 'in', ['PENDING', 'VERIFIED', 'REJECTED']),
+                orderBy('verifiedAt', 'desc'),
+                limit(100)
+            );
 
-            const res = await fetch(`/api/verification/admin?status=${statusFilter}`, {
-                headers: {
-                    'Authorization': `Bearer ${authToken}`
-                }
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                setUsers(data.users || []);
-            }
+            const snapshot = await getDocs(q);
+            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setUsers(usersData);
         } catch (error) {
             console.error('Error fetching verification data:', error);
         } finally {
@@ -74,7 +72,7 @@ export default function VerificationCenterPage() {
 
     const filteredUsers = users.filter(u => {
         const matchesSearch = !searchQuery ||
-            u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             u.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesStatus = statusFilter === 'ALL' || u.verificationStatus === statusFilter;
@@ -92,24 +90,16 @@ export default function VerificationCenterPage() {
 
         setProcessing(true);
         try {
-            const authToken = await user.getIdToken();
-
             if (actionType === 'force_reverify') {
-                const res = await fetch('/api/verification/admin', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        action: 'force_reverify',
-                        userId: selectedUser.id
-                    })
+                await updateDoc(doc(db, 'users', selectedUser.id), {
+                    verificationStatus: 'UNVERIFIED',
+                    diditSessionId: null,
+                    faceHash: null,
+                    documentHash: null,
+                    duplicateDetected: false,
+                    suspiciousVerification: false,
+                    lastVerificationResult: null
                 });
-
-                if (!res.ok) {
-                    throw new Error('Failed to reset verification');
-                }
             }
 
             await fetchData();
@@ -158,8 +148,8 @@ export default function VerificationCenterPage() {
                                 Monitor and manage user identity verifications
                             </p>
                         </div>
-                        <Button variant="outline" onClick={fetchData} disabled={refreshing}>
-                            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                        <Button variant="outline" onClick={fetchData}>
+                            <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
                         </Button>
                     </div>
@@ -222,25 +212,11 @@ export default function VerificationCenterPage() {
 
                 <Tabs defaultValue="all" className="space-y-4">
                     <TabsList>
-                        <TabsTrigger value="all">
-                            All Users ({filteredUsers.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="pending">
-                            <Users className="w-4 h-4 mr-1" />
-                            Pending ({pendingUsers.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="verified">
-                            <ShieldCheck className="w-4 h-4 mr-1" />
-                            Verified ({verifiedUsers.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="rejected">
-                            <ShieldAlert className="w-4 h-4 mr-1" />
-                            Rejected ({rejectedUsers.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="duplicates">
-                            <AlertTriangle className="w-4 h-4 mr-1" />
-                            Duplicates ({duplicateUsers.length})
-                        </TabsTrigger>
+                        <TabsTrigger value="all">All Users ({filteredUsers.length})</TabsTrigger>
+                        <TabsTrigger value="pending">Pending ({pendingUsers.length})</TabsTrigger>
+                        <TabsTrigger value="verified">Verified ({verifiedUsers.length})</TabsTrigger>
+                        <TabsTrigger value="rejected">Rejected ({rejectedUsers.length})</TabsTrigger>
+                        <TabsTrigger value="duplicates">Duplicates ({duplicateUsers.length})</TabsTrigger>
                     </TabsList>
 
                     <Card>
@@ -294,16 +270,15 @@ export default function VerificationCenterPage() {
                                                     <TableCell>
                                                         <div className="flex items-center gap-3">
                                                             <Avatar className="h-8 w-8">
-                                                                <AvatarImage src={u.photoURL} />
+                                                                <AvatarImage src={u.picture} />
                                                                 <AvatarFallback className="bg-purple-100 text-purple-700 text-xs">
-                                                                    {u.displayName?.[0] || 'U'}
+                                                                    {u.name?.[0] || 'U'}
                                                                 </AvatarFallback>
                                                             </Avatar>
                                                             <div>
                                                                 <p className="font-medium text-zinc-900 dark:text-white">
-                                                                    {u.displayName || 'Unknown'}
+                                                                    {u.name || 'Unknown'}
                                                                 </p>
-                                                                <p className="text-xs text-zinc-500">{u.wcaStyleId}</p>
                                                             </div>
                                                         </div>
                                                     </TableCell>
@@ -338,16 +313,6 @@ export default function VerificationCenterPage() {
                                                                     Reset
                                                                 </Button>
                                                             )}
-                                                            {u.duplicateDetected && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={() => openActionDialog(u, 'suspend')}
-                                                                    disabled={processing}
-                                                                >
-                                                                    <Ban className="h-4 w-4" />
-                                                                </Button>
-                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
@@ -363,14 +328,9 @@ export default function VerificationCenterPage() {
                 <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>
-                                {actionType === 'force_reverify' ? 'Force Re-verification' : 'Suspend User'}
-                            </DialogTitle>
+                            <DialogTitle>Force Re-verification</DialogTitle>
                             <DialogDescription>
-                                {actionType === 'force_reverify'
-                                    ? `This will reset ${selectedUser?.displayName}'s verification status. They will need to verify again.`
-                                    : `This will suspend ${selectedUser?.displayName}'s account. They will be immediately logged out.`
-                                }
+                                This will reset {selectedUser?.name}'s verification status. They will need to verify again.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
@@ -378,7 +338,7 @@ export default function VerificationCenterPage() {
                                 Cancel
                             </Button>
                             <Button
-                                variant={actionType === 'suspend' ? 'destructive' : 'default'}
+                                variant="default"
                                 onClick={handleAction}
                                 disabled={processing}
                             >
@@ -387,10 +347,8 @@ export default function VerificationCenterPage() {
                                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                         Processing...
                                     </>
-                                ) : actionType === 'force_reverify' ? (
-                                    'Reset Verification'
                                 ) : (
-                                    'Suspend User'
+                                    'Reset Verification'
                                 )}
                             </Button>
                         </DialogFooter>

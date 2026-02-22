@@ -17,28 +17,10 @@ model User {
   isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now())
   
-  // Verification fields
-  verificationStatus         String?   // UNVERIFIED, PENDING, VERIFIED, REJECTED
-  diditWorkflowId            String?
-  diditSessionId             String?
-  faceHash                  String?
-  documentHash               String?
-  verificationCountry        String?
-  duplicateDetected         Boolean   @default(false)
-  verificationAttemptCount   Int       @default(0)
-  verifiedAt                 DateTime?
-  verificationLevel          Int?
-  suspiciousVerification     Boolean   @default(false)
-  lastVerificationAttemptAt  DateTime?
-  verificationRequestedAt   DateTime?
-  verificationLockedUntil    DateTime?
-  lastVerificationResult    Json?
-  
   sessions  UserSession[]
   results   Result[]
   
   @@index([email])
-  @@index([verificationStatus])
 }
 
 model UserSession {
@@ -108,14 +90,4 @@ model Result {
   @@index([competitionId])
   @@index([userId])
   @@index([status])
-}
-
-model IdentityIndex {
-  id        String   @id // hash value
-  userId    String
-  type      String   // FACE, DOCUMENT
-  createdAt DateTime @default(now())
-  
-  @@index([userId])
-  @@index([type])
 }

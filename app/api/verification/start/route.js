@@ -1,27 +1,61 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, updateDoc } from 'firebase/firestore';
 
-const firebaseConfig = {
-    apiKey: "AIzaSyBUH2hL2lR-nNi2jnWQWeeX00z8N-MQqO0",
-    authDomain: "texcads-670e0.firebaseapp.com",
-    databaseURL: "https://texcads-670e0-default-rtdb.firebaseio.com",
-    projectId: "texcads-670e0",
-    storageBucket: "texcads-670e0.firebasestorage.app",
-    messagingSenderId: "586899233238",
-    appId: "1:586899233238:web:9dbee74e14cd95f23f2c77"
-};
+let adminDb = null;
 
-function getFirestoreDb() {
-    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-    return getFirestore(app);
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
+    }
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function getDb() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = require('firebase-admin/app');
+        const { getFirestore } = require('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing Firebase Admin env vars');
+            throw new Error('Missing Firebase environment variables');
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (getApps().length === 0) {
+            initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
+        }
+
+        adminDb = getFirestore();
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin init error:', error.message);
+        throw error;
+    }
+}
+
+function hashString(str) {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(str || '').digest('hex');
 }
 
 export async function POST(request) {
     try {
+        const db = await getDb();
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');
 
@@ -29,31 +63,35 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
-        const user = await prisma.user.findUnique({
-            where: { id: userId }
-        });
+        const userDoc = await db.collection('users').doc(userId).get();
 
-        if (!user) {
+        if (!userDoc.exists) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        if (user.verificationStatus === 'VERIFIED') {
+        const userData = userDoc.data();
+
+        if (userData.verificationStatus === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
-        if (user.verificationLockedUntil && user.verificationLockedUntil > new Date()) {
-            return NextResponse.json({
-                error: 'Verification temporarily locked',
-                lockedUntil: user.verificationLockedUntil.toISOString()
-            }, { status: 429 });
+        if (userData.verificationLockedUntil) {
+            const lockUntil = userData.verificationLockedUntil.toDate ? userData.verificationLockedUntil.toDate() : new Date(userData.verificationLockedUntil);
+            if (lockUntil > new Date()) {
+                return NextResponse.json({
+                    error: 'Verification temporarily locked',
+                    lockedUntil: lockUntil.toISOString()
+                }, { status: 429 });
+            }
         }
 
         const maxAttempts = 3;
-        const attemptCount = user.verificationAttemptCount || 0;
+        const attemptCount = userData.verificationAttemptCount || 0;
 
         if (attemptCount >= maxAttempts) {
-            if (user.lastVerificationAttemptAt) {
-                const hoursSinceLastAttempt = (new Date() - user.lastVerificationAttemptAt) / (1000 * 60 * 60);
+            if (userData.lastVerificationAttemptAt) {
+                const lastAttemptDate = userData.lastVerificationAttemptAt.toDate ? userData.lastVerificationAttemptAt.toDate() : new Date(userData.lastVerificationAttemptAt);
+                const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
                     return NextResponse.json({
@@ -98,33 +136,16 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session created successfully:', sessionData.session_id);
 
-        const newAttemptCount = user.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
+        const newAttemptCount = userData.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        await prisma.user.update({
-            where: { id: userId },
-            data: {
-                diditSessionId: sessionData.session_id,
-                diditWorkflowId: workflowId,
-                verificationStatus: 'PENDING',
-                verificationAttemptCount: newAttemptCount,
-                lastVerificationAttemptAt: new Date(),
-                verificationRequestedAt: new Date()
-            }
+        await db.collection('users').doc(userId).update({
+            diditSessionId: sessionData.session_id,
+            diditWorkflowId: workflowId,
+            verificationStatus: 'PENDING',
+            verificationAttemptCount: newAttemptCount,
+            lastVerificationAttemptAt: new Date(),
+            verificationRequestedAt: new Date()
         });
-
-        // Sync to Firebase for frontend compatibility
-        try {
-            const db = getFirestoreDb();
-            await updateDoc(doc(db, 'users', userId), {
-                verificationStatus: 'PENDING',
-                diditSessionId: sessionData.session_id,
-                verificationAttemptCount: newAttemptCount,
-                lastVerificationAttemptAt: new Date(),
-                verificationRequestedAt: new Date()
-            });
-        } catch (e) {
-            console.error('Firebase sync error:', e);
-        }
 
         return NextResponse.json({
             success: true,
