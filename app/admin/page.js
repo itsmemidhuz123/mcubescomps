@@ -2245,7 +2245,7 @@ export default function AdminPanel() {
                             <CardContent>
                                 <div className="text-center py-8 text-gray-500">
                                     <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-purple-400" />
-                                    <p>Click "Open Full Center" to access the complete verification management system.</p>
+                                    <p>Click &quot;Open Full Center&quot; to access the complete verification management system.</p>
                                     <p className="text-sm mt-2">There you can:</p>
                                     <ul className="text-sm mt-2 list-disc list-inside text-left max-w-md mx-auto">
                                         <li>View all pending, verified, and rejected verifications</li>
