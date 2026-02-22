@@ -1,10 +1,19 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+
+let prisma = null;
+
+async function getPrisma() {
+    if (prisma) return prisma;
+    const { PrismaClient } = await import('@prisma/client');
+    prisma = new PrismaClient();
+    return prisma;
+}
 
 export async function POST(request) {
     try {
+        const db = await getPrisma();
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');
 
@@ -12,7 +21,7 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
-        const user = await prisma.user.findUnique({
+        const user = await db.user.findUnique({
             where: { id: userId }
         });
 
@@ -83,7 +92,7 @@ export async function POST(request) {
 
         const newAttemptCount = user.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        await prisma.user.update({
+        await db.user.update({
             where: { id: userId },
             data: {
                 diditSessionId: sessionData.session_id,

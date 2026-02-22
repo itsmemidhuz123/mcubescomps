@@ -2,7 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
-import { prisma } from '@/lib/prisma';
+
+let prisma = null;
+
+async function getPrisma() {
+    if (prisma) return prisma;
+    const { PrismaClient } = await import('@prisma/client');
+    prisma = new PrismaClient();
+    return prisma;
+}
 
 function verifyWebhookSignature(payload, signature, secret) {
     if (!signature || !secret) return false;
@@ -21,6 +29,7 @@ function hashString(str) {
 
 export async function POST(request) {
     try {
+        const db = await getPrisma();
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
@@ -44,7 +53,7 @@ export async function POST(request) {
 
         const userId = vendor_data;
 
-        const user = await prisma.user.findUnique({
+        const user = await db.user.findUnique({
             where: { id: userId }
         });
 
@@ -59,10 +68,10 @@ export async function POST(request) {
             const country = result?.country || null;
             const fullName = result?.full_name || user.name || null;
 
-            const existingFace = await prisma.identityIndex.findUnique({
+            const existingFace = await db.identityIndex.findUnique({
                 where: { id: faceHash }
             });
-            const existingDoc = await prisma.identityIndex.findUnique({
+            const existingDoc = await db.identityIndex.findUnique({
                 where: { id: documentHash }
             });
 
@@ -71,7 +80,7 @@ export async function POST(request) {
                 if (existingFace) duplicateType.push('FACE');
                 if (existingDoc) duplicateType.push('DOCUMENT');
 
-                await prisma.user.update({
+                await db.user.update({
                     where: { id: userId },
                     data: {
                         verificationStatus: 'REJECTED',
@@ -92,7 +101,7 @@ export async function POST(request) {
                 });
             }
 
-            await prisma.identityIndex.create({
+            await db.identityIndex.create({
                 data: {
                     id: faceHash,
                     userId: userId,
@@ -100,7 +109,7 @@ export async function POST(request) {
                 }
             });
 
-            await prisma.identityIndex.create({
+            await db.identityIndex.create({
                 data: {
                     id: documentHash,
                     userId: userId,
@@ -108,7 +117,7 @@ export async function POST(request) {
                 }
             });
 
-            await prisma.user.update({
+            await db.user.update({
                 where: { id: userId },
                 data: {
                     verificationStatus: 'VERIFIED',
@@ -137,7 +146,7 @@ export async function POST(request) {
         } else if (status === 'declined' || status === 'rejected') {
             const rejectionReason = result?.reason || 'Unknown reason';
 
-            await prisma.user.update({
+            await db.user.update({
                 where: { id: userId },
                 data: {
                     verificationStatus: 'REJECTED',
