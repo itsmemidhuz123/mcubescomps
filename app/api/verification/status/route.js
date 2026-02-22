@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 
-let adminApp = null;
 let adminDb = null;
 
 function parsePrivateKey(privateKey) {
@@ -17,8 +16,8 @@ async function initializeAdmin() {
     if (adminDb) return adminDb;
 
     try {
-        const { initializeApp, getApps, cert } = await import('firebase-admin/app');
-        const { getFirestore } = await import('firebase-admin/firestore');
+        const { initializeApp, getApps, cert } = require('firebase-admin/app');
+        const { getFirestore } = require('firebase-admin/firestore');
 
         const projectId = process.env.FIREBASE_PROJECT_ID;
         const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -31,21 +30,17 @@ async function initializeAdmin() {
 
         const privateKey = parsePrivateKey(privateKeyRaw);
 
-        if (!adminApp) {
-            if (getApps().length === 0) {
-                adminApp = initializeApp({
-                    credential: cert({
-                        projectId,
-                        clientEmail,
-                        privateKey
-                    })
-                });
-            } else {
-                adminApp = getApps()[0];
-            }
+        if (getApps().length === 0) {
+            initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
         }
 
-        adminDb = getFirestore(adminApp);
+        adminDb = getFirestore();
         return adminDb;
     } catch (error) {
         console.error('Firebase Admin init error:', error.message);
