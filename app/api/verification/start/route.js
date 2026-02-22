@@ -83,9 +83,7 @@ export async function POST(request) {
                     id: userId,
                     email: userEmail,
                     name: userName,
-                    picture: userPicture,
-                    verificationstatus: 'UNVERIFIED',
-                    verificationattemptcount: 0
+                    picture: userPicture
                 });
 
             if (insertError) {
