@@ -17,7 +17,8 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { ArrowLeft, Search, Users, Ban, CheckCircle, Shield, Crown, UserCheck, UserX, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Users, Ban, CheckCircle, Shield, Crown, UserCheck, UserX, Filter, ChevronLeft, ChevronRight, ShieldAlert } from 'lucide-react';
+import { VerificationStatusBadge } from '@/components/verification/VerifiedBadge';
 
 const ROLE_LEVELS = {
     USER: 0,
@@ -227,6 +228,7 @@ export default function UserManagementPage() {
                                         <TableHead>User</TableHead>
                                         <TableHead>Email</TableHead>
                                         <TableHead>Role</TableHead>
+                                        <TableHead>Verification</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Country</TableHead>
                                         <TableHead>Joined</TableHead>
@@ -270,6 +272,17 @@ export default function UserManagementPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <VerificationStatusBadge status={u.verificationStatus || 'UNVERIFIED'} size="sm" />
+                                                        {u.duplicateDetected && (
+                                                            <Badge variant="outline" className="text-[10px] bg-orange-50 border-orange-200 text-orange-700">
+                                                                <ShieldAlert className="w-3 h-3 mr-1" />
+                                                                Duplicate
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
                                                     <Badge className={STATUS_COLORS[u.status] || STATUS_COLORS.ACTIVE}>
                                                         {u.status || 'ACTIVE'}
                                                     </Badge>
@@ -282,6 +295,16 @@ export default function UserManagementPage() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        {u.verificationStatus !== 'VERIFIED' && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="text-blue-600 hover:text-blue-700"
+                                                                title="Request Verification"
+                                                            >
+                                                                <ShieldAlert className="h-4 w-4 mr-1" />
+                                                            </Button>
+                                                        )}
                                                         {u.status === 'SUSPENDED' ? (
                                                             <Button
                                                                 size="sm"
