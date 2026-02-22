@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, getSupabaseAdmin } from '@/lib/supabase';
 
 function hashString(str) {
     const crypto = require('crypto');
@@ -77,16 +77,24 @@ export async function POST(request) {
                 console.log('Firebase fetch failed, using userId as fallback');
             }
 
-            // Use database function to insert/update user (bypasses RLS)
-            const { error: insertError } = await supabase.rpc('upsert_user', {
-                p_id: userId,
-                p_email: userEmail,
-                p_name: userName,
-                p_picture: userPicture
-            });
+            // Use admin client to bypass RLS
+            const supabaseAdmin = getSupabaseAdmin();
 
-            // Fetch the user regardless of insert result
-            const { data: userRecord } = await supabase
+            const { error: insertError } = await supabaseAdmin
+                .from('users')
+                .upsert({
+                    id: userId,
+                    email: userEmail,
+                    name: userName,
+                    picture: userPicture
+                }, { onConflict: 'id' });
+
+            if (insertError) {
+                console.error('User insert error:', insertError);
+            }
+
+            // Fetch the user
+            const { data: userRecord } = await supabaseAdmin
                 .from('users')
                 .select('*')
                 .eq('id', userId)
@@ -165,7 +173,8 @@ export async function POST(request) {
 
         const newAttemptCount = userData.verificationstatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        const { error: updateError } = await supabase
+        const supabaseAdmin = getSupabaseAdmin();
+        const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({
                 diditsessionid: sessionData.session_id,
