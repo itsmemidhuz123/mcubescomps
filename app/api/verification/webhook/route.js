@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
@@ -35,6 +37,9 @@ export async function POST(request) {
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
+
+        console.log('Webhook received, DIDIT_WEBHOOK_SECRET exists:', !!webhookSecret);
+        console.log('Webhook body:', JSON.stringify(body).substring(0, 500));
 
         if (webhookSecret && webhookSecret !== 'your_webhook_secret_here') {
             const isValid = verifyWebhookSignature(body, signature, webhookSecret);
@@ -203,7 +208,7 @@ export async function POST(request) {
         }
 
     } catch (error) {
-        console.error('Webhook error:', error);
+        console.error('Webhook error:', error.message, error.stack);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

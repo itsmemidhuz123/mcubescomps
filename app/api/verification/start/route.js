@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
@@ -69,7 +71,11 @@ export async function POST(request) {
         const workflowId = process.env.DIDIT_WORKFLOW_ID;
         const webhookUrl = `${request.headers.get('origin') || 'https://mcubescomps.com'}/api/verification/webhook`;
 
+        console.log('DIDIT_API_KEY exists:', !!diditApiKey);
+        console.log('DIDIT_WORKFLOW_ID:', workflowId);
+
         if (!diditApiKey) {
+            console.error('DIDIT API Key is missing');
             return NextResponse.json({ error: 'DIDIT not configured' }, { status: 500 });
         }
 
@@ -89,10 +95,11 @@ export async function POST(request) {
         if (!sessionResponse.ok) {
             const errorText = await sessionResponse.text();
             console.error('DIDIT session creation failed:', errorText);
-            return NextResponse.json({ error: 'Failed to create verification session' }, { status: 500 });
+            return NextResponse.json({ error: 'Failed to create verification session', details: errorText }, { status: 500 });
         }
 
         const sessionData = await sessionResponse.json();
+        console.log('DIDIT session created successfully:', sessionData.session_id);
 
         const newAttemptCount = userData.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
