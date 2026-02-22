@@ -54,17 +54,19 @@ export default function VerificationCenterPage() {
         try {
             const supabase = getSupabaseAdmin();
 
-            let query = supabase
+            // Fetch all users to see what's in the database
+            const { data, error } = await supabase
                 .from('users')
                 .select('*')
-                .in('verificationstatus', ['PENDING', 'VERIFIED', 'REJECTED'])
-                .order('verifiedat', { ascending: false })
+                .order('createdat', { ascending: false })
                 .limit(100);
 
-            const { data, error } = await query;
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
 
-            if (error) throw error;
-
+            console.log('Fetched users:', data?.length, data);
             setUsers(data || []);
         } catch (error) {
             console.error('Error fetching verification data:', error);

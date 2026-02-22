@@ -43,6 +43,26 @@ export function VerificationSection({ compact = false }) {
     const duplicateDetected = verificationData?.duplicateDetected || userProfile?.duplicateDetected || false;
     const lastResult = verificationData?.lastVerificationResult || userProfile?.lastVerificationResult;
 
+    const handleReset = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const authToken = await user.getIdToken();
+            await fetch('/api/verification/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ userId: user.uid })
+            });
+            window.location.reload();
+        } catch (err) {
+            console.error('Reset error:', err);
+            setLoading(false);
+        }
+    };
+
     const handleStartVerification = async () => {
         if (!user) return;
 
@@ -176,18 +196,27 @@ export function VerificationSection({ compact = false }) {
                             <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">Verification Pending</h3>
-                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                                Your identity verification is being processed. This usually takes a few minutes.
+                            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">Verification In Progress</h3>
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                                You have a verification session in progress. Complete it or reset to start over.
                             </p>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-3 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-                                onClick={() => window.location.reload()}
-                            >
-                                Check Status
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    size="sm"
+                                    onClick={handleStartVerification}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Loading...' : 'Continue Verification'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleReset}
+                                    disabled={loading}
+                                >
+                                    Reset
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </CardContent>
