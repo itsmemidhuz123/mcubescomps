@@ -21,7 +21,15 @@ export async function GET(request) {
             .single();
 
         if (userError || !userData) {
-            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+            return NextResponse.json({
+                verificationStatus: 'UNVERIFIED',
+                verifiedAt: null,
+                verificationLevel: null,
+                duplicateDetected: false,
+                suspiciousVerification: false,
+                verificationAttemptCount: 0,
+                lastVerificationResult: null
+            });
         }
 
         return NextResponse.json({

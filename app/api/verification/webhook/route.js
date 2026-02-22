@@ -46,15 +46,31 @@ export async function POST(request) {
 
         const supabase = getSupabase();
 
-        const { data: userData, error: userError } = await supabase
+        let userData = null;
+
+        const { data: existingUser, error: fetchError } = await supabase
             .from('users')
             .select('*')
             .eq('id', userId)
             .single();
 
-        if (userError || !userData) {
-            console.error('User not found for webhook:', userId);
-            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        if (fetchError || !existingUser) {
+            console.log('User not in Supabase for webhook, creating record...');
+            const { error: insertError } = await supabase
+                .from('users')
+                .insert({
+                    id: userId,
+                    email: '',
+                    verificationstatus: 'UNVERIFIED',
+                    verificationattemptcount: 0
+                });
+
+            if (insertError) {
+                console.error('Failed to create user in webhook:', insertError);
+            }
+            userData = { id: userId, verificationstatus: 'UNVERIFIED', verificationattemptcount: 0 };
+        } else {
+            userData = existingUser;
         }
 
         if (status === 'approved') {
