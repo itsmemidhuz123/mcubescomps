@@ -107,12 +107,14 @@ export async function POST(request) {
 
     } else if (mappedStatus === 'REJECTED') {
       const rejectionReason = result?.reason || 'Verification was declined';
+      const now = new Date().toISOString();
 
       const updateData = {
         verificationStatus: 'REJECTED',
+        lastVerificationAttemptAt: now,
         lastVerificationResult: {
           status: diditStatus,
-          rejectedAt: new Date().toISOString(),
+          rejectedAt: now,
           reason: rejectionReason
         }
       };

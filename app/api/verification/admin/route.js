@@ -86,7 +86,8 @@ export async function POST(request) {
                 diditSessionId: null,
                 currentSessionId: null,
                 lastVerificationResult: null,
-                verificationAttemptCount: currentAttemptCount
+                lastVerificationAttemptAt: null,
+                verificationRequestedAt: null
             };
 
             const result = await updateVerificationStatus(userId, updateData);

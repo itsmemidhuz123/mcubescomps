@@ -22,6 +22,7 @@ export async function POST(request) {
 
         const currentStatus = userData.verificationStatus || 'UNVERIFIED';
         const attemptCount = userData.verificationAttemptCount || 0;
+        const lastResult = userData.lastVerificationResult;
 
         if (currentStatus === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
@@ -30,14 +31,20 @@ export async function POST(request) {
         const maxAttempts = 3;
 
         if (attemptCount >= maxAttempts) {
-            if (userData.lastVerificationAttemptAt) {
-                const lastAttemptDate = new Date(userData.lastVerificationAttemptAt);
+            const lastAttemptDate = lastResult?.rejectedAt
+                ? new Date(lastResult.rejectedAt)
+                : userData.lastVerificationAttemptAt
+                    ? new Date(userData.lastVerificationAttemptAt)
+                    : null;
+
+            if (lastAttemptDate) {
                 const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
                     return NextResponse.json({
                         error: 'Maximum verification attempts exceeded. Try again after 24 hours.',
-                        attemptsRemaining: 0
+                        attemptsRemaining: 0,
+                        hoursRemaining: Math.ceil(24 - hoursSinceLastAttempt)
                     }, { status: 429 });
                 }
             }
@@ -77,7 +84,29 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session response:', JSON.stringify(sessionData));
 
-        const newAttemptCount = currentStatus === 'PENDING' ? attemptCount : attemptCount + 1;
+        let newAttemptCount;
+        if (currentStatus === 'PENDING') {
+            newAttemptCount = attemptCount;
+        } else if (currentStatus === 'REJECTED' && attemptCount >= maxAttempts) {
+            const lastAttemptDate = lastResult?.rejectedAt
+                ? new Date(lastResult.rejectedAt)
+                : userData.lastVerificationAttemptAt
+                    ? new Date(userData.lastVerificationAttemptAt)
+                    : null;
+
+            if (lastAttemptDate) {
+                const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
+                if (hoursSinceLastAttempt >= 24) {
+                    newAttemptCount = 1;
+                } else {
+                    newAttemptCount = attemptCount;
+                }
+            } else {
+                newAttemptCount = attemptCount + 1;
+            }
+        } else {
+            newAttemptCount = attemptCount + 1;
+        }
 
         // Update in Firestore
         const updateResult = await updateVerificationStatus(userId, {

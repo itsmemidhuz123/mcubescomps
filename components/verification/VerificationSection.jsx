@@ -1,22 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VerifiedBadge, VerificationStatusBadge } from './VerifiedBadge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Shield, ShieldCheck, ShieldAlert, ShieldQuestion, Clock, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Shield, ShieldCheck, ShieldAlert, ShieldQuestion, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 
 export function VerificationSection({ compact = false }) {
-    const { user, userProfile } = useAuth();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
-    const [checkingStatus, setCheckingStatus] = useState(false);
     const [error, setError] = useState(null);
     const [verificationData, setVerificationData] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
-    const [autoRetryCount, setAutoRetryCount] = useState(0);
-    const [lastCheckedAt, setLastCheckedAt] = useState(null);
-    const autoRetryTimerRef = useRef(null);
 
     useEffect(() => {
         async function fetchVerificationStatus() {
@@ -32,7 +28,6 @@ export function VerificationSection({ compact = false }) {
 
                 if (res.ok) {
                     const data = await res.json();
-                    console.log('Verification status data:', data);
                     setVerificationData(data);
                 }
             } catch (err) {
@@ -42,73 +37,6 @@ export function VerificationSection({ compact = false }) {
 
         fetchVerificationStatus();
     }, [user, refreshKey]);
-
-    useEffect(() => {
-        if (verificationData?.verificationStatus === 'PENDING' && user) {
-            if (autoRetryCount < 5) {
-                const retryDelay = 60 * 1000;
-                console.log(`Scheduling auto-retry ${autoRetryCount + 1}/5 in 1 minute...`);
-
-                autoRetryTimerRef.current = setTimeout(() => {
-                    setAutoRetryCount(prev => prev + 1);
-                    checkDIDITStatus();
-                }, retryDelay);
-            }
-        }
-
-        return () => {
-            if (autoRetryTimerRef.current) {
-                clearTimeout(autoRetryTimerRef.current);
-            }
-        };
-    }, [verificationData?.verificationStatus, autoRetryCount, user]);
-
-    async function checkDIDITStatus() {
-        if (!user || checkingStatus) return;
-
-        setCheckingStatus(true);
-        setLastCheckedAt(new Date());
-
-        try {
-            const authToken = await user.getIdToken();
-            console.log('Checking DIDIT status...');
-
-            const res = await fetch(`/api/verification/check?userId=${user.uid}`, {
-                headers: {
-                    'Authorization': `Bearer ${authToken}`
-                }
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                console.log('DIDIT check result:', data);
-
-                if (data.status === 'VERIFIED') {
-                    setVerificationData(prev => ({
-                        ...prev,
-                        verificationStatus: 'VERIFIED',
-                        verifiedAt: data.verifiedAt || new Date().toISOString()
-                    }));
-                } else if (data.status === 'REJECTED') {
-                    setVerificationData(prev => ({
-                        ...prev,
-                        verificationStatus: 'REJECTED'
-                    }));
-                } else {
-                    setVerificationData(prev => ({
-                        ...prev,
-                        verificationStatus: data.status || 'PENDING'
-                    }));
-                }
-
-                setRefreshKey(prev => prev + 1);
-            }
-        } catch (err) {
-            console.error('Failed to check DIDIT status:', err);
-        } finally {
-            setCheckingStatus(false);
-        }
-    }
 
     const verificationStatus = verificationData?.verificationStatus || 'UNVERIFIED';
     const verifiedAt = verificationData?.verifiedAt || null;
@@ -137,33 +65,11 @@ export function VerificationSection({ compact = false }) {
 
     const retryInfo = getRetryInfo();
 
-    const handleReset = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            const authToken = await user.getIdToken();
-            await fetch('/api/verification/reset', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`
-                },
-                body: JSON.stringify({ userId: user.uid })
-            });
-            setAutoRetryCount(0);
-            setRefreshKey(prev => prev + 1);
-        } catch (err) {
-            console.error('Reset error:', err);
-            setLoading(false);
-        }
-    };
-
     const handleStartVerification = async () => {
         if (!user) return;
 
         setLoading(true);
         setError(null);
-        setAutoRetryCount(0);
 
         try {
             const authToken = await user.getIdToken();
@@ -178,7 +84,6 @@ export function VerificationSection({ compact = false }) {
             });
 
             const data = await res.json();
-            console.log('Verification response:', data);
 
             if (!res.ok) {
                 if (res.status === 429) {
@@ -190,25 +95,18 @@ export function VerificationSection({ compact = false }) {
                 return;
             }
 
-            try {
-                const authToken = await user.getIdToken();
-                const statusRes = await fetch(`/api/verification/status?userId=${user.uid}`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                if (statusRes.ok) {
-                    const statusData = await statusRes.json();
-                    setVerificationData(statusData);
-                }
-            } catch (e) {
-                console.error('Failed to refresh status:', e);
+            const statusRes = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                setVerificationData(statusData);
             }
 
             if (data.verificationUrl) {
                 const initDidit = () => {
                     if (window.DiditSdk && window.DiditSdk.shared) {
-                        console.log('Using DIDIT SDK');
                         window.DiditSdk.shared.onComplete = (result) => {
-                            console.log('Verification result:', result);
                             if (result?.type === 'completed') {
                                 setRefreshKey(prev => prev + 1);
                             }
@@ -226,14 +124,11 @@ export function VerificationSection({ compact = false }) {
                     const script = document.createElement('script');
                     script.src = 'https://cdn.jsdelivr.net/npm/@didit-protocol/sdk-web/dist/didit-sdk.umd.min.js';
                     script.onload = () => {
-                        console.log('DIDIT SDK loaded');
                         if (!initDidit()) {
-                            console.log('SDK failed, redirecting...');
                             window.location.href = data.verificationUrl;
                         }
                     };
                     script.onerror = () => {
-                        console.log('SDK load failed, redirecting...');
                         window.location.href = data.verificationUrl;
                     };
                     document.head.appendChild(script);
@@ -293,8 +188,6 @@ export function VerificationSection({ compact = false }) {
     }
 
     if (verificationStatus === 'PENDING') {
-        const isCooldown = !retryInfo.canRetry;
-
         return (
             <Card className="bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800">
                 <CardContent className="p-4">
@@ -304,72 +197,12 @@ export function VerificationSection({ compact = false }) {
                         </div>
                         <div className="flex-1">
                             <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">Verification In Progress</h3>
-                            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-2">
                                 Your identity verification is being processed. This usually takes a few minutes.
                             </p>
-                            {lastCheckedAt && (
-                                <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
-                                    Last checked: {lastCheckedAt.toLocaleTimeString()}
-                                </p>
-                            )}
-                            {autoRetryCount > 0 && autoRetryCount < 5 && (
-                                <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
-                                    Auto-retry {autoRetryCount}/5 - checking every minute
-                                </p>
-                            )}
-                            {isCooldown && (
-                                <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-3">
-                                    {retryInfo.message}
-                                </p>
-                            )}
-                            <div className="flex gap-2 flex-wrap">
-                                <Button
-                                    size="sm"
-                                    onClick={checkDIDITStatus}
-                                    disabled={checkingStatus}
-                                    variant="outline"
-                                >
-                                    {checkingStatus ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                            Checking...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <RefreshCw className="w-4 h-4 mr-2" />
-                                            Check Status
-                                        </>
-                                    )}
-                                </Button>
-                                {!isCooldown && (
-                                    <>
-                                        <Button
-                                            size="sm"
-                                            onClick={handleStartVerification}
-                                            disabled={loading}
-                                        >
-                                            {loading ? 'Loading...' : 'Continue Verification'}
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={handleReset}
-                                            disabled={loading}
-                                        >
-                                            Reset
-                                        </Button>
-                                    </>
-                                )}
-                                {isCooldown && (
-                                    <Button
-                                        size="sm"
-                                        disabled={true}
-                                        className="opacity-50 cursor-not-allowed"
-                                    >
-                                        {retryInfo.message}
-                                    </Button>
-                                )}
-                            </div>
+                            <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                                Please wait while we verify your identity. The page will update automatically once verification is complete.
+                            </p>
                         </div>
                     </div>
                 </CardContent>
@@ -405,16 +238,17 @@ export function VerificationSection({ compact = false }) {
                                         : 'Your identity verification was not approved.'
                                 }
                             </p>
-                            {retryInfo.canRetry ? (
+                            {attemptCount >= 3 && !retryInfo.canRetry && (
                                 <p className="text-xs text-red-500 mt-2">
-                                    You can try again now.
-                                </p>
-                            ) : (
-                                <p className="text-xs text-red-500 mt-2">
-                                    {retryInfo.message}
+                                    Maximum attempts (3) reached. Please contact support.
                                 </p>
                             )}
-                            {retryInfo.canRetry && (
+                            {retryInfo.canRetry && attemptCount < 3 && (
+                                <p className="text-xs text-green-600 mt-2">
+                                    You can try again now. ({attemptCount}/3 attempts used)
+                                </p>
+                            )}
+                            {retryInfo.canRetry && attemptCount < 3 && (
                                 <Button
                                     className="mt-3 bg-red-600 hover:bg-red-700"
                                     onClick={handleStartVerification}
@@ -430,12 +264,12 @@ export function VerificationSection({ compact = false }) {
                                     )}
                                 </Button>
                             )}
-                            {!retryInfo.canRetry && (
+                            {(!retryInfo.canRetry || attemptCount >= 3) && (
                                 <Button
                                     className="mt-3"
                                     disabled={true}
                                 >
-                                    {retryInfo.message}
+                                    {attemptCount >= 3 ? 'Maximum attempts reached' : retryInfo.message}
                                 </Button>
                             )}
                         </div>
@@ -493,9 +327,6 @@ export function VerificationSection({ compact = false }) {
                                 </>
                             )}
                         </Button>
-                        <p className="text-[10px] text-zinc-400 text-center mt-2">
-                            {attemptCount > 0 && `Attempt ${attemptCount} of 3`}
-                        </p>
                     </div>
                 </div>
             </CardContent>
