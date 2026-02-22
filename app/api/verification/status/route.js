@@ -1,19 +1,22 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-let prisma = null;
+let supabase = null;
 
-async function getPrisma() {
-    if (prisma) return prisma;
-    const { PrismaClient } = await import('@prisma/client');
-    prisma = new PrismaClient();
-    return prisma;
+function getSupabase() {
+    if (supabase) return supabase;
+    supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_KEY
+    );
+    return supabase;
 }
 
 export async function GET(request) {
     try {
-        const db = await getPrisma();
+        const sb = getSupabase();
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
 
@@ -21,11 +24,13 @@ export async function GET(request) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
         }
 
-        const user = await db.user.findUnique({
-            where: { id: userId }
-        });
+        const { data: user, error } = await sb
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
-        if (!user) {
+        if (error || !user) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 

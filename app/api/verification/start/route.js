@@ -1,19 +1,22 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-let prisma = null;
+let supabase = null;
 
-async function getPrisma() {
-    if (prisma) return prisma;
-    const { PrismaClient } = await import('@prisma/client');
-    prisma = new PrismaClient();
-    return prisma;
+function getSupabase() {
+    if (supabase) return supabase;
+    supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_KEY
+    );
+    return supabase;
 }
 
 export async function POST(request) {
     try {
-        const db = await getPrisma();
+        const sb = getSupabase();
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');
 
@@ -21,11 +24,13 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
-        const user = await db.user.findUnique({
-            where: { id: userId }
-        });
+        const { data: user, error } = await sb
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
-        if (!user) {
+        if (error || !user) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
@@ -33,19 +38,13 @@ export async function POST(request) {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
-        if (user.verificationLockedUntil && user.verificationLockedUntil > new Date()) {
-            return NextResponse.json({
-                error: 'Verification temporarily locked',
-                lockedUntil: user.verificationLockedUntil.toISOString()
-            }, { status: 429 });
-        }
-
         const maxAttempts = 3;
         const attemptCount = user.verificationAttemptCount || 0;
 
         if (attemptCount >= maxAttempts) {
             if (user.lastVerificationAttemptAt) {
-                const hoursSinceLastAttempt = (new Date() - user.lastVerificationAttemptAt) / (1000 * 60 * 60);
+                const lastAttemptDate = new Date(user.lastVerificationAttemptAt);
+                const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
                     return NextResponse.json({
@@ -92,17 +91,17 @@ export async function POST(request) {
 
         const newAttemptCount = user.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        await db.user.update({
-            where: { id: userId },
-            data: {
+        await sb
+            .from('users')
+            .update({
                 diditSessionId: sessionData.session_id,
                 diditWorkflowId: workflowId,
                 verificationStatus: 'PENDING',
                 verificationAttemptCount: newAttemptCount,
-                lastVerificationAttemptAt: new Date(),
-                verificationRequestedAt: new Date()
-            }
-        });
+                lastVerificationAttemptAt: new Date().toISOString(),
+                verificationRequestedAt: new Date().toISOString()
+            })
+            .eq('id', userId);
 
         return NextResponse.json({
             success: true,

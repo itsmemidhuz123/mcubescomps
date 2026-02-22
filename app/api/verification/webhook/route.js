@@ -2,14 +2,17 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
-let prisma = null;
+let supabase = null;
 
-async function getPrisma() {
-    if (prisma) return prisma;
-    const { PrismaClient } = await import('@prisma/client');
-    prisma = new PrismaClient();
-    return prisma;
+function getSupabase() {
+    if (supabase) return supabase;
+    supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_KEY
+    );
+    return supabase;
 }
 
 function verifyWebhookSignature(payload, signature, secret) {
@@ -29,7 +32,7 @@ function hashString(str) {
 
 export async function POST(request) {
     try {
-        const db = await getPrisma();
+        const sb = getSupabase();
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
@@ -53,11 +56,13 @@ export async function POST(request) {
 
         const userId = vendor_data;
 
-        const user = await db.user.findUnique({
-            where: { id: userId }
-        });
+        const { data: user, error: userError } = await sb
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
-        if (!user) {
+        if (userError || !user) {
             console.error('User not found for webhook:', userId);
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
@@ -68,21 +73,22 @@ export async function POST(request) {
             const country = result?.country || null;
             const fullName = result?.full_name || user.name || null;
 
-            const existingFace = await db.identityIndex.findUnique({
-                where: { id: faceHash }
-            });
-            const existingDoc = await db.identityIndex.findUnique({
-                where: { id: documentHash }
-            });
+            const { data: existingFace } = await sb
+                .from('identityIndex')
+                .select('*')
+                .eq('id', faceHash)
+                .single();
+
+            const { data: existingDoc } = await sb
+                .from('identityIndex')
+                .select('*')
+                .eq('id', documentHash)
+                .single();
 
             if (existingFace || existingDoc) {
-                const duplicateType = [];
-                if (existingFace) duplicateType.push('FACE');
-                if (existingDoc) duplicateType.push('DOCUMENT');
-
-                await db.user.update({
-                    where: { id: userId },
-                    data: {
+                await sb
+                    .from('users')
+                    .update({
                         verificationStatus: 'REJECTED',
                         duplicateDetected: true,
                         suspiciousVerification: true,
@@ -91,8 +97,8 @@ export async function POST(request) {
                             rejectedAt: new Date().toISOString(),
                             reason: 'DUPLICATE_IDENTITY'
                         }
-                    }
-                });
+                    })
+                    .eq('id', userId);
 
                 return NextResponse.json({
                     success: true,
@@ -101,30 +107,26 @@ export async function POST(request) {
                 });
             }
 
-            await db.identityIndex.create({
-                data: {
-                    id: faceHash,
-                    userId: userId,
-                    type: 'FACE'
-                }
+            await sb.from('identityIndex').insert({
+                id: faceHash,
+                userId: userId,
+                type: 'FACE'
             });
 
-            await db.identityIndex.create({
-                data: {
-                    id: documentHash,
-                    userId: userId,
-                    type: 'DOCUMENT'
-                }
+            await sb.from('identityIndex').insert({
+                id: documentHash,
+                userId: userId,
+                type: 'DOCUMENT'
             });
 
-            await db.user.update({
-                where: { id: userId },
-                data: {
+            await sb
+                .from('users')
+                .update({
                     verificationStatus: 'VERIFIED',
                     faceHash: faceHash,
                     documentHash: documentHash,
                     verificationCountry: country,
-                    verifiedAt: new Date(),
+                    verifiedAt: new Date().toISOString(),
                     verificationLevel: 1,
                     duplicateDetected: false,
                     suspiciousVerification: false,
@@ -134,8 +136,8 @@ export async function POST(request) {
                         fullName: fullName,
                         country: country
                     }
-                }
-            });
+                })
+                .eq('id', userId);
 
             return NextResponse.json({
                 success: true,
@@ -146,17 +148,17 @@ export async function POST(request) {
         } else if (status === 'declined' || status === 'rejected') {
             const rejectionReason = result?.reason || 'Unknown reason';
 
-            await db.user.update({
-                where: { id: userId },
-                data: {
+            await sb
+                .from('users')
+                .update({
                     verificationStatus: 'REJECTED',
                     lastVerificationResult: {
                         status: status,
                         rejectedAt: new Date().toISOString(),
                         reason: rejectionReason
                     }
-                }
-            });
+                })
+                .eq('id', userId);
 
             return NextResponse.json({
                 success: true,
