@@ -24,39 +24,44 @@ async function initializeAdmin() {
         const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
         const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
+        console.log('Checking env vars:', {
+            projectId: !!projectId,
+            clientEmail: !!clientEmail,
+            privateKey: !!privateKeyRaw
+        });
+
         if (!projectId || !clientEmail || !privateKeyRaw) {
-            console.error('Missing env vars for Firebase Admin');
-            return null;
+            console.error('Missing Firebase Admin env vars:', { projectId, clientEmail, hasKey: !!privateKeyRaw });
+            throw new Error('Missing Firebase environment variables');
         }
 
         const privateKey = parsePrivateKey(privateKeyRaw);
 
-        if (getApps().length === 0) {
-            adminApp = initializeApp({
-                credential: cert({
-                    projectId,
-                    clientEmail,
-                    privateKey
-                })
-            });
-        } else {
-            adminApp = getApps()[0];
+        if (!adminApp) {
+            if (getApps().length === 0) {
+                adminApp = initializeApp({
+                    credential: cert({
+                        projectId,
+                        clientEmail,
+                        privateKey
+                    })
+                });
+            } else {
+                adminApp = getApps()[0];
+            }
         }
 
         adminDb = getFirestore(adminApp);
         return adminDb;
     } catch (error) {
-        console.error('Firebase Admin init error:', error);
-        return null;
+        console.error('Firebase Admin init error:', error.message);
+        throw error;
     }
 }
 
 export async function POST(request) {
     try {
         const db = await initializeAdmin();
-        if (!db) {
-            return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
-        }
 
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');

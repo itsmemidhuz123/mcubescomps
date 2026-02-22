@@ -26,29 +26,31 @@ async function initializeAdmin() {
         const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
         if (!projectId || !clientEmail || !privateKeyRaw) {
-            console.error('Missing env vars for Firebase Admin');
-            return null;
+            console.error('Missing Firebase Admin env vars');
+            throw new Error('Missing Firebase environment variables');
         }
 
         const privateKey = parsePrivateKey(privateKeyRaw);
 
-        if (getApps().length === 0) {
-            adminApp = initializeApp({
-                credential: cert({
-                    projectId,
-                    clientEmail,
-                    privateKey
-                })
-            });
-        } else {
-            adminApp = getApps()[0];
+        if (!adminApp) {
+            if (getApps().length === 0) {
+                adminApp = initializeApp({
+                    credential: cert({
+                        projectId,
+                        clientEmail,
+                        privateKey
+                    })
+                });
+            } else {
+                adminApp = getApps()[0];
+            }
         }
 
         adminDb = getFirestore(adminApp);
         return adminDb;
     } catch (error) {
-        console.error('Firebase Admin init error:', error);
-        return null;
+        console.error('Firebase Admin init error:', error.message);
+        throw error;
     }
 }
 
@@ -70,9 +72,6 @@ function hashString(str) {
 export async function POST(request) {
     try {
         const db = await initializeAdmin();
-        if (!db) {
-            return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
-        }
 
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
