@@ -11,12 +11,37 @@ export function VerificationSection({ compact = false }) {
     const { user, userProfile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [verificationData, setVerificationData] = useState(null);
 
-    const verificationStatus = userProfile?.verificationStatus || 'UNVERIFIED';
-    const verifiedAt = userProfile?.verifiedAt;
-    const attemptCount = userProfile?.verificationAttemptCount || 0;
-    const duplicateDetected = userProfile?.duplicateDetected || false;
-    const lastResult = userProfile?.lastVerificationResult;
+    useEffect(() => {
+        async function fetchVerificationStatus() {
+            if (!user) return;
+
+            try {
+                const authToken = await user.getIdToken();
+                const res = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setVerificationData(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch verification status:', err);
+            }
+        }
+
+        fetchVerificationStatus();
+    }, [user]);
+
+    const verificationStatus = verificationData?.verificationStatus || userProfile?.verificationStatus || 'UNVERIFIED';
+    const verifiedAt = verificationData?.verifiedAt || userProfile?.verifiedAt;
+    const attemptCount = verificationData?.verificationAttemptCount || userProfile?.verificationAttemptCount || 0;
+    const duplicateDetected = verificationData?.duplicateDetected || userProfile?.duplicateDetected || false;
+    const lastResult = verificationData?.lastVerificationResult || userProfile?.lastVerificationResult;
 
     const handleStartVerification = async () => {
         if (!user) return;

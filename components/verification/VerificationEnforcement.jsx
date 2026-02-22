@@ -18,12 +18,36 @@ export function VerificationEnforcement({
     const { user, userProfile } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
+    const [verificationStatus, setVerificationStatus] = useState('UNVERIFIED');
 
     useEffect(() => {
-        if (userProfile) {
-            setLoading(false);
+        async function fetchVerificationStatus() {
+            if (!user) {
+                setLoading(false);
+                return;
+            }
+
+            try {
+                const authToken = await user.getIdToken();
+                const res = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setVerificationStatus(data.verificationStatus || 'UNVERIFIED');
+                }
+            } catch (err) {
+                console.error('Failed to fetch verification status:', err);
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [userProfile]);
+
+        fetchVerificationStatus();
+    }, [user]);
 
     if (loading) {
         return (
@@ -34,7 +58,7 @@ export function VerificationEnforcement({
     }
 
     const requiresVerification = verificationMandatory && currentRound >= verificationRequiredFromRound;
-    const isVerified = userProfile?.verificationStatus === 'VERIFIED';
+    const isVerified = verificationStatus === 'VERIFIED';
 
     if (!requiresVerification || isVerified) {
         return <>{children}</>;
