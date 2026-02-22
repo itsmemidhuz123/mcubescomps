@@ -64,28 +64,44 @@ export async function GET(request) {
 
         console.log('Querying DIDIT for session:', diditSessionId);
 
-        const sessionResponse = await fetch(`https://verification.didit.me/v3/session/${diditSessionId}`, {
-            method: 'GET',
-            headers: {
-                'x-api-key': diditApiKey,
-                'Content-Type': 'application/json'
-            }
-        });
+        let sessionData = null;
+        let diditStatus = null;
+        let diditError = null;
 
-        if (!sessionResponse.ok) {
-            const errorText = await sessionResponse.text();
-            console.error('DIDIT session query failed:', errorText);
-            return NextResponse.json({
-                error: 'Failed to query DIDIT',
-                details: errorText,
-                currentStatus: currentStatus
-            }, { status: 500 });
+        try {
+            const sessionResponse = await fetch(`https://verification.didit.me/v3/session/${diditSessionId}/`, {
+                method: 'GET',
+                headers: {
+                    'x-api-key': diditApiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (sessionResponse.ok) {
+                sessionData = await sessionResponse.json();
+                console.log('DIDIT session response:', JSON.stringify(sessionData));
+                diditStatus = sessionData.status || sessionData.result?.status;
+            } else {
+                const errorText = await sessionResponse.text();
+                console.log('DIDIT session query response:', sessionResponse.status, errorText);
+                diditError = errorText;
+            }
+        } catch (e) {
+            console.log('DIDIT session query error:', e.message);
+            diditError = e.message;
         }
 
-        const sessionData = await sessionResponse.json();
-        console.log('DIDIT session response:', JSON.stringify(sessionData));
+        if (!diditStatus && diditError) {
+            return NextResponse.json({
+                status: currentStatus || 'PENDING',
+                verified: currentStatus === 'VERIFIED',
+                needsVerification: currentStatus !== 'VERIFIED',
+                message: 'Could not verify with DIDIT. Status unchanged.',
+                diditError: diditError,
+                retryAfter: 60 * 1000
+            });
+        }
 
-        const diditStatus = sessionData.status || sessionData.result?.status;
         const mappedStatus = mapDiditStatus(diditStatus);
 
         console.log('DIDIT status:', diditStatus, '-> mapped:', mappedStatus);
