@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -50,32 +48,23 @@ export default function VerificationCenterPage() {
         if (user && isSuperAdmin) {
             fetchData();
         }
-    }, [user, isSuperAdmin]);
+    }, [user, isSuperAdmin, statusFilter]);
 
     async function fetchData() {
         setLoading(true);
         try {
-            const usersQuery = query(
-                collection(db, 'users'),
-                where('verificationStatus', 'in', ['PENDING', 'VERIFIED', 'REJECTED']),
-                orderBy('verifiedAt', 'desc'),
-                limit(100)
-            );
+            const authToken = await user.getIdToken();
 
-            const snapshot = await getDocs(usersQuery);
-            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setUsers(usersData);
+            const res = await fetch(`/api/verification/admin?status=${statusFilter}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
 
-            const logsQuery = query(
-                collection(db, 'auditLogs'),
-                where('action', 'in', ['VERIFICATION_APPROVED', 'VERIFICATION_REJECTED', 'DUPLICATE_DETECTED']),
-                orderBy('timestamp', 'desc'),
-                limit(50)
-            );
-
-            const logsSnapshot = await getDocs(logsQuery);
-            const logsData = logsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAuditLogs(logsData);
+            if (res.ok) {
+                const data = await res.json();
+                setUsers(data.users || []);
+            }
         } catch (error) {
             console.error('Error fetching verification data:', error);
         } finally {
@@ -103,23 +92,24 @@ export default function VerificationCenterPage() {
 
         setProcessing(true);
         try {
+            const authToken = await user.getIdToken();
+
             if (actionType === 'force_reverify') {
-                await updateDoc(doc(db, 'users', selectedUser.id), {
-                    verificationStatus: 'UNVERIFIED',
-                    diditSessionId: null,
-                    faceHash: null,
-                    documentHash: null,
-                    duplicateDetected: false,
-                    suspiciousVerification: false,
-                    lastVerificationResult: null
+                const res = await fetch('/api/verification/admin', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'force_reverify',
+                        userId: selectedUser.id
+                    })
                 });
-            } else if (actionType === 'suspend') {
-                await updateDoc(doc(db, 'users', selectedUser.id), {
-                    status: 'SUSPENDED',
-                    suspendedAt: serverTimestamp(),
-                    suspendedBy: user.uid,
-                    suspendReason: 'Fraudulent verification detected'
-                });
+
+                if (!res.ok) {
+                    throw new Error('Failed to reset verification');
+                }
             }
 
             await fetchData();
