@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Copy, Check, Video } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Shield, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Copy, Check, Video } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import {
     CompetitionMode,
@@ -98,7 +98,9 @@ export default function AdminPanel() {
         currentRound: 1,
         tournamentStatus: TournamentStatus.REGISTRATION,
         videoRequired: false,
-        videoRequiredFromRound: 1
+        videoRequiredFromRound: 1,
+        verificationMandatory: false,
+        verificationRequiredFromRound: 1
     });
 
     const [couponForm, setCouponForm] = useState({
@@ -518,7 +520,11 @@ export default function AdminPanel() {
             mode: comp.mode || CompetitionMode.STANDARD,
             rounds: comp.rounds || [getDefaultRound(1, false)],
             currentRound: comp.currentRound || 1,
-            tournamentStatus: comp.tournamentStatus || TournamentStatus.REGISTRATION
+            tournamentStatus: comp.tournamentStatus || TournamentStatus.REGISTRATION,
+            videoRequired: comp.videoRequired || false,
+            videoRequiredFromRound: comp.videoRequiredFromRound || 1,
+            verificationMandatory: comp.verificationMandatory || false,
+            verificationRequiredFromRound: comp.verificationRequiredFromRound || 1
         });
     };
 
@@ -553,6 +559,10 @@ export default function AdminPanel() {
                 scrambles: formData.scrambles,
                 isPublished: formData.isPublished,
                 mode: formData.mode,
+                videoRequired: formData.videoRequired || false,
+                videoRequiredFromRound: formData.videoRequiredFromRound || 1,
+                verificationMandatory: formData.verificationMandatory || false,
+                verificationRequiredFromRound: formData.verificationRequiredFromRound || 1,
                 updatedAt: new Date().toISOString()
             };
 
@@ -805,6 +815,12 @@ export default function AdminPanel() {
                         )}
                     </TabsTrigger>
                     <TabsTrigger value="payments">Payments</TabsTrigger>
+                    {isSuperAdmin && (
+                        <TabsTrigger value="verification" className="text-purple-600 data-[state=active]:text-purple-700">
+                            <ShieldCheck className="w-4 h-4 mr-2" />
+                            Verification
+                        </TabsTrigger>
+                    )}
                     <TabsTrigger value="coupons">
                         <Tag className="w-4 h-4 mr-2" />
                         Coupons
@@ -1190,6 +1206,48 @@ export default function AdminPanel() {
                                                     </Select>
                                                     <p className="text-xs text-gray-500">
                                                         Video will be required starting from this round
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Identity Verification Settings */}
+                                    <div className="mt-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                                        <h3 className="font-semibold text-indigo-900 dark:text-indigo-200 mb-3 flex items-center gap-2">
+                                            <ShieldCheck className="h-4 w-4" />
+                                            Identity Verification (DIDIT)
+                                        </h3>
+                                        <div className="space-y-3">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="verificationMandatory"
+                                                    checked={formData.verificationMandatory || false}
+                                                    onCheckedChange={(checked) => setFormData({ ...formData, verificationMandatory: checked })}
+                                                />
+                                                <Label htmlFor="verificationMandatory" className="text-sm">
+                                                    Require identity verification to participate
+                                                </Label>
+                                            </div>
+
+                                            {formData.verificationMandatory && (
+                                                <div className="ml-6 space-y-2">
+                                                    <Label className="text-sm text-gray-600">Require verification from round:</Label>
+                                                    <Select
+                                                        value={formData.verificationRequiredFromRound?.toString() || '1'}
+                                                        onValueChange={(v) => setFormData({ ...formData, verificationRequiredFromRound: parseInt(v) })}
+                                                    >
+                                                        <SelectTrigger className="w-[180px]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="1">Round 1</SelectItem>
+                                                            <SelectItem value="2">Round 2</SelectItem>
+                                                            <SelectItem value="3">Round 3</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-xs text-gray-500">
+                                                        Identity verification will be required starting from this round. Round 1 can remain open if configured.
                                                     </p>
                                                 </div>
                                             )}
@@ -2166,6 +2224,40 @@ export default function AdminPanel() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+
+                {isSuperAdmin && (
+                    <TabsContent value="verification">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-purple-600 flex items-center gap-2">
+                                        <ShieldCheck className="h-5 w-5" />
+                                        Identity Verification Center
+                                    </CardTitle>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Manage user identity verifications and monitor duplicates
+                                    </p>
+                                </div>
+                                <Button variant="outline" onClick={() => router.push('/admin/verification')}>
+                                    Open Full Center
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-center py-8 text-gray-500">
+                                    <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-purple-400" />
+                                    <p>Click "Open Full Center" to access the complete verification management system.</p>
+                                    <p className="text-sm mt-2">There you can:</p>
+                                    <ul className="text-sm mt-2 list-disc list-inside text-left max-w-md mx-auto">
+                                        <li>View all pending, verified, and rejected verifications</li>
+                                        <li>Detect duplicate identity attempts</li>
+                                        <li>Force re-verification for users</li>
+                                        <li>Suspend accounts with fraudulent verification</li>
+                                    </ul>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                )}
             </Tabs>
         </div>
     );
