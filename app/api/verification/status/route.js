@@ -28,18 +28,20 @@ export async function GET(request) {
                 duplicateDetected: false,
                 suspiciousVerification: false,
                 verificationAttemptCount: 0,
-                lastVerificationResult: null
+                lastVerificationResult: null,
+                lastVerificationAttemptAt: null
             });
         }
 
         return NextResponse.json({
-            verificationStatus: userData.verificationstatus || 'UNVERIFIED',
-            verifiedAt: userData.verifiedat || null,
-            verificationLevel: userData.verificationlevel || null,
-            duplicateDetected: userData.duplicatedetected || false,
-            suspiciousVerification: userData.suspiciousverification || false,
-            verificationAttemptCount: userData.verificationattemptcount || 0,
-            lastVerificationResult: userData.lastverificationresult || null
+            verificationStatus: userData.verification_status || 'UNVERIFIED',
+            verifiedAt: userData.verified_at || null,
+            verificationLevel: userData.verification_level || null,
+            duplicateDetected: userData.duplicate_detected || false,
+            suspiciousVerification: userData.suspicious_verification || false,
+            verificationAttemptCount: userData.verification_attempt_count || 0,
+            lastVerificationResult: userData.last_verification_result || null,
+            lastVerificationAttemptAt: userData.last_verification_attempt_at || null
         });
 
     } catch (error) {

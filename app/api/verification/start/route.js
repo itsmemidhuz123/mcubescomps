@@ -108,30 +108,31 @@ export async function POST(request) {
                     id: userId,
                     email: userEmail,
                     name: userName,
-                    verificationstatus: 'UNVERIFIED',
-                    verificationattemptcount: 0
+                    verification_status: 'UNVERIFIED',
+                    verification_attempt_count: 0
                 };
             }
         } else {
             userData = existingUser;
         }
 
-        if (userData.verificationstatus === 'VERIFIED') {
+        if (userData.verification_status === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
         const maxAttempts = 3;
-        const attemptCount = userData.verificationattemptcount || 0;
+        const attemptCount = userData.verification_attempt_count || 0;
 
         if (attemptCount >= maxAttempts) {
-            if (userData.lastverificationattemptat) {
-                const lastAttemptDate = new Date(userData.lastverificationattemptat);
+            if (userData.last_verification_attempt_at) {
+                const lastAttemptDate = new Date(userData.last_verification_attempt_at);
                 const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
                     return NextResponse.json({
                         error: 'Maximum verification attempts exceeded. Try again after 24 hours.',
-                        attemptsRemaining: 0
+                        attemptsRemaining: 0,
+                        retryAfter: Math.ceil(24 - hoursSinceLastAttempt)
                     }, { status: 429 });
                 }
             }
@@ -171,18 +172,18 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session response:', JSON.stringify(sessionData));
 
-        const newAttemptCount = userData.verificationstatus === 'PENDING' ? attemptCount : attemptCount + 1;
+        const newAttemptCount = userData.verification_status === 'PENDING' ? attemptCount : attemptCount + 1;
 
         const supabaseAdmin = getSupabaseAdmin();
         const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({
-                diditsessionid: sessionData.session_id,
-                diditworkflowid: workflowId,
-                verificationstatus: 'PENDING',
-                verificationattemptcount: newAttemptCount,
-                lastverificationattemptat: new Date().toISOString(),
-                verificationrequestedat: new Date().toISOString()
+                didit_session_id: sessionData.session_id,
+                didit_workflow_id: workflowId,
+                verification_status: 'PENDING',
+                verification_attempt_count: newAttemptCount,
+                last_verification_attempt_at: new Date().toISOString(),
+                verification_requested_at: new Date().toISOString()
             })
             .eq('id', userId);
 

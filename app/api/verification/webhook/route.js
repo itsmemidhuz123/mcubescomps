@@ -19,6 +19,22 @@ function hashString(str) {
     return crypto.createHash('sha256').update(str || '').digest('hex');
 }
 
+function mapDiditStatus(diditStatus) {
+    const statusMap = {
+        'approved': 'VERIFIED',
+        'Approved': 'VERIFIED',
+        'declined': 'REJECTED',
+        'Declined': 'REJECTED',
+        'rejected': 'REJECTED',
+        'Rejected': 'REJECTED',
+        'in_review': 'PENDING',
+        'In Review': 'PENDING',
+        'pending': 'PENDING',
+        'Pending': 'PENDING'
+    };
+    return statusMap[diditStatus] || 'PENDING';
+}
+
 export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -31,18 +47,13 @@ export async function GET(request) {
             return NextResponse.redirect(new URL('/profile?verification=error', request.url));
         }
 
-        let redirectUrl = '/profile?verification=';
+        let redirectStatus = 'pending';
+        if (status === 'Approved') redirectStatus = 'approved';
+        else if (status === 'Declined') redirectStatus = 'declined';
+        else if (status === 'In Review') redirectStatus = 'pending';
 
-        if (status === 'Approved') {
-            redirectUrl += 'approved';
-        } else if (status === 'Declined') {
-            redirectUrl += 'declined';
-        } else {
-            redirectUrl += 'pending';
-        }
-
-        console.log('Redirecting to:', redirectUrl);
-        return NextResponse.redirect(new URL(redirectUrl, request.url));
+        console.log('Redirecting to: /profile?verification=' + redirectStatus);
+        return NextResponse.redirect(new URL('/profile?verification=' + redirectStatus, request.url));
 
     } catch (error) {
         console.error('GET webhook error:', error.message);
@@ -56,7 +67,7 @@ export async function POST(request) {
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
 
-        console.log('Webhook received, DIDIT_WEBHOOK_SECRET exists:', !!webhookSecret);
+        console.log('Webhook POST received, DIDIT_WEBHOOK_SECRET exists:', !!webhookSecret);
         console.log('Webhook body:', JSON.stringify(body).substring(0, 500));
 
         if (webhookSecret && webhookSecret !== 'your_webhook_secret_here') {
@@ -67,17 +78,14 @@ export async function POST(request) {
             }
         }
 
-        const { session_id, status, vendor_data, result } = body;
+        const { session_id, status: diditStatus, vendor_data, result } = body;
 
         if (!vendor_data) {
             return NextResponse.json({ error: 'No vendor data' }, { status: 400 });
         }
 
         const userId = vendor_data;
-
         const supabase = getSupabaseAdmin();
-
-        let userData = null;
 
         const { data: existingUser, error: fetchError } = await supabase
             .from('users')
@@ -97,16 +105,16 @@ export async function POST(request) {
             if (insertError) {
                 console.error('Failed to create user in webhook:', insertError);
             }
-            userData = { id: userId, verificationstatus: 'UNVERIFIED', verificationattemptcount: 0 };
-        } else {
-            userData = existingUser;
         }
 
-        if (status === 'approved') {
+        const mappedStatus = mapDiditStatus(diditStatus);
+        console.log('DIDIT status:', diditStatus, '-> mapped to:', mappedStatus);
+
+        if (mappedStatus === 'VERIFIED') {
             const faceHash = result?.face?.hash || hashString(result?.face?.data || session_id);
             const documentHash = result?.document?.hash || hashString(result?.document?.data || session_id);
             const country = result?.country || null;
-            const fullName = result?.full_name || userData.name || null;
+            const fullName = result?.full_name || null;
 
             const { data: existingFaceData } = await supabase
                 .from('identityindex')
@@ -124,12 +132,12 @@ export async function POST(request) {
                 await supabase
                     .from('users')
                     .update({
-                        verificationstatus: 'REJECTED',
-                        duplicatedetected: true,
-                        suspiciousverification: true,
-                        lastverificationresult: {
-                            status: status,
-                            rejectedat: new Date().toISOString(),
+                        verification_status: 'REJECTED',
+                        duplicate_detected: true,
+                        suspicious_verification: true,
+                        last_verification_result: {
+                            status: diditStatus,
+                            rejected_at: new Date().toISOString(),
                             reason: 'DUPLICATE_IDENTITY'
                         }
                     })
@@ -146,35 +154,35 @@ export async function POST(request) {
                 .from('identityindex')
                 .upsert({
                     id: faceHash,
-                    userid: userId,
+                    user_id: userId,
                     type: 'FACE',
-                    createdat: new Date().toISOString()
+                    created_at: new Date().toISOString()
                 });
 
             await supabase
                 .from('identityindex')
                 .upsert({
                     id: documentHash,
-                    userid: userId,
+                    user_id: userId,
                     type: 'DOCUMENT',
-                    createdat: new Date().toISOString()
+                    created_at: new Date().toISOString()
                 });
 
             await supabase
                 .from('users')
                 .update({
-                    verificationstatus: 'VERIFIED',
-                    facehash: faceHash,
-                    documenthash: documentHash,
-                    verificationcountry: country,
-                    verifiedat: new Date().toISOString(),
-                    verificationlevel: 1,
-                    duplicatedetected: false,
-                    suspiciousverification: false,
-                    lastverificationresult: {
-                        status: status,
-                        approvedat: new Date().toISOString(),
-                        fullName: fullName,
+                    verification_status: 'VERIFIED',
+                    face_hash: faceHash,
+                    document_hash: documentHash,
+                    verification_country: country,
+                    verified_at: new Date().toISOString(),
+                    verification_level: 1,
+                    duplicate_detected: false,
+                    suspicious_verification: false,
+                    last_verification_result: {
+                        status: diditStatus,
+                        approved_at: new Date().toISOString(),
+                        full_name: fullName,
                         country: country
                     }
                 })
@@ -186,16 +194,16 @@ export async function POST(request) {
                 verified: true
             });
 
-        } else if (status === 'declined' || status === 'rejected') {
-            const rejectionReason = result?.reason || 'Unknown reason';
+        } else if (mappedStatus === 'REJECTED') {
+            const rejectionReason = result?.reason || 'Verification was declined';
 
             await supabase
                 .from('users')
                 .update({
-                    verificationstatus: 'REJECTED',
-                    lastverificationresult: {
-                        status: status,
-                        rejectedat: new Date().toISOString(),
+                    verification_status: 'REJECTED',
+                    last_verification_result: {
+                        status: diditStatus,
+                        rejected_at: new Date().toISOString(),
                         reason: rejectionReason
                     }
                 })
@@ -207,17 +215,29 @@ export async function POST(request) {
                 verified: false
             });
 
-        } else if (status === 'in_review') {
+        } else if (mappedStatus === 'PENDING') {
+            await supabase
+                .from('users')
+                .update({
+                    verification_status: 'PENDING',
+                    last_verification_result: {
+                        status: diditStatus,
+                        in_review_at: new Date().toISOString()
+                    }
+                })
+                .eq('id', userId);
+
             return NextResponse.json({
                 success: true,
-                message: 'Verification in review'
+                message: 'Verification in review',
+                status: 'PENDING'
             });
 
         } else {
             return NextResponse.json({
                 success: true,
                 message: 'Status received',
-                status: status
+                status: mappedStatus
             });
         }
 

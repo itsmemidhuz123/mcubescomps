@@ -54,11 +54,10 @@ export default function VerificationCenterPage() {
         try {
             const supabase = getSupabaseAdmin();
 
-            // Fetch all users to see what's in the database
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
-                .order('createdat', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(100);
 
             if (error) {
@@ -66,7 +65,7 @@ export default function VerificationCenterPage() {
                 throw error;
             }
 
-            console.log('Fetched users:', data?.length, data);
+            console.log('Fetched users:', data?.length);
             setUsers(data || []);
         } catch (error) {
             console.error('Error fetching verification data:', error);
@@ -80,15 +79,15 @@ export default function VerificationCenterPage() {
             u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             u.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesStatus = statusFilter === 'ALL' || u.verificationstatus === statusFilter;
+        const matchesStatus = statusFilter === 'ALL' || u.verification_status === statusFilter;
 
         return matchesSearch && matchesStatus;
     });
 
-    const pendingUsers = filteredUsers.filter(u => u.verificationstatus === 'PENDING');
-    const verifiedUsers = filteredUsers.filter(u => u.verificationstatus === 'VERIFIED');
-    const rejectedUsers = filteredUsers.filter(u => u.verificationstatus === 'REJECTED');
-    const duplicateUsers = filteredUsers.filter(u => u.duplicatedetected === true);
+    const pendingUsers = filteredUsers.filter(u => u.verification_status === 'PENDING');
+    const verifiedUsers = filteredUsers.filter(u => u.verification_status === 'VERIFIED');
+    const rejectedUsers = filteredUsers.filter(u => u.verification_status === 'REJECTED');
+    const duplicateUsers = filteredUsers.filter(u => u.duplicate_detected === true);
 
     async function handleAction() {
         if (!selectedUser || !actionType) return;
@@ -101,13 +100,14 @@ export default function VerificationCenterPage() {
                 await supabase
                     .from('users')
                     .update({
-                        verificationstatus: 'UNVERIFIED',
-                        diditsessionid: null,
-                        facehash: null,
-                        documenthash: null,
-                        duplicatedetected: false,
-                        suspiciousverification: false,
-                        lastverificationresult: null
+                        verification_status: 'UNVERIFIED',
+                        didit_session_id: null,
+                        face_hash: null,
+                        document_hash: null,
+                        duplicate_detected: false,
+                        suspicious_verification: false,
+                        last_verification_result: null,
+                        last_verification_attempt_at: null
                     })
                     .eq('id', selectedUser.id);
             }
@@ -297,8 +297,8 @@ export default function VerificationCenterPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col gap-1">
-                                                            <VerificationStatusBadge status={u.verificationstatus} size="sm" />
-                                                            {u.duplicatedetected && (
+                                                            <VerificationStatusBadge status={u.verificationstatus -> u.verification_status} size="sm" />
+                                                            {u.duplicate_detected && (
                                                                 <Badge variant="outline" className="text-[10px] bg-orange-50 border-orange-200 text-orange-700">
                                                                     Duplicate
                                                                 </Badge>
@@ -306,14 +306,14 @@ export default function VerificationCenterPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
-                                                        {u.verifiedat ? new Date(u.verifiedat).toLocaleDateString() : 'N/A'}
+                                                        {u.verified_at ? new Date(u.verified_at).toLocaleDateString() : 'N/A'}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
-                                                        {u.verificationattemptcount || 0}
+                                                        {u.verification_attempt_count || 0}
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
-                                                            {u.verificationstatus === 'VERIFIED' && (
+                                                            {u.verificationstatus -> u.verification_status === 'VERIFIED' && (
                                                                 <Button
                                                                     size="sm"
                                                                     variant="outline"
