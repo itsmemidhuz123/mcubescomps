@@ -297,7 +297,7 @@ export default function VerificationCenterPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col gap-1">
-                                                            <VerificationStatusBadge status={u.verificationstatus -> u.verification_status} size="sm" />
+                                                            <VerificationStatusBadge status={u.verification_status} size="sm" />
                                                             {u.duplicate_detected && (
                                                                 <Badge variant="outline" className="text-[10px] bg-orange-50 border-orange-200 text-orange-700">
                                                                     Duplicate
@@ -313,7 +313,7 @@ export default function VerificationCenterPage() {
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
-                                                            {u.verificationstatus -> u.verification_status === 'VERIFIED' && (
+                                                            {u.verification_status === 'VERIFIED' && (
                                                                 <Button
                                                                     size="sm"
                                                                     variant="outline"
