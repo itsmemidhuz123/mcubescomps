@@ -19,6 +19,37 @@ function hashString(str) {
     return crypto.createHash('sha256').update(str || '').digest('hex');
 }
 
+export async function GET(request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const verificationSessionId = searchParams.get('verificationSessionId');
+        const status = searchParams.get('status');
+
+        console.log('GET webhook - verificationSessionId:', verificationSessionId, 'status:', status);
+
+        if (!verificationSessionId) {
+            return NextResponse.redirect(new URL('/profile?verification=error', request.url));
+        }
+
+        let redirectUrl = '/profile?verification=';
+
+        if (status === 'Approved') {
+            redirectUrl += 'approved';
+        } else if (status === 'Declined') {
+            redirectUrl += 'declined';
+        } else {
+            redirectUrl += 'pending';
+        }
+
+        console.log('Redirecting to:', redirectUrl);
+        return NextResponse.redirect(new URL(redirectUrl, request.url));
+
+    } catch (error) {
+        console.error('GET webhook error:', error.message);
+        return NextResponse.redirect(new URL('/profile?verification=error', request.url));
+    }
+}
+
 export async function POST(request) {
     try {
         const body = await request.json();

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2 } from 'lucide-react';
+import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
@@ -59,6 +59,7 @@ function CompactStat({ icon: Icon, label, value, colorClass }) {
 function ProfilePage() {
     const { user, userProfile, loading, updateProfile } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [formData, setFormData] = useState({
         displayName: '',
         username: '',
@@ -72,6 +73,19 @@ function ProfilePage() {
     const [uploading, setUploading] = useState(false);
     const [dataLoading, setDataLoading] = useState(true);
     const [message, setMessage] = useState({ type: '', text: '' });
+
+    useEffect(() => {
+        const verificationStatus = searchParams.get('verification');
+        if (verificationStatus === 'approved') {
+            setMessage({ type: 'success', text: 'Identity verification successful!' });
+        } else if (verificationStatus === 'declined') {
+            setMessage({ type: 'error', text: 'Identity verification was declined. Please try again.' });
+        } else if (verificationStatus === 'pending') {
+            setMessage({ type: 'warning', text: 'Verification is being processed. Please check back later.' });
+        } else if (verificationStatus === 'error') {
+            setMessage({ type: 'error', text: 'Something went wrong with verification.' });
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -589,7 +603,13 @@ function ProfilePage() {
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {message.text && (
-                                                <div className={`p-3 rounded border text-xs ${message.type === 'success' ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/20 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/20 text-red-600 dark:text-red-400'}`}>
+                                                <div className={`p-3 rounded border text-xs flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/20 text-green-600 dark:text-green-400' :
+                                                        message.type === 'warning' ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-900/20 text-yellow-600 dark:text-yellow-400' :
+                                                            'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/20 text-red-600 dark:text-red-400'
+                                                    }`}>
+                                                    {message.type === 'success' && <CheckCircle className="w-4 h-4" />}
+                                                    {message.type === 'warning' && <AlertCircle className="w-4 h-4" />}
+                                                    {message.type === 'error' && <XCircle className="w-4 h-4" />}
                                                     {message.text}
                                                 </div>
                                             )}
@@ -674,4 +694,12 @@ function ProfilePage() {
     );
 }
 
-export default ProfilePage;
+function ProfilePageWithSuspense() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>}>
+            <ProfilePage />
+        </Suspense>
+    );
+}
+
+export default ProfilePageWithSuspense;
