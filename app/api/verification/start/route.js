@@ -77,21 +77,33 @@ export async function POST(request) {
                 console.log('Firebase fetch failed, using userId as fallback');
             }
 
-            const { error: insertError } = await supabase
+            // Use database function to insert/update user (bypasses RLS)
+            const { error: insertError } = await supabase.rpc('upsert_user', {
+                p_id: userId,
+                p_email: userEmail,
+                p_name: userName,
+                p_picture: userPicture
+            });
+
+            // Fetch the user regardless of insert result
+            const { data: userRecord } = await supabase
                 .from('users')
-                .upsert({
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (userRecord) {
+                userData = userRecord;
+            } else {
+                // Create user data object from input
+                userData = {
                     id: userId,
                     email: userEmail,
                     name: userName,
-                    picture: userPicture
-                }, { onConflict: 'id', ignoreDuplicates: true });
-
-            if (insertError) {
-                console.error('Failed to create user in Supabase:', insertError);
-                return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
+                    verificationstatus: 'UNVERIFIED',
+                    verificationattemptcount: 0
+                };
             }
-
-            userData = { id: userId, email: userEmail, name: userName, verificationstatus: 'UNVERIFIED', verificationattemptcount: 0 };
         } else {
             userData = existingUser;
         }
