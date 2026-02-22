@@ -54,6 +54,8 @@ export default function VerificationCenterPage() {
         try {
             const supabase = getSupabaseAdmin();
 
+            console.log('Fetching users from Supabase...');
+
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
@@ -65,7 +67,13 @@ export default function VerificationCenterPage() {
                 throw error;
             }
 
-            console.log('Fetched users:', data?.length);
+            console.log('Fetched users count:', data?.length);
+            console.log('Sample user:', data?.[0]);
+
+            // Filter to only users with verification status
+            const usersWithVerification = (data || []).filter(u => u.verification_status !== null && u.verification_status !== undefined);
+            console.log('Users with verification:', usersWithVerification.length);
+
             setUsers(data || []);
         } catch (error) {
             console.error('Error fetching verification data:', error);

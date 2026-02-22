@@ -86,7 +86,9 @@ export async function POST(request) {
                     id: userId,
                     email: userEmail,
                     name: userName,
-                    picture: userPicture
+                    picture: userPicture,
+                    verification_status: 'UNVERIFIED',
+                    verification_attempt_count: 0
                 }, { onConflict: 'id' });
 
             if (insertError) {
@@ -173,6 +175,8 @@ export async function POST(request) {
         console.log('DIDIT session response:', JSON.stringify(sessionData));
 
         const newAttemptCount = userData.verification_status === 'PENDING' ? attemptCount : attemptCount + 1;
+
+        console.log('Updating user status to PENDING. Current status:', userData.verification_status);
 
         const supabaseAdmin = getSupabaseAdmin();
         const { error: updateError } = await supabaseAdmin

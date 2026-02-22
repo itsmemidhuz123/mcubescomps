@@ -47,6 +47,39 @@ export async function GET(request) {
             return NextResponse.redirect(new URL('/profile?verification=error', request.url));
         }
 
+        // Update user status based on DIDIT response
+        const supabase = getSupabaseAdmin();
+
+        // Find user by session_id
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id, verification_status')
+            .eq('didit_session_id', verificationSessionId)
+            .single();
+
+        if (user && !userError) {
+            // Map DIDIT status to our status
+            let newStatus = 'PENDING';
+            if (status === 'Approved') newStatus = 'VERIFIED';
+            else if (status === 'Declined') newStatus = 'REJECTED';
+            else if (status === 'In Review') newStatus = 'PENDING';
+
+            console.log('Updating user status to:', newStatus);
+
+            await supabase
+                .from('users')
+                .update({
+                    verification_status: newStatus,
+                    last_verification_result: {
+                        status: status,
+                        updated_at: new Date().toISOString()
+                    }
+                })
+                .eq('id', user.id);
+        } else {
+            console.log('User not found for session_id:', verificationSessionId);
+        }
+
         let redirectStatus = 'pending';
         if (status === 'Approved') redirectStatus = 'approved';
         else if (status === 'Declined') redirectStatus = 'declined';
