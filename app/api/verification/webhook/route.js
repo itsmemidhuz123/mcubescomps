@@ -1,22 +1,56 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { createHmac } from 'crypto';
 
-const firebaseConfig = {
-    apiKey: "AIzaSyBUH2hL2lR-nNi2jnWQWeeX00z8N-MQqO0",
-    authDomain: "texcads-670e0.firebaseapp.com",
-    databaseURL: "https://texcads-670e0-default-rtdb.firebaseio.com",
-    projectId: "texcads-670e0",
-    storageBucket: "texcads-670e0.firebasestorage.app",
-    messagingSenderId: "586899233238",
-    appId: "1:586899233238:web:9dbee74e14cd95f23f2c77"
-};
+let adminApp = null;
+let adminDb = null;
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
+    }
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function initializeAdmin() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+        const { getFirestore } = await import('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing env vars for Firebase Admin');
+            return null;
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (getApps().length === 0) {
+            adminApp = initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
+        } else {
+            adminApp = getApps()[0];
+        }
+
+        adminDb = getFirestore(adminApp);
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin init error:', error);
+        return null;
+    }
+}
 
 function verifyWebhookSignature(payload, signature, secret) {
     if (!signature || !secret) return false;
@@ -29,11 +63,17 @@ function verifyWebhookSignature(payload, signature, secret) {
 }
 
 function hashString(str) {
+    const crypto = require('crypto');
     return createHmac('sha256', '').update(str || '').digest('hex');
 }
 
 export async function POST(request) {
     try {
+        const db = await initializeAdmin();
+        if (!db) {
+            return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+        }
+
         const body = await request.json();
         const signature = request.headers.get('x-didit-signature');
         const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
@@ -57,9 +97,9 @@ export async function POST(request) {
 
         const userId = vendor_data;
 
-        const userDoc = await getDoc(doc(db, 'users', userId));
+        const userDoc = await db.collection('users').doc(userId).get();
 
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             console.error('User not found for webhook:', userId);
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
@@ -73,15 +113,15 @@ export async function POST(request) {
             const fullName = result?.full_name || userData.displayName || null;
             const dateOfBirth = result?.date_of_birth || null;
 
-            const existingFaceDoc = await getDoc(doc(db, 'identityIndex', faceHash));
-            const existingDocDoc = await getDoc(doc(db, 'identityIndex', documentHash));
+            const existingFaceDoc = await db.collection('identityIndex').doc(faceHash).get();
+            const existingDocDoc = await db.collection('identityIndex').doc(documentHash).get();
 
-            if (existingFaceDoc.exists() || existingDocDoc.exists()) {
+            if (existingFaceDoc.exists || existingDocDoc.exists) {
                 const duplicateType = [];
-                if (existingFaceDoc.exists()) duplicateType.push('FACE');
-                if (existingDocDoc.exists()) duplicateType.push('DOCUMENT');
+                if (existingFaceDoc.exists) duplicateType.push('FACE');
+                if (existingDocDoc.exists) duplicateType.push('DOCUMENT');
 
-                await addDoc(collection(db, 'auditLogs'), {
+                await db.collection('auditLogs').add({
                     action: 'DUPLICATE_DETECTED',
                     userId: userId,
                     userEmail: userData.email,
@@ -91,17 +131,17 @@ export async function POST(request) {
                         duplicateType: duplicateType,
                         sessionId: session_id
                     },
-                    timestamp: serverTimestamp(),
+                    timestamp: new Date(),
                     performedBy: 'SYSTEM'
                 });
 
-                await updateDoc(doc(db, 'users', userId), {
+                await db.collection('users').doc(userId).update({
                     verificationStatus: 'REJECTED',
                     duplicateDetected: true,
                     suspiciousVerification: true,
                     lastVerificationResult: {
                         status: status,
-                        rejectedAt: serverTimestamp(),
+                        rejectedAt: new Date(),
                         reason: 'DUPLICATE_IDENTITY'
                     }
                 });
@@ -113,19 +153,19 @@ export async function POST(request) {
                 });
             }
 
-            await setDoc(doc(db, 'identityIndex', faceHash), {
+            await db.collection('identityIndex').doc(faceHash).set({
                 userId: userId,
                 type: 'FACE',
-                createdAt: serverTimestamp()
+                createdAt: new Date()
             });
 
-            await setDoc(doc(db, 'identityIndex', documentHash), {
+            await db.collection('identityIndex').doc(documentHash).set({
                 userId: userId,
                 type: 'DOCUMENT',
-                createdAt: serverTimestamp()
+                createdAt: new Date()
             });
 
-            await addDoc(collection(db, 'auditLogs'), {
+            await db.collection('auditLogs').add({
                 action: 'VERIFICATION_APPROVED',
                 userId: userId,
                 userEmail: userData.email,
@@ -136,22 +176,22 @@ export async function POST(request) {
                     fullName: fullName,
                     sessionId: session_id
                 },
-                timestamp: serverTimestamp(),
+                timestamp: new Date(),
                 performedBy: 'SYSTEM'
             });
 
-            await updateDoc(doc(db, 'users', userId), {
+            await db.collection('users').doc(userId).update({
                 verificationStatus: 'VERIFIED',
                 faceHash: faceHash,
                 documentHash: documentHash,
                 verificationCountry: country,
-                verifiedAt: serverTimestamp(),
+                verifiedAt: new Date(),
                 verificationLevel: 1,
                 duplicateDetected: false,
                 suspiciousVerification: false,
                 lastVerificationResult: {
                     status: status,
-                    approvedAt: serverTimestamp(),
+                    approvedAt: new Date(),
                     fullName: fullName,
                     country: country
                 }
@@ -166,7 +206,7 @@ export async function POST(request) {
         } else if (status === 'declined' || status === 'rejected') {
             const rejectionReason = result?.reason || 'Unknown reason';
 
-            await addDoc(collection(db, 'auditLogs'), {
+            await db.collection('auditLogs').add({
                 action: 'VERIFICATION_REJECTED',
                 userId: userId,
                 userEmail: userData.email,
@@ -174,15 +214,15 @@ export async function POST(request) {
                     sessionId: session_id,
                     reason: rejectionReason
                 },
-                timestamp: serverTimestamp(),
+                timestamp: new Date(),
                 performedBy: 'SYSTEM'
             });
 
-            await updateDoc(doc(db, 'users', userId), {
+            await db.collection('users').doc(userId).update({
                 verificationStatus: 'REJECTED',
                 lastVerificationResult: {
                     status: status,
-                    rejectedAt: serverTimestamp(),
+                    rejectedAt: new Date(),
                     reason: rejectionReason
                 }
             });

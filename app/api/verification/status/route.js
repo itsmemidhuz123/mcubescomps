@@ -1,24 +1,63 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
-const firebaseConfig = {
-    apiKey: "AIzaSyBUH2hL2lR-nNi2jnWQWeeX00z8N-MQqO0",
-    authDomain: "texcads-670e0.firebaseapp.com",
-    databaseURL: "https://texcads-670e0-default-rtdb.firebaseio.com",
-    projectId: "texcads-670e0",
-    storageBucket: "texcads-670e0.firebasestorage.app",
-    messagingSenderId: "586899233238",
-    appId: "1:586899233238:web:9dbee74e14cd95f23f2c77"
-};
+let adminApp = null;
+let adminDb = null;
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+function parsePrivateKey(privateKey) {
+    if (!privateKey) return null;
+    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
+        return privateKey;
+    }
+    return privateKey.replace(/\\n/g, '\n');
+}
+
+async function initializeAdmin() {
+    if (adminDb) return adminDb;
+
+    try {
+        const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+        const { getFirestore } = await import('firebase-admin/firestore');
+
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (!projectId || !clientEmail || !privateKeyRaw) {
+            console.error('Missing env vars for Firebase Admin');
+            return null;
+        }
+
+        const privateKey = parsePrivateKey(privateKeyRaw);
+
+        if (getApps().length === 0) {
+            adminApp = initializeApp({
+                credential: cert({
+                    projectId,
+                    clientEmail,
+                    privateKey
+                })
+            });
+        } else {
+            adminApp = getApps()[0];
+        }
+
+        adminDb = getFirestore(adminApp);
+        return adminDb;
+    } catch (error) {
+        console.error('Firebase Admin init error:', error);
+        return null;
+    }
+}
 
 export async function GET(request) {
     try {
+        const db = await initializeAdmin();
+        if (!db) {
+            return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+        }
+
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
 
@@ -26,9 +65,9 @@ export async function GET(request) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
         }
 
-        const userDoc = await getDoc(doc(db, 'users', userId));
+        const userDoc = await db.collection('users').doc(userId).get();
 
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
