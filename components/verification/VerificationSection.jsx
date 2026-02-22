@@ -41,7 +41,27 @@ export function VerificationSection({ compact = false }) {
     const verifiedAt = verificationData?.verifiedAt || userProfile?.verifiedAt;
     const attemptCount = verificationData?.verificationAttemptCount || userProfile?.verificationAttemptCount || 0;
     const duplicateDetected = verificationData?.duplicateDetected || userProfile?.duplicateDetected || false;
+    const lastVerificationAttemptAt = verificationData?.lastVerificationAttemptAt || userProfile?.lastVerificationAttemptAt;
     const lastResult = verificationData?.lastVerificationResult || userProfile?.lastVerificationResult;
+
+    const getRetryInfo = () => {
+        if (!lastVerificationAttemptAt) return { canRetry: true, message: null };
+
+        const lastAttempt = new Date(lastVerificationAttemptAt);
+        const hoursSinceLastAttempt = (new Date() - lastAttempt) / (1000 * 60 * 60);
+        const hoursRemaining = 24 - hoursSinceLastAttempt;
+
+        if (hoursSinceLastAttempt >= 24) {
+            return { canRetry: true, message: null };
+        }
+
+        return {
+            canRetry: false,
+            message: `You can retry after ${Math.ceil(hoursRemaining)} hours`
+        };
+    };
+
+    const retryInfo = getRetryInfo();
 
     const handleReset = async () => {
         if (!user) return;
@@ -188,6 +208,8 @@ export function VerificationSection({ compact = false }) {
     }
 
     if (verificationStatus === 'PENDING') {
+        const isCooldown = !retryInfo.canRetry;
+
         return (
             <Card className="bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800">
                 <CardContent className="p-4">
@@ -198,24 +220,42 @@ export function VerificationSection({ compact = false }) {
                         <div className="flex-1">
                             <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">Verification In Progress</h3>
                             <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-                                You have a verification session in progress. Complete it or reset to start over.
+                                Your identity verification is being processed. This usually takes a few minutes.
                             </p>
+                            {isCooldown && (
+                                <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-3">
+                                    {retryInfo.message}
+                                </p>
+                            )}
                             <div className="flex gap-2">
-                                <Button
-                                    size="sm"
-                                    onClick={handleStartVerification}
-                                    disabled={loading}
-                                >
-                                    {loading ? 'Loading...' : 'Continue Verification'}
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleReset}
-                                    disabled={loading}
-                                >
-                                    Reset
-                                </Button>
+                                {!isCooldown && (
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleStartVerification}
+                                            disabled={loading}
+                                        >
+                                            {loading ? 'Loading...' : 'Continue Verification'}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleReset}
+                                            disabled={loading}
+                                        >
+                                            Reset
+                                        </Button>
+                                    </>
+                                )}
+                                {isCooldown && (
+                                    <Button
+                                        size="sm"
+                                        disabled={true}
+                                        className="opacity-50 cursor-not-allowed"
+                                    >
+                                        {retryInfo.message}
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -252,6 +292,16 @@ export function VerificationSection({ compact = false }) {
                                         : 'Your identity verification was not approved. Please try again.'
                                 }
                             </p>
+                            {attemptCount >= 3 && !retryInfo.canRetry && (
+                                <p className="text-xs text-red-500 mt-2">
+                                    {retryInfo.message}
+                                </p>
+                            )}
+                            {attemptCount >= 3 && retryInfo.canRetry && (
+                                <p className="text-xs text-red-500 mt-2">
+                                    Maximum attempts reached. Please contact support.
+                                </p>
+                            )}
                             {attemptCount < 3 && (
                                 <Button
                                     className="mt-3 bg-red-600 hover:bg-red-700"
@@ -267,11 +317,6 @@ export function VerificationSection({ compact = false }) {
                                         'Try Again'
                                     )}
                                 </Button>
-                            )}
-                            {attemptCount >= 3 && (
-                                <p className="text-xs text-red-500 mt-2">
-                                    Maximum attempts reached. Please contact support.
-                                </p>
                             )}
                         </div>
                     </div>
