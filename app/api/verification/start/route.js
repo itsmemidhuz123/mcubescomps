@@ -79,12 +79,12 @@ export async function POST(request) {
 
             const { error: insertError } = await supabase
                 .from('users')
-                .insert({
+                .upsert({
                     id: userId,
                     email: userEmail,
                     name: userName,
                     picture: userPicture
-                });
+                }, { onConflict: 'id', ignoreDuplicates: true });
 
             if (insertError) {
                 console.error('Failed to create user in Supabase:', insertError);
