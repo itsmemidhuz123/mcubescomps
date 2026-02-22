@@ -48,26 +48,53 @@ export function VerificationSection({ compact = false }) {
             }
 
             if (data.verificationUrl) {
-                const DiditSdk = (await import('@didit-protocol/sdk-web')).default;
+                if (window.DiditSdk) {
+                    window.DiditSdk.init({
+                        session_token: data.sessionToken,
+                        onSuccess: (session) => {
+                            console.log('Verification completed:', session);
+                            window.location.reload();
+                        },
+                        onError: (error) => {
+                            console.error('Verification error:', error);
+                            setError('Verification failed. Please try again.');
+                            setLoading(false);
+                        },
+                        onCancel: () => {
+                            console.log('Verification cancelled');
+                            setLoading(false);
+                        }
+                    });
 
-                DiditSdk.init({
-                    session_token: data.sessionToken,
-                    onSuccess: (session) => {
-                        console.log('Verification completed:', session);
-                        window.location.reload();
-                    },
-                    onError: (error) => {
-                        console.error('Verification error:', error);
-                        setError('Verification failed. Please try again.');
+                    window.DiditSdk.startVerification({ url: data.verificationUrl });
+                } else {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/@didit-protocol/sdk-web/dist/didit-sdk.min.js';
+                    script.onload = () => {
+                        window.DiditSdk.init({
+                            session_token: data.sessionToken,
+                            onSuccess: (session) => {
+                                console.log('Verification completed:', session);
+                                window.location.reload();
+                            },
+                            onError: (error) => {
+                                console.error('Verification error:', error);
+                                setError('Verification failed. Please try again.');
+                                setLoading(false);
+                            },
+                            onCancel: () => {
+                                console.log('Verification cancelled');
+                                setLoading(false);
+                            }
+                        });
+                        window.DiditSdk.startVerification({ url: data.verificationUrl });
+                    };
+                    script.onerror = () => {
+                        setError('Failed to load verification SDK. Please refresh and try again.');
                         setLoading(false);
-                    },
-                    onCancel: () => {
-                        console.log('Verification cancelled');
-                        setLoading(false);
-                    }
-                });
-
-                DiditSdk.startVerification({ url: data.verificationUrl });
+                    };
+                    document.body.appendChild(script);
+                }
             }
         } catch (err) {
             console.error('Verification error:', err);
