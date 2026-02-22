@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -52,7 +52,7 @@ export default function VerificationCenterPage() {
     async function fetchData() {
         setLoading(true);
         try {
-            const supabase = getSupabase();
+            const supabase = getSupabaseAdmin();
 
             let query = supabase
                 .from('users')
@@ -93,7 +93,7 @@ export default function VerificationCenterPage() {
 
         setProcessing(true);
         try {
-            const supabase = getSupabase();
+            const supabase = getSupabaseAdmin();
 
             if (actionType === 'force_reverify') {
                 await supabase

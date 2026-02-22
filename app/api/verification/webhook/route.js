@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 function verifyWebhookSignature(payload, signature, secret) {
     if (!signature || !secret) return false;
@@ -44,7 +44,7 @@ export async function POST(request) {
 
         const userId = vendor_data;
 
-        const supabase = getSupabase();
+        const supabase = getSupabaseAdmin();
 
         let userData = null;
 
@@ -58,12 +58,10 @@ export async function POST(request) {
             console.log('User not in Supabase for webhook, creating record...');
             const { error: insertError } = await supabase
                 .from('users')
-                .insert({
+                .upsert({
                     id: userId,
-                    email: '',
-                    verificationstatus: 'UNVERIFIED',
-                    verificationattemptcount: 0
-                });
+                    email: ''
+                }, { onConflict: 'id' });
 
             if (insertError) {
                 console.error('Failed to create user in webhook:', insertError);
