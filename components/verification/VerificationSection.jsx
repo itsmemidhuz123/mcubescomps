@@ -27,7 +27,10 @@ export function VerificationSection({ compact = false }) {
 
                 if (res.ok) {
                     const data = await res.json();
+                    console.log('Verification status data:', data);
                     setVerificationData(data);
+                } else {
+                    console.error('Failed to fetch status:', res.status, res.statusText);
                 }
             } catch (err) {
                 console.error('Failed to fetch verification status:', err);
@@ -112,6 +115,21 @@ export function VerificationSection({ compact = false }) {
                 }
                 setLoading(false);
                 return;
+            }
+
+            // Immediately fetch updated status
+            try {
+                const authToken = await user.getIdToken();
+                const statusRes = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (statusRes.ok) {
+                    const statusData = await statusRes.json();
+                    console.log('Updated verification status:', statusData);
+                    setVerificationData(statusData);
+                }
+            } catch (e) {
+                console.error('Failed to refresh status:', e);
             }
 
             if (data.verificationUrl) {
