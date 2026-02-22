@@ -83,14 +83,19 @@ export default function VerificationCenterPage() {
     }
 
     const filteredUsers = users.filter(u => {
+        const userStatus = u.verification_status || 'UNVERIFIED';
         const matchesSearch = !searchQuery ||
             u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             u.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesStatus = statusFilter === 'ALL' || u.verification_status === statusFilter;
+        const matchesStatus = statusFilter === 'ALL' || userStatus === statusFilter;
+
+        console.log('Filtering user:', u.id, 'status:', userStatus, 'matchesStatus:', matchesStatus);
 
         return matchesSearch && matchesStatus;
     });
+
+    console.log('Total filtered users:', filteredUsers.length);
 
     const pendingUsers = filteredUsers.filter(u => u.verification_status === 'PENDING');
     const verifiedUsers = filteredUsers.filter(u => u.verification_status === 'VERIFIED');

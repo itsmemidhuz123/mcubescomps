@@ -12,6 +12,7 @@ export function VerificationSection({ compact = false }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [verificationData, setVerificationData] = useState(null);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     useEffect(() => {
         async function fetchVerificationStatus() {
@@ -19,7 +20,8 @@ export function VerificationSection({ compact = false }) {
 
             try {
                 const authToken = await user.getIdToken();
-                const res = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                // Add timestamp to bypass cache
+                const res = await fetch(`/api/verification/status?userId=${user.uid}&_=${Date.now()}`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
@@ -28,6 +30,7 @@ export function VerificationSection({ compact = false }) {
                 if (res.ok) {
                     const data = await res.json();
                     console.log('Verification status data:', data);
+                    console.log('Verification status from API:', data.verificationStatus);
                     setVerificationData(data);
                 } else {
                     console.error('Failed to fetch status:', res.status, res.statusText);
@@ -38,7 +41,7 @@ export function VerificationSection({ compact = false }) {
         }
 
         fetchVerificationStatus();
-    }, [user]);
+    }, [user, refreshKey]);
 
     const verificationStatus = verificationData?.verificationStatus || userProfile?.verificationStatus || 'UNVERIFIED';
     const verifiedAt = verificationData?.verifiedAt || userProfile?.verifiedAt;
@@ -46,6 +49,9 @@ export function VerificationSection({ compact = false }) {
     const duplicateDetected = verificationData?.duplicateDetected || userProfile?.duplicateDetected || false;
     const lastVerificationAttemptAt = verificationData?.lastVerificationAttemptAt || userProfile?.lastVerificationAttemptAt;
     const lastResult = verificationData?.lastVerificationResult || userProfile?.lastVerificationResult;
+
+    console.log('Rendering VerificationSection. verificationStatus:', verificationStatus);
+    console.log('verificationData:', verificationData);
 
     const getRetryInfo = () => {
         if (!lastVerificationAttemptAt) return { canRetry: true, message: null };
