@@ -56,7 +56,7 @@ function getDefaultEventSettings(eventId) {
 }
 
 export default function AdminPanel() {
-    const { user, isAdmin, isModerator, hasPermission, loading: authLoading } = useAuth();
+    const { user, isAdmin, isSuperAdmin, isModerator, hasPermission, loading: authLoading } = useAuth();
     const router = useRouter();
 
     // Data States
