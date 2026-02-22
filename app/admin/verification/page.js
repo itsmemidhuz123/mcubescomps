@@ -330,7 +330,7 @@ export default function VerificationCenterPage() {
                         <DialogHeader>
                             <DialogTitle>Force Re-verification</DialogTitle>
                             <DialogDescription>
-                                This will reset {selectedUser?.name}'s verification status. They will need to verify again.
+                                This will reset {selectedUser?.name}&apos;s verification status. They will need to verify again.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
