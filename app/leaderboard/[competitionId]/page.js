@@ -284,7 +284,8 @@ export default function LeaderboardPage() {
                 country: user.country,
                 photoURL: user.photoURL,
                 hasResults: false,
-                status: 'registered'
+                status: 'registered',
+                verificationStatus: user.verificationStatus || null
             }));
         }
 
@@ -314,7 +315,7 @@ export default function LeaderboardPage() {
                         currentRound: participant?.currentRound || 1,
                         qualifiedForNextRound: result.qualifiedForNextRound || participant?.qualified || false,
                         disqualified: result.disqualified || false,
-                        verificationStatus: result.verificationStatus || 'pending',
+                        verificationStatus: user.verificationStatus || null,
                         flagLevel: result.flagLevel
                     };
                 }
@@ -331,7 +332,8 @@ export default function LeaderboardPage() {
                     hasResults: false,
                     flagged: false,
                     participantStatus: participant?.eliminated ? 'eliminated' : participant?.qualified ? 'qualified' : 'active',
-                    currentRound: participant?.currentRound || 1
+                    currentRound: participant?.currentRound || 1,
+                    verificationStatus: user.verificationStatus || null
                 };
             });
 
@@ -356,7 +358,7 @@ export default function LeaderboardPage() {
             const result = resultsMap.get(user.id);
             if (result) {
                 const useTime = viewMode === 'single' ? result.bestSingle : result.average;
-                return { ...result, displayTime: useTime };
+                return { ...result, displayTime: useTime, verificationStatus: user.verificationStatus || null };
             }
             return {
                 userId: user.id,
@@ -368,7 +370,8 @@ export default function LeaderboardPage() {
                 bestSingle: null,
                 times: [],
                 hasResults: false,
-                flagged: false
+                flagged: false,
+                verificationStatus: user.verificationStatus || null
             };
         });
 

@@ -74,6 +74,26 @@ function ProfilePage() {
     const [uploading, setUploading] = useState(false);
     const [dataLoading, setDataLoading] = useState(true);
     const [message, setMessage] = useState({ type: '', text: '' });
+    const [verificationStatus, setVerificationStatus] = useState(null);
+
+    useEffect(() => {
+        async function fetchVerificationStatus() {
+            if (!user) return;
+            try {
+                const authToken = await user.getIdToken();
+                const res = await fetch(`/api/verification/status?userId=${user.uid}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setVerificationStatus(data.verificationStatus);
+                }
+            } catch (err) {
+                console.error('Failed to fetch verification status:', err);
+            }
+        }
+        fetchVerificationStatus();
+    }, [user]);
 
     useEffect(() => {
         const verificationStatus = searchParams.get('verification');
@@ -379,8 +399,10 @@ function ProfilePage() {
                                     <div>
                                         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{userProfile?.displayName || 'User'}</h1>
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm text-zinc-500">@{userProfile?.username || 'username'}</p>
-                                            {userProfile?.verificationStatus === 'VERIFIED' && <VerifiedBadge size="sm" />}
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm text-zinc-500">@{userProfile?.username || 'username'}</p>
+                                                {verificationStatus === 'VERIFIED' && <VerifiedBadge size="sm" />}
+                                            </div>
                                         </div>
                                     </div>
 
