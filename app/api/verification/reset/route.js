@@ -13,14 +13,22 @@ export async function POST(request) {
 
         const supabase = getSupabaseAdmin();
 
+        // Clear both snake_case and camelCase columns for backward compatibility
         const { error } = await supabase
             .from('users')
             .update({
+                // snake_case columns
                 verification_status: 'UNVERIFIED',
                 didit_session_id: null,
                 didit_workflow_id: null,
                 last_verification_attempt_at: null,
-                last_verification_result: null
+                last_verification_result: null,
+                // camelCase columns (for backward compatibility)
+                verificationstatus: 'UNVERIFIED',
+                diditsessionid: null,
+                diditworkflowid: null,
+                lastverificationattemptat: null,
+                lastverificationresult: null
             })
             .eq('id', userId);
 

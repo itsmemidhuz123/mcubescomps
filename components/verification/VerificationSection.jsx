@@ -43,15 +43,17 @@ export function VerificationSection({ compact = false }) {
         fetchVerificationStatus();
     }, [user, refreshKey]);
 
-    const verificationStatus = verificationData?.verificationStatus || userProfile?.verificationStatus || 'UNVERIFIED';
-    const verifiedAt = verificationData?.verifiedAt || userProfile?.verifiedAt;
-    const attemptCount = verificationData?.verificationAttemptCount || userProfile?.verificationAttemptCount || 0;
-    const duplicateDetected = verificationData?.duplicateDetected || userProfile?.duplicateDetected || false;
-    const lastVerificationAttemptAt = verificationData?.lastVerificationAttemptAt || userProfile?.lastVerificationAttemptAt;
-    const lastResult = verificationData?.lastVerificationResult || userProfile?.lastVerificationResult;
+    // Only use API data, don't fallback to Firebase userProfile
+    const verificationStatus = verificationData?.verificationStatus || 'UNVERIFIED';
+    const verifiedAt = verificationData?.verifiedAt || null;
+    const attemptCount = verificationData?.verificationAttemptCount || 0;
+    const duplicateDetected = verificationData?.duplicateDetected || false;
+    const lastVerificationAttemptAt = verificationData?.lastVerificationAttemptAt || null;
+    const lastResult = verificationData?.lastVerificationResult || null;
 
     console.log('Rendering VerificationSection. verificationStatus:', verificationStatus);
     console.log('verificationData:', verificationData);
+    console.log('userProfile.verificationStatus:', userProfile?.verificationStatus);
 
     const getRetryInfo = () => {
         if (!lastVerificationAttemptAt) return { canRetry: true, message: null };
