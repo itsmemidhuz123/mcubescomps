@@ -64,6 +64,7 @@ export default function LeaderboardPage() {
     const [selectedRound, setSelectedRound] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState('ongoing');
     const [sortBy, setSortBy] = useState('average');
+    const [filterBy, setFilterBy] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('ao5');
     const [loading, setLoading] = useState(true);
@@ -202,12 +203,13 @@ export default function LeaderboardPage() {
     async function fetchLeaderboards(events) {
         try {
             const leaderboardData = {};
-            // Get all results and filter client-side
             const snapshot = await getDocs(collection(db, 'results'));
             const allResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             for (const eventId of events || []) {
                 const results = [];
+                const eventResults = allResults.filter(r => r.competitionId === params.competitionId && r.eventId === eventId);
+
                 for (const resultData of eventResults) {
                     try {
                         const userDoc = await getDoc(doc(db, 'users', resultData.userId));
