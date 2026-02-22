@@ -18,7 +18,7 @@ async function getUserFromFirebase(userId) {
         const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
         if (!projectId || !clientEmail || !privateKeyRaw) {
-            console.error('Missing Firebase Admin env vars');
+            console.log('Firebase Admin env vars not configured');
             return null;
         }
 
@@ -65,26 +65,35 @@ export async function POST(request) {
             console.log('User not in Supabase, fetching from Firebase...');
             const firebaseUser = await getUserFromFirebase(userId);
 
-            if (!firebaseUser) {
-                return NextResponse.json({ error: 'User not found' }, { status: 404 });
+            let userEmail = '';
+            let userName = null;
+            let userPicture = null;
+
+            if (firebaseUser) {
+                userEmail = firebaseUser.email || '';
+                userName = firebaseUser.displayName || firebaseUser.name || null;
+                userPicture = firebaseUser.photoURL || null;
+            } else {
+                console.log('Firebase fetch failed, using userId as fallback');
             }
 
             const { error: insertError } = await supabase
                 .from('users')
                 .insert({
                     id: userId,
-                    email: firebaseUser.email || '',
-                    name: firebaseUser.displayName || firebaseUser.name || null,
-                    picture: firebaseUser.photoURL || null,
+                    email: userEmail,
+                    name: userName,
+                    picture: userPicture,
                     verificationstatus: 'UNVERIFIED',
                     verificationattemptcount: 0
                 });
 
             if (insertError) {
                 console.error('Failed to create user in Supabase:', insertError);
+                return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
             }
 
-            userData = { ...firebaseUser, verificationstatus: 'UNVERIFIED', verificationattemptcount: 0 };
+            userData = { id: userId, email: userEmail, name: userName, verificationstatus: 'UNVERIFIED', verificationattemptcount: 0 };
         } else {
             userData = existingUser;
         }
