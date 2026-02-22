@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { getVerificationData } from '@/lib/firebase-admin';
 
 export async function GET(request) {
     try {
@@ -14,23 +14,11 @@ export async function GET(request) {
 
         console.log('Status API - fetching for userId:', userId);
 
-        const supabase = getSupabaseAdmin();
-
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
+        const userData = await getVerificationData(userId);
 
         console.log('Status API - userData:', userData);
-        console.log('Status API - verification_status:', userData?.verification_status);
-        console.log('Status API - verificationstatus:', userData?.verificationstatus);
 
-        if (userError) {
-            console.error('Status API - error:', userError);
-        }
-
-        if (userError || !userData) {
+        if (!userData) {
             return NextResponse.json({
                 verificationStatus: 'UNVERIFIED',
                 verifiedAt: null,
@@ -43,25 +31,15 @@ export async function GET(request) {
             });
         }
 
-        // Check both snake_case and camelCase column names for backward compatibility
-        const verificationStatus = userData.verification_status || userData.verificationstatus || 'UNVERIFIED';
-        const verifiedAt = userData.verified_at || userData.verifiedat || null;
-        const verificationLevel = userData.verification_level || userData.verificationlevel || null;
-        const duplicateDetected = userData.duplicate_detected || userData.duplicatedetected || false;
-        const suspiciousVerification = userData.suspicious_verification || userData.suspiciousverification || false;
-        const verificationAttemptCount = userData.verification_attempt_count || userData.verificationattemptcount || 0;
-        const lastVerificationResult = userData.last_verification_result || userData.lastverificationresult || null;
-        const lastVerificationAttemptAt = userData.last_verification_attempt_at || userData.lastverificationattemptat || null;
-
         const response = {
-            verificationStatus: verificationStatus,
-            verifiedAt: verifiedAt,
-            verificationLevel: verificationLevel,
-            duplicateDetected: duplicateDetected,
-            suspiciousVerification: suspiciousVerification,
-            verificationAttemptCount: verificationAttemptCount,
-            lastVerificationResult: lastVerificationResult,
-            lastVerificationAttemptAt: lastVerificationAttemptAt
+            verificationStatus: userData.verificationStatus || 'UNVERIFIED',
+            verifiedAt: userData.verifiedAt || null,
+            verificationLevel: userData.verificationLevel || null,
+            duplicateDetected: userData.duplicateDetected || false,
+            suspiciousVerification: userData.suspiciousVerification || false,
+            verificationAttemptCount: userData.verificationAttemptCount || 0,
+            lastVerificationResult: userData.lastVerificationResult || null,
+            lastVerificationAttemptAt: userData.lastVerificationAttemptAt || null
         };
 
         console.log('Status API - returning:', response);

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { updateVerificationStatus } from '@/lib/firebase-admin';
 
 export async function POST(request) {
     try {
@@ -11,29 +11,18 @@ export async function POST(request) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
         }
 
-        const supabase = getSupabaseAdmin();
+        console.log('Reset verification for userId:', userId);
 
-        // Clear both snake_case and camelCase columns for backward compatibility
-        const { error } = await supabase
-            .from('users')
-            .update({
-                // snake_case columns
-                verification_status: 'UNVERIFIED',
-                didit_session_id: null,
-                didit_workflow_id: null,
-                last_verification_attempt_at: null,
-                last_verification_result: null,
-                // camelCase columns (for backward compatibility)
-                verificationstatus: 'UNVERIFIED',
-                diditsessionid: null,
-                diditworkflowid: null,
-                lastverificationattemptat: null,
-                lastverificationresult: null
-            })
-            .eq('id', userId);
+        const result = await updateVerificationStatus(userId, {
+            verificationStatus: 'UNVERIFIED',
+            diditSessionId: null,
+            diditWorkflowId: null,
+            lastVerificationAttemptAt: null,
+            lastVerificationResult: null
+        });
 
-        if (error) {
-            console.error('Reset error:', error);
+        if (result.error) {
+            console.error('Reset error:', result.error);
             return NextResponse.json({ error: 'Failed to reset' }, { status: 500 });
         }
 
