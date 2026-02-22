@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getSupabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +17,7 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { ArrowLeft, Search, Shield, ShieldCheck, ShieldAlert, Users, AlertTriangle, RefreshCw, Loader2, Ban } from 'lucide-react';
+import { ArrowLeft, Search, Shield, ShieldCheck, ShieldAlert, Users, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { VerificationStatusBadge } from '@/components/verification/VerifiedBadge';
 
 export default function VerificationCenterPage() {
@@ -53,16 +52,20 @@ export default function VerificationCenterPage() {
     async function fetchData() {
         setLoading(true);
         try {
-            let q = query(
-                collection(db, 'users'),
-                where('verificationStatus', 'in', ['PENDING', 'VERIFIED', 'REJECTED']),
-                orderBy('verifiedAt', 'desc'),
-                limit(100)
-            );
+            const supabase = getSupabase();
 
-            const snapshot = await getDocs(q);
-            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setUsers(usersData);
+            let query = supabase
+                .from('users')
+                .select('*')
+                .in('verificationstatus', ['PENDING', 'VERIFIED', 'REJECTED'])
+                .order('verifiedat', { ascending: false })
+                .limit(100);
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            setUsers(data || []);
         } catch (error) {
             console.error('Error fetching verification data:', error);
         } finally {
@@ -75,31 +78,36 @@ export default function VerificationCenterPage() {
             u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             u.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesStatus = statusFilter === 'ALL' || u.verificationStatus === statusFilter;
+        const matchesStatus = statusFilter === 'ALL' || u.verificationstatus === statusFilter;
 
         return matchesSearch && matchesStatus;
     });
 
-    const pendingUsers = filteredUsers.filter(u => u.verificationStatus === 'PENDING');
-    const verifiedUsers = filteredUsers.filter(u => u.verificationStatus === 'VERIFIED');
-    const rejectedUsers = filteredUsers.filter(u => u.verificationStatus === 'REJECTED');
-    const duplicateUsers = filteredUsers.filter(u => u.duplicateDetected === true);
+    const pendingUsers = filteredUsers.filter(u => u.verificationstatus === 'PENDING');
+    const verifiedUsers = filteredUsers.filter(u => u.verificationstatus === 'VERIFIED');
+    const rejectedUsers = filteredUsers.filter(u => u.verificationstatus === 'REJECTED');
+    const duplicateUsers = filteredUsers.filter(u => u.duplicatedetected === true);
 
     async function handleAction() {
         if (!selectedUser || !actionType) return;
 
         setProcessing(true);
         try {
+            const supabase = getSupabase();
+
             if (actionType === 'force_reverify') {
-                await updateDoc(doc(db, 'users', selectedUser.id), {
-                    verificationStatus: 'UNVERIFIED',
-                    diditSessionId: null,
-                    faceHash: null,
-                    documentHash: null,
-                    duplicateDetected: false,
-                    suspiciousVerification: false,
-                    lastVerificationResult: null
-                });
+                await supabase
+                    .from('users')
+                    .update({
+                        verificationstatus: 'UNVERIFIED',
+                        diditsessionid: null,
+                        facehash: null,
+                        documenthash: null,
+                        duplicatedetected: false,
+                        suspiciousverification: false,
+                        lastverificationresult: null
+                    })
+                    .eq('id', selectedUser.id);
             }
 
             await fetchData();
@@ -287,8 +295,8 @@ export default function VerificationCenterPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col gap-1">
-                                                            <VerificationStatusBadge status={u.verificationStatus} size="sm" />
-                                                            {u.duplicateDetected && (
+                                                            <VerificationStatusBadge status={u.verificationstatus} size="sm" />
+                                                            {u.duplicatedetected && (
                                                                 <Badge variant="outline" className="text-[10px] bg-orange-50 border-orange-200 text-orange-700">
                                                                     Duplicate
                                                                 </Badge>
@@ -296,14 +304,14 @@ export default function VerificationCenterPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
-                                                        {u.verifiedAt ? new Date(u.verifiedAt).toLocaleDateString() : 'N/A'}
+                                                        {u.verifiedat ? new Date(u.verifiedat).toLocaleDateString() : 'N/A'}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
-                                                        {u.verificationAttemptCount || 0}
+                                                        {u.verificationattemptcount || 0}
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
-                                                            {u.verificationStatus === 'VERIFIED' && (
+                                                            {u.verificationstatus === 'VERIFIED' && (
                                                                 <Button
                                                                     size="sm"
                                                                     variant="outline"
