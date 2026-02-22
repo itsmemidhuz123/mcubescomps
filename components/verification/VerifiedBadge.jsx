@@ -42,6 +42,10 @@ export function VerificationStatusBadge({ status, size = 'default' }) {
         REJECTED: {
             label: 'Rejected',
             className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800'
+        },
+        BLOCKED: {
+            label: 'Blocked',
+            className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800'
         }
     };
 

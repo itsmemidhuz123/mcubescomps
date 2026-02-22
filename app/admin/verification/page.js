@@ -94,6 +94,7 @@ export default function VerificationCenterPage() {
     const pendingUsers = filteredUsers.filter(u => u.verificationStatus === 'PENDING');
     const verifiedUsers = filteredUsers.filter(u => u.verificationStatus === 'VERIFIED');
     const rejectedUsers = filteredUsers.filter(u => u.verificationStatus === 'REJECTED');
+    const blockedUsers = filteredUsers.filter(u => u.verificationStatus === 'BLOCKED');
     const duplicateUsers = filteredUsers.filter(u => u.duplicateDetected === true);
 
     async function handleAction() {
@@ -138,6 +139,30 @@ export default function VerificationCenterPage() {
                     body: JSON.stringify({
                         userId: selectedUser.uid,
                         action: 'reset'
+                    })
+                });
+            } else if (actionType === 'unlock') {
+                await fetch('/api/verification/admin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        userId: selectedUser.uid,
+                        action: 'unlock'
+                    })
+                });
+            } else if (actionType === 'reset_attempts') {
+                await fetch('/api/verification/admin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        userId: selectedUser.uid,
+                        action: 'reset_attempts'
                     })
                 });
             }
@@ -239,6 +264,19 @@ export default function VerificationCenterPage() {
                     <Card>
                         <CardContent className="p-4">
                             <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-red-200 dark:bg-red-900/50">
+                                    <AlertTriangle className="w-5 h-5 text-red-700 dark:text-red-400" />
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold">{blockedUsers.length}</p>
+                                    <p className="text-xs text-zinc-500">Blocked</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
                                 <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/30">
                                     <AlertTriangle className="w-5 h-5 text-orange-600" />
                                 </div>
@@ -257,6 +295,7 @@ export default function VerificationCenterPage() {
                         <TabsTrigger value="pending">Pending ({pendingUsers.length})</TabsTrigger>
                         <TabsTrigger value="verified">Verified ({verifiedUsers.length})</TabsTrigger>
                         <TabsTrigger value="rejected">Rejected ({rejectedUsers.length})</TabsTrigger>
+                        <TabsTrigger value="blocked">Blocked ({blockedUsers.length})</TabsTrigger>
                         <TabsTrigger value="duplicates">Duplicates ({duplicateUsers.length})</TabsTrigger>
                     </TabsList>
 
@@ -281,6 +320,7 @@ export default function VerificationCenterPage() {
                                         <SelectItem value="PENDING">Pending</SelectItem>
                                         <SelectItem value="VERIFIED">Verified</SelectItem>
                                         <SelectItem value="REJECTED">Rejected</SelectItem>
+                                        <SelectItem value="BLOCKED">Blocked</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -372,6 +412,17 @@ export default function VerificationCenterPage() {
                                                             >
                                                                 Reset
                                                             </Button>
+                                                            {u.verificationStatus === 'BLOCKED' && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                                                                    onClick={() => openActionDialog(u, 'unlock')}
+                                                                    disabled={processing}
+                                                                >
+                                                                    Unlock
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>

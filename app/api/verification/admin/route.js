@@ -48,8 +48,14 @@ export async function POST(request) {
             });
 
         } else if (action === 'manual_reject') {
+            const userData = await getVerificationData(userId);
+            const attemptCount = (userData?.verificationAttemptCount || 0) + 1;
+            const newStatus = attemptCount >= 3 ? 'BLOCKED' : 'REJECTED';
+
             const updateData = {
-                verificationStatus: 'REJECTED',
+                verificationStatus: newStatus,
+                verificationAttemptCount: attemptCount,
+                lastVerificationAttemptAt: new Date().toISOString(),
                 lastVerificationResult: {
                     status: 'rejected',
                     rejectedAt: new Date().toISOString(),
@@ -64,19 +70,15 @@ export async function POST(request) {
                 return NextResponse.json({ error: result.error }, { status: 500 });
             }
 
-            console.log('User manually rejected:', userId);
+            console.log('User manually rejected:', userId, 'status:', newStatus);
 
             return NextResponse.json({
                 success: true,
-                message: 'User manually rejected',
-                verificationStatus: 'REJECTED'
+                message: newStatus === 'BLOCKED' ? 'User blocked (max attempts)' : 'User manually rejected',
+                verificationStatus: newStatus
             });
 
         } else if (action === 'reset') {
-            const userData = await getVerificationData(userId);
-
-            const currentAttemptCount = userData?.verificationAttemptCount || 0;
-
             const updateData = {
                 verificationStatus: 'UNVERIFIED',
                 verifiedAt: null,
@@ -87,7 +89,8 @@ export async function POST(request) {
                 currentSessionId: null,
                 lastVerificationResult: null,
                 lastVerificationAttemptAt: null,
-                verificationRequestedAt: null
+                verificationRequestedAt: null,
+                verificationAttemptCount: 0
             };
 
             const result = await updateVerificationStatus(userId, updateData);
@@ -102,6 +105,64 @@ export async function POST(request) {
                 success: true,
                 message: 'Verification status reset',
                 verificationStatus: 'UNVERIFIED'
+            });
+
+        } else if (action === 'unlock') {
+            const userData = await getVerificationData(userId);
+
+            if (userData?.verificationStatus !== 'BLOCKED') {
+                return NextResponse.json({
+                    error: 'User is not blocked'
+                }, { status: 400 });
+            }
+
+            const updateData = {
+                verificationStatus: 'UNVERIFIED',
+                suspiciousVerification: false,
+                lastVerificationResult: {
+                    status: 'unblocked',
+                    unlockedAt: new Date().toISOString(),
+                    unlockedBy: 'admin'
+                },
+                verificationAttemptCount: 0
+            };
+
+            const result = await updateVerificationStatus(userId, updateData);
+
+            if (result.error) {
+                return NextResponse.json({ error: result.error }, { status: 500 });
+            }
+
+            console.log('User unlocked:', userId);
+
+            return NextResponse.json({
+                success: true,
+                message: 'User verification unlocked',
+                verificationStatus: 'UNVERIFIED'
+            });
+
+        } else if (action === 'reset_attempts') {
+            const updateData = {
+                verificationAttemptCount: 0,
+                lastVerificationResult: {
+                    status: 'attempts_reset',
+                    resetAt: new Date().toISOString(),
+                    resetBy: 'admin'
+                }
+            };
+
+            const result = await updateVerificationStatus(userId, updateData);
+
+            if (result.error) {
+                return NextResponse.json({ error: result.error }, { status: 500 });
+            }
+
+            console.log('User attempts reset:', userId);
+
+            return NextResponse.json({
+                success: true,
+                message: 'Verification attempts reset',
+                verificationAttemptCount: 0
             });
 
         } else {

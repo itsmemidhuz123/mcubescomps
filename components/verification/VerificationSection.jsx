@@ -88,6 +88,8 @@ export function VerificationSection({ compact = false }) {
             if (!res.ok) {
                 if (res.status === 429) {
                     setError(data.error || 'Too many attempts. Please try again later.');
+                } else if (res.status === 403) {
+                    setError(data.error || 'Verification blocked. Please contact support.');
                 } else {
                     setError(data.error || 'Failed to start verification');
                 }
@@ -210,6 +212,29 @@ export function VerificationSection({ compact = false }) {
         );
     }
 
+    if (verificationStatus === 'BLOCKED') {
+        return (
+            <Card className="bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800">
+                <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30">
+                            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="font-semibold text-red-900 dark:text-red-100 mb-1">Verification Blocked</h3>
+                            <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+                                Maximum verification attempts (3) have been reached. Your account has been blocked from further verification attempts.
+                            </p>
+                            <p className="text-xs text-red-600 dark:text-red-400">
+                                Please contact support to unlock your verification.
+                            </p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
     if (verificationStatus === 'REJECTED') {
         const rejectedClass = duplicateDetected
             ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
@@ -238,14 +263,17 @@ export function VerificationSection({ compact = false }) {
                                         : 'Your identity verification was not approved.'
                                 }
                             </p>
-                            {attemptCount >= 3 && !retryInfo.canRetry && (
+                            {attemptCount >= 3 ? (
                                 <p className="text-xs text-red-500 mt-2">
-                                    Maximum attempts (3) reached. Please contact support.
+                                    Maximum attempts (3) reached.
                                 </p>
-                            )}
-                            {retryInfo.canRetry && attemptCount < 3 && (
+                            ) : retryInfo.canRetry ? (
                                 <p className="text-xs text-green-600 mt-2">
                                     You can try again now. ({attemptCount}/3 attempts used)
+                                </p>
+                            ) : (
+                                <p className="text-xs text-red-500 mt-2">
+                                    {retryInfo.message}
                                 </p>
                             )}
                             {retryInfo.canRetry && attemptCount < 3 && (

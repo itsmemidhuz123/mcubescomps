@@ -25,7 +25,17 @@ export async function POST(request) {
         const lastResult = userData.lastVerificationResult;
 
         if (currentStatus === 'VERIFIED') {
-            return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
+            return NextResponse.json({
+                error: 'User is already verified',
+                verificationStatus: 'VERIFIED'
+            }, { status: 400 });
+        }
+
+        if (currentStatus === 'BLOCKED') {
+            return NextResponse.json({
+                error: 'Verification blocked. Please contact support.',
+                verificationStatus: 'BLOCKED'
+            }, { status: 403 });
         }
 
         const maxAttempts = 3;
@@ -44,7 +54,8 @@ export async function POST(request) {
                     return NextResponse.json({
                         error: 'Maximum verification attempts exceeded. Try again after 24 hours.',
                         attemptsRemaining: 0,
-                        hoursRemaining: Math.ceil(24 - hoursSinceLastAttempt)
+                        hoursRemaining: Math.ceil(24 - hoursSinceLastAttempt),
+                        verificationStatus: 'REJECTED'
                     }, { status: 429 });
                 }
             }
@@ -108,14 +119,15 @@ export async function POST(request) {
             newAttemptCount = attemptCount + 1;
         }
 
-        // Update in Firestore
+        const now = new Date().toISOString();
+
         const updateResult = await updateVerificationStatus(userId, {
             diditSessionId: sessionData.session_id,
             diditWorkflowId: workflowId,
             verificationStatus: 'PENDING',
             verificationAttemptCount: newAttemptCount,
-            lastVerificationAttemptAt: new Date().toISOString(),
-            verificationRequestedAt: new Date().toISOString()
+            lastVerificationAttemptAt: now,
+            verificationRequestedAt: now
         });
 
         if (updateResult.error) {
@@ -123,14 +135,15 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Failed to update verification status' }, { status: 500 });
         }
 
-        console.log('Updated user status to PENDING');
+        console.log('Updated user status to PENDING, attempt:', newAttemptCount);
 
         return NextResponse.json({
             success: true,
             sessionToken: sessionData.session_token,
             verificationUrl: sessionData.url || sessionData.verification_url,
             sessionId: sessionData.session_id,
-            attemptsRemaining: maxAttempts - newAttemptCount
+            attemptsRemaining: maxAttempts - newAttemptCount,
+            verificationStatus: 'PENDING'
         });
 
     } catch (error) {

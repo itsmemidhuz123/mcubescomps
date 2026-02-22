@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { VerifiedBadge } from '@/components/verification/VerifiedBadge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -142,7 +143,8 @@ export default function LeaderboardPage() {
                         displayName: userData.displayName || regData.userName || 'Unknown',
                         wcaStyleId: userData.wcaStyleId || regData.wcaStyleId || 'N/A',
                         country: userData.country || 'Unknown',
-                        photoURL: userData.photoURL
+                        photoURL: userData.photoURL,
+                        verificationStatus: userData.verificationStatus
                     });
                 } catch (e) {
                     users.push({ id: regData.userId, ...regData });
@@ -169,7 +171,8 @@ export default function LeaderboardPage() {
                         ...data,
                         displayName: userData.displayName || data.userName || 'Unknown',
                         photoURL: userData.photoURL,
-                        country: userData.country || 'Unknown'
+                        country: userData.country || 'Unknown',
+                        verificationStatus: userData.verificationStatus
                     });
                 } catch (e) {
                     participantsData.push({ id: docSnap.id, ...data });
@@ -637,6 +640,7 @@ export default function LeaderboardPage() {
                                                             <Link href={`/user/${entry.userId}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline transition-colors">
                                                                 {entry.userName || 'Unknown'}
                                                             </Link>
+                                                            {entry.verificationStatus === 'VERIFIED' && <VerifiedBadge size="sm" />}
                                                             {isCurrentUser && <Badge className="bg-blue-100 text-blue-700 text-xs">You</Badge>}
                                                             {entry.flagged && (
                                                                 <div className="group relative">

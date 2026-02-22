@@ -18,6 +18,7 @@ import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
 import { VerificationSection } from '@/components/verification/VerificationSection';
+import { VerifiedBadge } from '@/components/verification/VerifiedBadge';
 
 const COUNTRIES = [
     'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
@@ -377,7 +378,10 @@ function ProfilePage() {
 
                                     <div>
                                         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{userProfile?.displayName || 'User'}</h1>
-                                        <p className="text-sm text-zinc-500">@{userProfile?.username || 'username'}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm text-zinc-500">@{userProfile?.username || 'username'}</p>
+                                            {userProfile?.verificationStatus === 'VERIFIED' && <VerifiedBadge size="sm" />}
+                                        </div>
                                     </div>
 
                                     <div className="flex flex-wrap justify-center gap-2 pt-2">
