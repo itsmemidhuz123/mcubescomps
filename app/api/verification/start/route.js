@@ -118,16 +118,21 @@ export async function POST(request) {
             userData = existingUser;
         }
 
-        if (userData.verification_status === 'VERIFIED') {
+        // Check both column names for backward compatibility
+        const currentStatus = userData.verification_status || userData.verificationstatus || 'UNVERIFIED';
+        const currentAttemptCount = userData.verification_attempt_count || userData.verificationattemptcount || 0;
+        const currentLastAttemptAt = userData.last_verification_attempt_at || userData.lastverificationattemptat || null;
+
+        if (currentStatus === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
         const maxAttempts = 3;
-        const attemptCount = userData.verification_attempt_count || 0;
+        const attemptCount = currentAttemptCount;
 
         if (attemptCount >= maxAttempts) {
-            if (userData.last_verification_attempt_at) {
-                const lastAttemptDate = new Date(userData.last_verification_attempt_at);
+            if (currentLastAttemptAt) {
+                const lastAttemptDate = new Date(currentLastAttemptAt);
                 const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
@@ -174,9 +179,11 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session response:', JSON.stringify(sessionData));
 
-        const newAttemptCount = userData.verification_status === 'PENDING' ? attemptCount : attemptCount + 1;
+        // Check both column names for backward compatibility
+        const currentStatus = userData.verification_status || userData.verificationstatus || 'UNVERIFIED';
+        const newAttemptCount = currentStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        console.log('Updating user status to PENDING. Current status:', userData.verification_status);
+        console.log('Updating user status to PENDING. Current status:', currentStatus);
 
         const supabaseAdmin = getSupabaseAdmin();
         const { error: updateError } = await supabaseAdmin

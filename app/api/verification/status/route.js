@@ -24,6 +24,7 @@ export async function GET(request) {
 
         console.log('Status API - userData:', userData);
         console.log('Status API - verification_status:', userData?.verification_status);
+        console.log('Status API - verificationstatus:', userData?.verificationstatus);
 
         if (userError) {
             console.error('Status API - error:', userError);
@@ -42,15 +43,25 @@ export async function GET(request) {
             });
         }
 
+        // Check both snake_case and camelCase column names for backward compatibility
+        const verificationStatus = userData.verification_status || userData.verificationstatus || 'UNVERIFIED';
+        const verifiedAt = userData.verified_at || userData.verifiedat || null;
+        const verificationLevel = userData.verification_level || userData.verificationlevel || null;
+        const duplicateDetected = userData.duplicate_detected || userData.duplicatedetected || false;
+        const suspiciousVerification = userData.suspicious_verification || userData.suspiciousverification || false;
+        const verificationAttemptCount = userData.verification_attempt_count || userData.verificationattemptcount || 0;
+        const lastVerificationResult = userData.last_verification_result || userData.lastverificationresult || null;
+        const lastVerificationAttemptAt = userData.last_verification_attempt_at || userData.lastverificationattemptat || null;
+
         const response = {
-            verificationStatus: userData.verification_status || 'UNVERIFIED',
-            verifiedAt: userData.verified_at || null,
-            verificationLevel: userData.verification_level || null,
-            duplicateDetected: userData.duplicate_detected || false,
-            suspiciousVerification: userData.suspicious_verification || false,
-            verificationAttemptCount: userData.verification_attempt_count || 0,
-            lastVerificationResult: userData.last_verification_result || null,
-            lastVerificationAttemptAt: userData.last_verification_attempt_at || null
+            verificationStatus: verificationStatus,
+            verifiedAt: verifiedAt,
+            verificationLevel: verificationLevel,
+            duplicateDetected: duplicateDetected,
+            suspiciousVerification: suspiciousVerification,
+            verificationAttemptCount: verificationAttemptCount,
+            lastVerificationResult: lastVerificationResult,
+            lastVerificationAttemptAt: lastVerificationAttemptAt
         };
 
         console.log('Status API - returning:', response);
