@@ -1,61 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-
-let adminDb = null;
-
-function parsePrivateKey(privateKey) {
-    if (!privateKey) return null;
-    if (privateKey.includes('\n') && !privateKey.includes('\\n')) {
-        return privateKey;
-    }
-    return privateKey.replace(/\\n/g, '\n');
-}
-
-async function getDb() {
-    if (adminDb) return adminDb;
-
-    try {
-        const { initializeApp, getApps, cert } = require('firebase-admin/app');
-        const { getFirestore } = require('firebase-admin/firestore');
-
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKeyRaw) {
-            console.error('Missing Firebase Admin env vars');
-            throw new Error('Missing Firebase environment variables');
-        }
-
-        const privateKey = parsePrivateKey(privateKeyRaw);
-
-        if (getApps().length === 0) {
-            initializeApp({
-                credential: cert({
-                    projectId,
-                    clientEmail,
-                    privateKey
-                })
-            });
-        }
-
-        adminDb = getFirestore();
-        return adminDb;
-    } catch (error) {
-        console.error('Firebase Admin init error:', error.message);
-        throw error;
-    }
-}
-
-function hashString(str) {
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(str || '').digest('hex');
-}
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request) {
     try {
-        const db = await getDb();
         const { userId } = await request.json();
         const authHeader = request.headers.get('authorization');
 
@@ -63,35 +12,31 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
         }
 
-        const userDoc = await db.collection('users').doc(userId).get();
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
 
-        if (!userDoc.exists) {
+        if (!user) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        const userData = userDoc.data();
-
-        if (userData.verificationStatus === 'VERIFIED') {
+        if (user.verificationStatus === 'VERIFIED') {
             return NextResponse.json({ error: 'User is already verified' }, { status: 400 });
         }
 
-        if (userData.verificationLockedUntil) {
-            const lockUntil = userData.verificationLockedUntil.toDate ? userData.verificationLockedUntil.toDate() : new Date(userData.verificationLockedUntil);
-            if (lockUntil > new Date()) {
-                return NextResponse.json({
-                    error: 'Verification temporarily locked',
-                    lockedUntil: lockUntil.toISOString()
-                }, { status: 429 });
-            }
+        if (user.verificationLockedUntil && user.verificationLockedUntil > new Date()) {
+            return NextResponse.json({
+                error: 'Verification temporarily locked',
+                lockedUntil: user.verificationLockedUntil.toISOString()
+            }, { status: 429 });
         }
 
         const maxAttempts = 3;
-        const attemptCount = userData.verificationAttemptCount || 0;
+        const attemptCount = user.verificationAttemptCount || 0;
 
         if (attemptCount >= maxAttempts) {
-            if (userData.lastVerificationAttemptAt) {
-                const lastAttemptDate = userData.lastVerificationAttemptAt.toDate ? userData.lastVerificationAttemptAt.toDate() : new Date(userData.lastVerificationAttemptAt);
-                const hoursSinceLastAttempt = (new Date() - lastAttemptDate) / (1000 * 60 * 60);
+            if (user.lastVerificationAttemptAt) {
+                const hoursSinceLastAttempt = (new Date() - user.lastVerificationAttemptAt) / (1000 * 60 * 60);
 
                 if (hoursSinceLastAttempt < 24) {
                     return NextResponse.json({
@@ -136,15 +81,18 @@ export async function POST(request) {
         const sessionData = await sessionResponse.json();
         console.log('DIDIT session created successfully:', sessionData.session_id);
 
-        const newAttemptCount = userData.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
+        const newAttemptCount = user.verificationStatus === 'PENDING' ? attemptCount : attemptCount + 1;
 
-        await db.collection('users').doc(userId).update({
-            diditSessionId: sessionData.session_id,
-            diditWorkflowId: workflowId,
-            verificationStatus: 'PENDING',
-            verificationAttemptCount: newAttemptCount,
-            lastVerificationAttemptAt: new Date(),
-            verificationRequestedAt: new Date()
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                diditSessionId: sessionData.session_id,
+                diditWorkflowId: workflowId,
+                verificationStatus: 'PENDING',
+                verificationAttemptCount: newAttemptCount,
+                lastVerificationAttemptAt: new Date(),
+                verificationRequestedAt: new Date()
+            }
         });
 
         return NextResponse.json({
@@ -156,7 +104,7 @@ export async function POST(request) {
         });
 
     } catch (error) {
-        console.error('Verification start error:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        console.error('Verification start error:', error.message);
+        return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
     }
 }
