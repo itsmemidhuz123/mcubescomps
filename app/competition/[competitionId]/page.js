@@ -12,11 +12,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer, Tag, CheckCircle, XCircle, Loader2, Layers } from 'lucide-react';
+import { ArrowLeft, Calendar, Trophy, DollarSign, Play, Clock, Users, AlertCircle, Lock, Info, Timer, Tag, CheckCircle, XCircle, Loader2, Layers, ShieldAlert } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
 import { CompetitionMode, TournamentStatus } from '@/lib/tournament';
+import { VerificationEnforcement } from '@/components/verification/VerificationEnforcement';
 
 // Helper to format time from milliseconds
 function formatTimeDisplay(ms) {
@@ -887,6 +888,46 @@ function CompetitionDetail() {
                     <div className="text-zinc-500 dark:text-zinc-400 text-xl mb-4">Competition not found</div>
                     <Button onClick={() => router.push('/competitions')}>Back to Competitions</Button>
                 </div>
+            </div>
+        );
+    }
+
+    const requiresVerification = competition.verificationMandatory &&
+        competition.currentRound >= (competition.verificationRequiredFromRound || 1);
+    const isVerified = userProfile?.verificationStatus === 'VERIFIED';
+
+    if (user && requiresVerification && !isVerified) {
+        return (
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-4">
+                <Card className="max-w-md w-full">
+                    <CardContent className="p-6">
+                        <div className="text-center">
+                            <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                                <ShieldAlert className="w-8 h-8 text-red-600 dark:text-red-400" />
+                            </div>
+
+                            <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">
+                                Identity Verification Required
+                            </h2>
+
+                            <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+                                This competition requires identity verification to participate.
+                            </p>
+
+                            <p className="text-sm text-zinc-500 mb-6">
+                                Verification is required from round {competition.verificationRequiredFromRound || 1}.
+                                Please verify your identity to continue.
+                            </p>
+
+                            <Button
+                                onClick={() => router.push('/profile')}
+                                className="w-full"
+                            >
+                                Go to Profile to Verify
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
