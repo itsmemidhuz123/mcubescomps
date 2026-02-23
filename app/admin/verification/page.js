@@ -335,13 +335,14 @@ export default function VerificationCenterPage() {
                                             <TableHead>Status</TableHead>
                                             <TableHead>Verified At</TableHead>
                                             <TableHead>Attempts</TableHead>
+                                            <TableHead>Last Attempt</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filteredUsers.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8 text-zinc-500">
+                                                <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                                                     No users found
                                                 </TableCell>
                                             </TableRow>
@@ -380,7 +381,13 @@ export default function VerificationCenterPage() {
                                                         {u.verifiedAt ? new Date(u.verifiedAt).toLocaleDateString() : 'N/A'}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
-                                                        {u.verificationAttemptCount || 0}
+                                                        {u.verificationAttemptCount || 0} / 3
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">
+                                                        {u.lastVerificationAttemptAt
+                                                            ? new Date(u.lastVerificationAttemptAt).toLocaleString()
+                                                            : 'Never'
+                                                        }
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
@@ -423,6 +430,15 @@ export default function VerificationCenterPage() {
                                                                     Unlock
                                                                 </Button>
                                                             )}
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => openActionDialog(u, 'reset_attempts')}
+                                                                disabled={processing}
+                                                                title="Reset attempt count"
+                                                            >
+                                                                Reset
+                                                            </Button>
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>

@@ -2,11 +2,27 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { getVerificationData, updateVerificationStatus } from '@/lib/firebase-admin';
+import { db } from '@/lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+
+async function logVerificationEvent(userId, eventType, details) {
+    try {
+        const logRef = doc(db, 'auditLogs', `${eventType}_${userId}_${Date.now()}`);
+        await setDoc(logRef, {
+            eventType,
+            userId,
+            details,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Failed to log verification event:', error.message);
+    }
+}
 
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { userId, action, reason } = body;
+        const { userId, action, reason, adminUserId } = body;
         const authHeader = request.headers.get('authorization');
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -20,6 +36,9 @@ export async function POST(request) {
         console.log('Admin verification action:', action, 'for user:', userId);
 
         if (action === 'manual_verify') {
+            const userData = await getVerificationData(userId);
+            const previousStatus = userData?.verificationStatus || 'UNKNOWN';
+
             const updateData = {
                 verificationStatus: 'VERIFIED',
                 verifiedAt: new Date().toISOString(),
@@ -40,6 +59,13 @@ export async function POST(request) {
             }
 
             console.log('User manually verified:', userId);
+            await logVerificationEvent(userId, 'verification_override', {
+                action: 'manual_verify',
+                previousStatus,
+                newStatus: 'VERIFIED',
+                adminUserId,
+                timestamp: new Date().toISOString()
+            });
 
             return NextResponse.json({
                 success: true,
@@ -51,6 +77,7 @@ export async function POST(request) {
             const userData = await getVerificationData(userId);
             const attemptCount = (userData?.verificationAttemptCount || 0) + 1;
             const newStatus = attemptCount >= 3 ? 'BLOCKED' : 'REJECTED';
+            const previousStatus = userData?.verificationStatus || 'UNKNOWN';
 
             const updateData = {
                 verificationStatus: newStatus,
@@ -71,6 +98,15 @@ export async function POST(request) {
             }
 
             console.log('User manually rejected:', userId, 'status:', newStatus);
+            await logVerificationEvent(userId, 'verification_override', {
+                action: 'manual_reject',
+                previousStatus,
+                newStatus,
+                attemptCount,
+                reason: reason || 'Manually rejected by admin',
+                adminUserId,
+                timestamp: new Date().toISOString()
+            });
 
             return NextResponse.json({
                 success: true,
@@ -79,6 +115,9 @@ export async function POST(request) {
             });
 
         } else if (action === 'reset') {
+            const userData = await getVerificationData(userId);
+            const previousStatus = userData?.verificationStatus || 'UNKNOWN';
+
             const updateData = {
                 verificationStatus: 'UNVERIFIED',
                 verifiedAt: null,
@@ -100,6 +139,13 @@ export async function POST(request) {
             }
 
             console.log('User verification reset:', userId);
+            await logVerificationEvent(userId, 'verification_reset', {
+                action: 'reset',
+                previousStatus,
+                newStatus: 'UNVERIFIED',
+                adminUserId,
+                timestamp: new Date().toISOString()
+            });
 
             return NextResponse.json({
                 success: true,
@@ -115,6 +161,8 @@ export async function POST(request) {
                     error: 'User is not blocked'
                 }, { status: 400 });
             }
+
+            const previousStatus = userData.verificationStatus;
 
             const updateData = {
                 verificationStatus: 'UNVERIFIED',
@@ -134,6 +182,13 @@ export async function POST(request) {
             }
 
             console.log('User unlocked:', userId);
+            await logVerificationEvent(userId, 'verification_override', {
+                action: 'unlock',
+                previousStatus,
+                newStatus: 'UNVERIFIED',
+                adminUserId,
+                timestamp: new Date().toISOString()
+            });
 
             return NextResponse.json({
                 success: true,
@@ -142,6 +197,8 @@ export async function POST(request) {
             });
 
         } else if (action === 'reset_attempts') {
+            const previousCount = (await getVerificationData(userId))?.verificationAttemptCount || 0;
+
             const updateData = {
                 verificationAttemptCount: 0,
                 lastVerificationResult: {
@@ -158,6 +215,13 @@ export async function POST(request) {
             }
 
             console.log('User attempts reset:', userId);
+            await logVerificationEvent(userId, 'verification_override', {
+                action: 'reset_attempts',
+                previousAttemptCount: previousCount,
+                newAttemptCount: 0,
+                adminUserId,
+                timestamp: new Date().toISOString()
+            });
 
             return NextResponse.json({
                 success: true,
@@ -190,6 +254,17 @@ export async function GET(request) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
+        const lastResult = userData.lastVerificationResult;
+        let cooldownExpiry = null;
+
+        if (userData.verificationStatus === 'REJECTED' && lastResult?.rejectedAt) {
+            const rejectedAt = new Date(lastResult.rejectedAt);
+            const cooldownEnd = new Date(rejectedAt.getTime() + 24 * 60 * 60 * 1000);
+            if (cooldownEnd > new Date()) {
+                cooldownExpiry = cooldownEnd.toISOString();
+            }
+        }
+
         return NextResponse.json({
             uid: userId,
             verificationStatus: userData.verificationStatus || 'UNVERIFIED',
@@ -201,7 +276,8 @@ export async function GET(request) {
             diditSessionId: userData.diditSessionId || null,
             lastVerificationResult: userData.lastVerificationResult || null,
             lastVerificationAttemptAt: userData.lastVerificationAttemptAt || null,
-            verificationRequestedAt: userData.verificationRequestedAt || null
+            verificationRequestedAt: userData.verificationRequestedAt || null,
+            cooldownExpiry
         });
 
     } catch (error) {

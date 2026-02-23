@@ -3,6 +3,22 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { getVerificationData, getUserByDiditSession, updateVerificationStatus } from '@/lib/firebase-admin';
+import { db } from '@/lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+
+async function logVerificationEvent(userId, eventType, details) {
+    try {
+        const logRef = doc(db, 'auditLogs', `${eventType}_${userId}_${Date.now()}`);
+        await setDoc(logRef, {
+            eventType,
+            userId,
+            details,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Failed to log verification event:', error.message);
+    }
+}
 
 function verifyWebhookSignature(payload, signature, secret) {
     if (!signature || !secret) return false;
@@ -81,6 +97,11 @@ export async function GET(request) {
                         }
                     });
                     console.log('Updated user to VERIFIED');
+                    await logVerificationEvent(userData.uid, 'verification_approved', {
+                        source: 'webhook_get',
+                        diditStatus: status,
+                        timestamp: now
+                    });
                 } else if (finalStatus === 'REJECTED') {
                     const attemptCount = (userData.verificationAttemptCount || 0) + 1;
                     const newStatus = attemptCount >= 3 ? 'BLOCKED' : 'REJECTED';
@@ -96,6 +117,13 @@ export async function GET(request) {
                         }
                     });
                     console.log('Updated user to', newStatus, 'attempts:', attemptCount);
+                    await logVerificationEvent(userData.uid, newStatus === 'BLOCKED' ? 'verification_blocked' : 'verification_rejected', {
+                        source: 'webhook_get',
+                        diditStatus: status,
+                        attemptCount,
+                        previousStatus: userData.verificationStatus,
+                        timestamp: now
+                    });
                 } else {
                     await updateVerificationStatus(userData.uid, {
                         verificationStatus: 'PENDING',
@@ -183,6 +211,12 @@ export async function POST(request) {
 
             await updateVerificationStatus(userId, updateData);
 
+            await logVerificationEvent(userId, 'verification_approved', {
+                source: 'webhook_post',
+                diditStatus,
+                timestamp: now
+            });
+
             return NextResponse.json({
                 success: true,
                 message: 'Verification approved',
@@ -206,6 +240,14 @@ export async function POST(request) {
             };
 
             await updateVerificationStatus(userId, updateData);
+
+            await logVerificationEvent(userId, newStatus === 'BLOCKED' ? 'verification_blocked' : 'verification_rejected', {
+                source: 'webhook_post',
+                diditStatus,
+                attemptCount,
+                previousStatus: userData?.verificationStatus,
+                timestamp: now
+            });
 
             return NextResponse.json({
                 success: true,
