@@ -27,7 +27,7 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
-    const playerRef = useRef(null);
+    const cleanupRef = useRef(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
 
@@ -35,6 +35,14 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
         if (!isOpen || !scramble) return;
 
         let mounted = true;
+        const container = containerRef.current;
+        if (!container) return;
+
+        // Cleanup previous
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
 
         const loadTwistyPlayer = async () => {
             setIsLoading(true);
@@ -59,9 +67,11 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
 
                 if (!mounted || !containerRef.current) return;
 
-                if (playerRef.current) {
-                    playerRef.current.remove();
-                    playerRef.current = null;
+                // Safe cleanup
+                try {
+                    containerRef.current.innerHTML = '';
+                } catch (e) {
+                    // Ignore
                 }
 
                 const player = document.createElement('twisty-player');
@@ -74,7 +84,6 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
                 player.style.height = '350px';
 
                 containerRef.current.appendChild(player);
-                playerRef.current = player;
             } catch (err) {
                 console.error('Error loading twisty player:', err);
                 if (mounted) setLoadError(err.message);
@@ -85,11 +94,19 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
 
         loadTwistyPlayer();
 
+        // Cleanup function
+        cleanupRef.current = () => {
+            mounted = false;
+        };
+
         return () => {
             mounted = false;
-            if (playerRef.current && playerRef.current.parentNode) {
-                playerRef.current.remove();
-                playerRef.current = null;
+            try {
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+                }
+            } catch (e) {
+                // Ignore
             }
         };
     }, [isOpen, scramble, puzzle]);

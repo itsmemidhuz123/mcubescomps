@@ -39,13 +39,21 @@ export default function FloatingScrambleImage({
     className = ''
 }) {
     const containerRef = useRef(null);
-    const displayRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const cleanupRef = useRef(null);
 
     useEffect(() => {
         if (!scramble) return;
 
         let mounted = true;
+        const container = containerRef.current;
+        if (!container) return;
+
+        // Cleanup previous
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
 
         const loadScramble = async () => {
             try {
@@ -82,12 +90,12 @@ export default function FloatingScrambleImage({
 
                 if (!mounted || !containerRef.current) return;
 
-                // Clear previous
-                if (displayRef.current) {
-                    displayRef.current.remove();
+                // Safe cleanup - just clear innerHTML
+                try {
+                    containerRef.current.innerHTML = '';
+                } catch (e) {
+                    // Ignore
                 }
-
-                containerRef.current.innerHTML = '';
 
                 if (visualization === '3d') {
                     const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
@@ -101,7 +109,6 @@ export default function FloatingScrambleImage({
                     player.style.width = '100%';
                     player.style.height = '100%';
                     containerRef.current.appendChild(player);
-                    displayRef.current = player;
                 } else {
                     const display = document.createElement('scramble-display');
                     display.setAttribute('event', EVENT_TO_DISPLAY[eventId] || '3x3x3');
@@ -111,7 +118,6 @@ export default function FloatingScrambleImage({
                     display.style.width = '100%';
                     display.style.height = '100%';
                     containerRef.current.appendChild(display);
-                    displayRef.current = display;
                 }
 
                 setIsLoaded(true);
@@ -122,11 +128,19 @@ export default function FloatingScrambleImage({
 
         loadScramble();
 
+        // Cleanup function
+        cleanupRef.current = () => {
+            mounted = false;
+        };
+
         return () => {
             mounted = false;
-            if (displayRef.current) {
-                displayRef.current.remove();
-                displayRef.current = null;
+            try {
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+                }
+            } catch (e) {
+                // Ignore
             }
         };
     }, [scramble, eventId, visualization]);

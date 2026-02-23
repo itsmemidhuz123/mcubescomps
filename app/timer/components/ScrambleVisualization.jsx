@@ -34,6 +34,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const displayRef = useRef(null);
+    const cleanupRef = useRef(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
     const displayEvent = useMemo(() => EVENT_TO_DISPLAY[eventId] || '3x3x3', [eventId]);
@@ -42,6 +43,14 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
         if (!scramble) return;
 
         let mounted = true;
+        const container = containerRef.current;
+        if (!container) return;
+
+        // Cleanup previous
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
 
         const loadScramble = async () => {
             try {
@@ -72,18 +81,18 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
                     }
                 }
 
-                if (!mounted) return;
+                if (!mounted || !containerRef.current) return;
 
                 await new Promise(r => setTimeout(r, 50));
 
                 if (!mounted || !containerRef.current) return;
 
-                if (displayRef.current) {
-                    displayRef.current.remove();
-                    displayRef.current = null;
+                // Safe cleanup - just clear innerHTML
+                try {
+                    containerRef.current.innerHTML = '';
+                } catch (e) {
+                    // Ignore cleanup errors
                 }
-
-                containerRef.current.innerHTML = '';
 
                 if (visualization === '3d') {
                     const player = document.createElement('twisty-player');
@@ -118,11 +127,19 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
 
         loadScramble();
 
+        // Cleanup function
+        cleanupRef.current = () => {
+            mounted = false;
+        };
+
         return () => {
             mounted = false;
-            if (displayRef.current && displayRef.current.parentNode) {
-                displayRef.current.remove();
-                displayRef.current = null;
+            try {
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+                }
+            } catch (e) {
+                // Ignore
             }
         };
     }, [scramble, puzzle, displayEvent, height, visualization]);
