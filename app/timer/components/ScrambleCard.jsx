@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Copy, RefreshCw, Image as ImageIcon } from 'lucide-react';
+import { Copy, RefreshCw, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 export default function ScrambleCard({
@@ -14,9 +14,13 @@ export default function ScrambleCard({
 
     const handleCopy = async () => {
         if (scramble) {
-            await navigator.clipboard.writeText(scramble);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            try {
+                await navigator.clipboard.writeText(scramble);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
         }
     };
 
@@ -53,15 +57,26 @@ export default function ScrambleCard({
                         disabled={isLoading}
                         className="h-7 w-7 p-0 text-zinc-400 hover:text-white"
                     >
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        {isLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-4 h-4" />
+                        )}
                     </Button>
                 </div>
             </div>
 
-            <div className="text-center">
-                <p className="font-mono text-lg text-white tracking-wide leading-relaxed">
-                    {scramble || 'Loading scramble...'}
-                </p>
+            <div className="text-center min-h-[40px] flex items-center justify-center">
+                {isLoading ? (
+                    <div className="flex items-center gap-2 text-zinc-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generating...
+                    </div>
+                ) : (
+                    <p className="font-mono text-lg text-white tracking-wide leading-relaxed">
+                        {scramble || 'Press refresh to generate scramble'}
+                    </p>
+                )}
             </div>
 
             {copied && (
