@@ -11,9 +11,9 @@ export default function ScrambleDisplay({
     checkered = true
 }) {
     const containerRef = useRef(null);
-    const scrambleDisplayRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
+    const cleanupRef = useRef(null);
 
     const eventMap = {
         '333': '3x3x3',
@@ -48,8 +48,14 @@ export default function ScrambleDisplay({
             return;
         }
 
-        const container = containerRef.current;
         let mounted = true;
+        const container = containerRef.current;
+
+        // Cleanup previous
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
 
         const loadScrambleDisplay = async () => {
             setIsLoading(true);
@@ -58,10 +64,13 @@ export default function ScrambleDisplay({
             try {
                 await import(/* webpackIgnore: true */ 'https://cdn.cubing.net/v0/js/cubing/scramble-display');
 
-                if (!mounted) return;
+                if (!mounted || !containerRef.current) return;
 
-                if (scrambleDisplayRef.current) {
-                    scrambleDisplayRef.current.remove();
+                // Safe cleanup
+                try {
+                    containerRef.current.innerHTML = '';
+                } catch (e) {
+                    // Ignore
                 }
 
                 const effectiveVisualization = isVisualizationSupported(eventId, visualization)
@@ -81,7 +90,6 @@ export default function ScrambleDisplay({
                     if (mounted) setIsLoading(false);
                 });
 
-                scrambleDisplayRef.current = display;
                 container.appendChild(display);
 
                 setTimeout(() => {
@@ -99,11 +107,19 @@ export default function ScrambleDisplay({
 
         loadScrambleDisplay();
 
+        // Cleanup function
+        cleanupRef.current = () => {
+            mounted = false;
+        };
+
         return () => {
             mounted = false;
-            if (scrambleDisplayRef.current && scrambleDisplayRef.current.parentNode) {
-                scrambleDisplayRef.current.remove();
-                scrambleDisplayRef.current = null;
+            try {
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+                }
+            } catch (e) {
+                // Ignore
             }
         };
     }, [eventId, scramble, visualization, width, height, checkered]);
