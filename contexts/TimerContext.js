@@ -7,46 +7,46 @@ import { getEventById, WCA_EVENTS, DEFAULT_EVENT } from '@/lib/events';
 const TimerContext = createContext(null);
 
 export const TimerProvider = ({ children }) => {
-  const sessionManager = useSessionManager();
-  const [settings, setSettings] = useState({
-    inspectionEnabled: true,
-    showScrambleImage: true,
-    theme: 'dark'
-  });
-  const [scramble, setScramble] = useState('');
-  const [scrambleImageUrl, setScrambleImageUrl] = useState('');
+    const sessionManager = useSessionManager();
+    const [settings, setSettings] = useState({
+        inspectionEnabled: true,
+        showScrambleImage: true,
+        theme: 'dark'
+    });
+    const [scramble, setScramble] = useState('');
+    const [scrambleImageUrl, setScrambleImageUrl] = useState('');
 
-  const event = getEventById(sessionManager.currentEvent);
+    const event = getEventById(sessionManager.currentEvent);
 
-  const updateSettings = useCallback((newSettings) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
-  }, []);
+    const updateSettings = useCallback((newSettings) => {
+        setSettings(prev => ({ ...prev, ...newSettings }));
+    }, []);
 
-  const value = {
-    ...sessionManager,
-    event,
-    allEvents: WCA_EVENTS,
-    settings,
-    updateSettings,
-    scramble,
-    setScramble,
-    scrambleImageUrl,
-    setScrambleImageUrl
-  };
+    const value = {
+        ...sessionManager,
+        event,
+        allEvents: WCA_EVENTS,
+        settings,
+        updateSettings,
+        scramble,
+        setScramble,
+        scrambleImageUrl,
+        setScrambleImageUrl
+    };
 
-  return (
-    <TimerContext.Provider value={value}>
-      {children}
-    </TimerContext.Provider>
-  );
+    return (
+        <TimerContext.Provider value={value}>
+            {children}
+        </TimerContext.Provider>
+    );
 };
 
 export const useTimer = () => {
-  const context = useContext(TimerContext);
-  if (!context) {
-    throw new Error('useTimer must be used within a TimerProvider');
-  }
-  return context;
+    const context = useContext(TimerContext);
+    if (!context) {
+        throw new Error('useTimer must be used within a TimerProvider');
+    }
+    return context;
 };
 
 export default TimerContext;
