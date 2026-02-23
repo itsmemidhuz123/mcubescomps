@@ -144,6 +144,8 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         setShowPenaltyButtons(true);
     }, [inspectionPenalty]);
 
+    const inspectionZeroTimeRef = useRef(null);
+
     const updateInspection = useCallback(() => {
         if (inspectionStartRef.current === null) return;
 
@@ -152,10 +154,27 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         const remaining = Math.max(0, 15 - elapsedSecs);
         const remainingSecs = Math.ceil(remaining);
 
-        // Never show negative numbers
-        const displaySecs = Math.max(0, remainingSecs);
+        // Track when inspection reached 0
+        if (remainingSecs <= 0 && inspectionZeroTimeRef.current === null) {
+            inspectionZeroTimeRef.current = performance.now();
+        }
+
+        // Calculate time after inspection reached 0
+        const timeAfterZero = inspectionZeroTimeRef.current
+            ? (performance.now() - inspectionZeroTimeRef.current) / 1000
+            : 0;
+
+        // Display: show 0, then negative seconds to indicate overtime
+        let displaySecs;
+        if (remainingSecs > 0) {
+            displaySecs = remainingSecs;
+        } else {
+            // After 0, show negative seconds: -1, -2, -3...
+            displaySecs = -Math.ceil(timeAfterZero);
+        }
         setInspectionRemaining(displaySecs);
 
+        // Beeps
         if (remainingSecs <= 8 && lastBeepRef.current > 8) {
             playBeep(800, 150);
             lastBeepRef.current = 8;
@@ -169,17 +188,21 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             lastBeepRef.current = 0;
         }
 
-        // At exactly 0, if user is NOT holding, auto-start timer with no penalty
-        if (remainingSecs <= 0 && timerStateRef.current === TIMER_STATES.INSPECTION) {
-            startTimer('none');
+        // If user is NOT holding (INSPECTION state):
+        // - 0-2s after inspection 0: +2 penalty when released
+        // - 2s+ after inspection 0: auto-DNF
+        if (timerStateRef.current === TIMER_STATES.INSPECTION && timeAfterZero > 2) {
+            startTimer('DNF');
+            inspectionZeroTimeRef.current = null;
             return;
         }
 
         // If user is holding (INSPECTION_ARMED):
-        // - 15-17s elapsed: release will give +2
-        // - 17s+ elapsed: auto-DNF and start timer
+        // - 15-17s elapsed (0-2s after 0): release will give +2
+        // - 17s+ elapsed (2s+ after 0): auto-DNF
         if (elapsedSecs > 17 && timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
             startTimer('DNF');
+            inspectionZeroTimeRef.current = null;
             return;
         }
 
@@ -196,6 +219,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         setInspectionPenalty('none');
         lastBeepRef.current = 15;
         inspectionStartRef.current = performance.now();
+        inspectionZeroTimeRef.current = null;
         inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
     }, [updateInspection]);
 
@@ -218,6 +242,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
                 startTimer('none');
             }
         } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
+            // User was holding - check elapsed time
             if (inspectionStartRef.current !== null) {
                 const elapsed = performance.now() - inspectionStartRef.current;
                 const elapsedSecs = elapsed / 1000;
@@ -229,8 +254,31 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
                     penalty = '+2';
                 }
 
+                inspectionZeroTimeRef.current = null;
                 startTimer(penalty);
             } else {
+                startTimer('none');
+            }
+        } else if (currentState === TIMER_STATES.INSPECTION) {
+            // User was NOT holding - check if inspection has ended (0 or negative)
+            // Calculate time after inspection reached 0
+            if (inspectionZeroTimeRef.current !== null) {
+                const timeAfterZero = (performance.now() - inspectionZeroTimeRef.current) / 1000;
+
+                let penalty = 'none';
+                if (timeAfterZero > 2) {
+                    // Already auto-DNF'd, do nothing
+                    inspectionZeroTimeRef.current = null;
+                    return;
+                } else {
+                    // Within 0-2s after inspection 0: +2 penalty
+                    penalty = '+2';
+                }
+
+                inspectionZeroTimeRef.current = null;
+                startTimer(penalty);
+            } else {
+                // Inspection not yet at 0, normal start
                 startTimer('none');
             }
         }
