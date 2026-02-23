@@ -45,6 +45,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
     const lastBeepRef = useRef(15);
     const timerStateRef = useRef(timerState);
     const audioContextRef = useRef(null);
+    const inspectionActiveRef = useRef(false);
 
     useEffect(() => {
         timerStateRef.current = timerState;
@@ -130,6 +131,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
 
         const finalTime = startTimeRef.current !== null ? performance.now() - startTimeRef.current : 0;
         startTimeRef.current = null;
+        inspectionActiveRef.current = false;
 
         setTimerState(TIMER_STATES.STOPPED);
         setDisplayTime(finalTime);
@@ -161,6 +163,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         setInspectionPenalty('none');
         inspectionStartRef.current = null;
         inspectionZeroTimeRef.current = null;
+        inspectionActiveRef.current = false;
 
         generateScramble();
         if (onSolveComplete) onSolveComplete(solve);
@@ -224,9 +227,8 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             return;
         }
 
-        // Continue loop if still in inspection or inspection_armed state
-        if (timerStateRef.current === TIMER_STATES.INSPECTION ||
-            timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
+        // Continue loop if inspection is active
+        if (inspectionActiveRef.current) {
             inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
         }
     }, [playBeep, autoCompleteAsDnf]);
@@ -238,6 +240,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         lastBeepRef.current = 15;
         inspectionStartRef.current = performance.now();
         inspectionZeroTimeRef.current = null;
+        inspectionActiveRef.current = true;
         inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
     }, [updateInspection]);
 
@@ -317,6 +320,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         setDisplayTime(0);
         setInspectionRemaining(15);
         inspectionStartRef.current = null;
+        inspectionActiveRef.current = false;
 
         generateScramble();
         if (onSolveComplete) onSolveComplete(finalSolve);
