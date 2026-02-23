@@ -146,6 +146,26 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
 
     const inspectionZeroTimeRef = useRef(null);
 
+    // Auto-complete inspection as DNF (when exceeding -2 seconds)
+    const autoCompleteAsDnf = useCallback(async () => {
+        const solve = {
+            time: 0,
+            penalty: 'DNF',
+            createdAt: Date.now()
+        };
+
+        await addSolve(solve);
+
+        setTimerState(TIMER_STATES.IDLE);
+        setInspectionRemaining(15);
+        setInspectionPenalty('none');
+        inspectionStartRef.current = null;
+        inspectionZeroTimeRef.current = null;
+
+        generateScramble();
+        if (onSolveComplete) onSolveComplete(solve);
+    }, [addSolve, generateScramble, onSolveComplete]);
+
     const updateInspection = useCallback(() => {
         if (inspectionStartRef.current === null) return;
 
@@ -190,10 +210,9 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
 
         // If user is NOT holding (INSPECTION state):
         // - 0-2s after inspection 0: +2 penalty when released
-        // - 2s+ after inspection 0: auto-DNF
+        // - 2s+ after inspection 0: auto-DNF immediately
         if (timerStateRef.current === TIMER_STATES.INSPECTION && timeAfterZero > 2) {
-            startTimer('DNF');
-            inspectionZeroTimeRef.current = null;
+            autoCompleteAsDnf();
             return;
         }
 
@@ -201,8 +220,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         // - 15-17s elapsed (0-2s after 0): release will give +2
         // - 17s+ elapsed (2s+ after 0): auto-DNF
         if (elapsedSecs > 17 && timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
-            startTimer('DNF');
-            inspectionZeroTimeRef.current = null;
+            autoCompleteAsDnf();
             return;
         }
 
@@ -211,7 +229,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
             inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
         }
-    }, [playBeep, startTimer]);
+    }, [playBeep, autoCompleteAsDnf]);
 
     const startInspection = useCallback(() => {
         setTimerState(TIMER_STATES.INSPECTION);
