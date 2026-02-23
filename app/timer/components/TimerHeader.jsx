@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,14 +11,14 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Maximize2, Minimize2, Eye, EyeOff, Plus, History, Edit3 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 const SyncStatus = ({ status }) => {
     const statusConfig = {
         synced: { icon: Cloud, color: 'text-green-500', label: 'Synced' },
-        not_synced: { icon: CloudOff, color: 'text-orange-500', label: 'Not Synced' },
+        not_synced: { icon: CloudOff, color: 'text-orange-500', label: 'Local' },
         syncing: { icon: RefreshCw, color: 'text-blue-500', label: 'Syncing...' },
         error: { icon: CloudOff, color: 'text-red-500', label: 'Sync Error' }
     };
@@ -34,7 +34,21 @@ const SyncStatus = ({ status }) => {
     );
 };
 
-export default function TimerHeader({ syncStatus = 'not_synced', onMergeData, onSettingsClick }) {
+export default function TimerHeader({
+    syncStatus = 'not_synced',
+    onMergeData,
+    onSettingsClick,
+    isFullscreen = false,
+    onToggleFullscreen,
+    isFocusMode = false,
+    onToggleFocusMode,
+    sessionName = 'Session 1',
+    onNewSession,
+    onViewHistory,
+    onRenameSession,
+    eventIcon = '🎲',
+    eventName = '3x3x3'
+}) {
     const { user, userProfile, signOut } = useAuth();
     const router = useRouter();
     const [isSyncing, setIsSyncing] = useState(false);
@@ -53,14 +67,59 @@ export default function TimerHeader({ syncStatus = 'not_synced', onMergeData, on
     };
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-[#0f1117]/95 backdrop-blur-sm border-b border-[#161a23]">
+        <header
+            className={`fixed top-0 left-0 right-0 z-50 bg-[#0f1117]/95 backdrop-blur-sm border-b border-[#161a23] transition-opacity duration-300 ${isFullscreen || isFocusMode ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                }`}
+        >
             <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex-1" />
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 px-2 py-1 bg-[#161a23] rounded-lg border border-[#2a2f3a]">
+                        <span className="text-lg">{eventIcon}</span>
+                        <span className="text-sm text-white font-medium">{eventName}</span>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onNewSession}
+                        className="text-zinc-400 hover:text-white text-xs gap-1"
+                    >
+                        <Plus className="w-3 h-3" />
+                        New
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onViewHistory}
+                        className="text-zinc-400 hover:text-white text-xs gap-1"
+                    >
+                        <History className="w-3 h-3" />
+                    </Button>
+                </div>
 
                 <h1 className="text-lg font-bold text-white tracking-wider">TIMER</h1>
 
-                <div className="flex-1 flex justify-end items-center gap-3">
+                <div className="flex items-center gap-2">
                     {user && <SyncStatus status={syncStatus} />}
+
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onToggleFullscreen}
+                        className="h-8 w-8 text-zinc-400 hover:text-white"
+                        title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    >
+                        {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onToggleFocusMode}
+                        className="h-8 w-8 text-zinc-400 hover:text-white"
+                        title={isFocusMode ? 'Exit Focus Mode' : 'Focus Mode'}
+                    >
+                        {isFocusMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

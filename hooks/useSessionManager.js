@@ -182,9 +182,39 @@ export const useSessionManager = () => {
         return await createNewSession(currentEvent);
     }, [createNewSession, currentEvent]);
 
+    const deleteSession = useCallback(async (sessionId) => {
+        try {
+            await deleteSessionFromDB(sessionId);
+            await loadSessionsForEvent(currentEvent);
+            if (currentSession?.sessionId === sessionId) {
+                await loadLatestSession(currentEvent);
+            }
+        } catch (error) {
+            console.error('Error deleting session:', error);
+        }
+    }, [currentEvent, currentSession, loadSessionsForEvent, loadLatestSession]);
+
+    const renameSession = useCallback(async (sessionId, newName) => {
+        try {
+            const session = await getSession(sessionId);
+            if (session) {
+                session.name = newName;
+                session.updatedAt = Date.now();
+                await saveSession(session);
+                await loadSessionsForEvent(currentEvent);
+                if (currentSession?.sessionId === sessionId) {
+                    setCurrentSession(session);
+                }
+            }
+        } catch (error) {
+            console.error('Error renaming session:', error);
+        }
+    }, [currentEvent, currentSession, loadSessionsForEvent]);
+
     useEffect(() => {
         loadLatestSession(currentEvent);
-    }, [currentEvent, loadLatestSession]);
+        loadSessionsForEvent(currentEvent);
+    }, [currentEvent, loadLatestSession, loadSessionsForEvent]);
 
     return {
         currentEvent,
@@ -198,6 +228,8 @@ export const useSessionManager = () => {
         updateSolvePenalty,
         deleteSolve,
         createSession,
+        deleteSession,
+        renameSession,
         refreshSession: () => loadLatestSession(currentEvent)
     };
 };

@@ -11,8 +11,11 @@ import SolveList from '@/app/timer/components/SolveList';
 import StatsPanel from '@/app/timer/components/StatsPanel';
 import ScrambleImageModal from '@/app/timer/components/ScrambleImageModal';
 import MergeDialog from '@/app/timer/components/MergeDialog';
+import FloatingScrambleImage from '@/app/timer/components/FloatingScrambleImage';
+import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
+import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
 import { Button } from '@/components/ui/button';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3 } from 'lucide-react';
 
 const TIMER_STATES = {
     IDLE: 'idle',
@@ -23,7 +26,10 @@ const TIMER_STATES = {
     STOPPED: 'stopped'
 };
 
-function TimerEngine({ onSolveComplete, generateScramble }) {
+const SCRAMBLE_STORAGE_KEY = 'timer_current_scramble';
+const SCRAMBLE_EVENT_KEY = 'timer_current_event';
+
+function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
     const { addSolve, settings } = useTimer();
     const [timerState, setTimerState] = useState(TIMER_STATES.IDLE);
     const [displayTime, setDisplayTime] = useState(0);
@@ -148,27 +154,37 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
 
         setInspectionRemaining(remainingSecs);
 
-        // Beep at 8 seconds remaining
         if (remainingSecs <= 8 && lastBeepRef.current > 8) {
             playBeep(800, 150);
             lastBeepRef.current = 8;
         }
-        // Beep at 5 seconds remaining
         if (remainingSecs <= 5 && lastBeepRef.current > 5) {
             playBeep(800, 150);
             lastBeepRef.current = 5;
         }
-        // Beep at 0 seconds (time's up)
         if (remainingSecs <= 0 && lastBeepRef.current > 0) {
             playBeep(1200, 300);
             lastBeepRef.current = 0;
+
+            // Auto-start timer when inspection ends (no penalty since user wasn't holding)
+            if (timerStateRef.current === TIMER_STATES.INSPECTION) {
+                startTimer('none');
+                return;
+            }
         }
 
+        // If user holds beyond 17 seconds, auto-DNF and start timer
+        if (elapsedSecs > 17 && timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
+            startTimer('DNF');
+            return;
+        }
+
+        // Continue loop if still in inspection or inspection_armed state
         if (timerStateRef.current === TIMER_STATES.INSPECTION ||
             timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
             inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
         }
-    }, [playBeep]);
+    }, [playBeep, startTimer]);
 
     const startInspection = useCallback(() => {
         setTimerState(TIMER_STATES.INSPECTION);
@@ -188,15 +204,6 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         }
     }, []);
 
-    const unarmTimer = useCallback(() => {
-        const currentState = timerStateRef.current;
-        if (currentState === TIMER_STATES.ARMED) {
-            setTimerState(TIMER_STATES.IDLE);
-        } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
-            setTimerState(TIMER_STATES.INSPECTION);
-        }
-    }, []);
-
     const releaseFromArmed = useCallback(() => {
         const currentState = timerStateRef.current;
 
@@ -207,7 +214,6 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
                 startTimer('none');
             }
         } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
-            // Calculate penalty based on elapsed inspection time
             if (inspectionStartRef.current !== null) {
                 const elapsed = performance.now() - inspectionStartRef.current;
                 const elapsedSecs = elapsed / 1000;
@@ -246,7 +252,6 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         if (onSolveComplete) onSolveComplete(finalSolve);
     }, [pendingSolve, addSolve, generateScramble, onSolveComplete, inspectionPenalty]);
 
-    // Keyboard handlers
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.code === 'Space' && !e.repeat) {
@@ -258,7 +263,7 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
                 } else if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
                     armTimer();
                 } else if (currentState === TIMER_STATES.INSPECTION) {
-                    armTimer(); // Arm in inspection state
+                    armTimer();
                 }
             }
         };
@@ -281,7 +286,6 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         };
     }, [stopTimer, armTimer, releaseFromArmed]);
 
-    // Touch handlers
     const handleTouchStart = useCallback((e) => {
         e.preventDefault();
         const currentState = timerStateRef.current;
@@ -356,7 +360,7 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
 }
 
 function TimerPageContent() {
-    const { solves, stats, event, deleteSolve, updateSolvePenalty } = useTimer();
+    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, refreshSession } = useTimer();
     const eventId = event?.id || '333';
     const { scramble, isLoading, generateScramble } = useCubingScramble(eventId);
     const { syncStatus, showMergePrompt, setShowMergePrompt, syncAllSessions, mergeData } = useSyncManager();
@@ -364,12 +368,130 @@ function TimerPageContent() {
     const [showStats, setShowStats] = useState(false);
     const [currentSolve, setCurrentSolve] = useState(null);
     const [showScrambleImage, setShowScrambleImage] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isFocusMode, setIsFocusMode] = useState(false);
+    const [showSessionHistory, setShowSessionHistory] = useState(false);
+    const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
 
-    const handleSolveComplete = useCallback((solve) => {
+    const timer = TimerEngine({
+        onSolveComplete: handleSolveComplete,
+        generateScramble: () => {
+            generateScramble();
+            saveScrambleToStorage(scramble, eventId);
+        }
+    });
+
+    function handleSolveComplete(solve) {
         setCurrentSolve(solve.time);
+    }
+
+    // Scramble persistence
+    const saveScrambleToStorage = useCallback((scrambleStr, event) => {
+        try {
+            localStorage.setItem(SCRAMBLE_STORAGE_KEY, scrambleStr || '');
+            localStorage.setItem(SCRAMBLE_EVENT_KEY, event || '333');
+        } catch (e) { }
     }, []);
 
-    const timer = TimerEngine({ onSolveComplete: handleSolveComplete, generateScramble });
+    const loadScrambleFromStorage = useCallback(() => {
+        try {
+            const storedEvent = localStorage.getItem(SCRAMBLE_EVENT_KEY);
+            const storedScramble = localStorage.getItem(SCRAMBLE_STORAGE_KEY);
+            return { event: storedEvent, scramble: storedScramble };
+        } catch (e) {
+            return { event: null, scramble: null };
+        }
+    }, []);
+
+    // Fullscreen handlers
+    const toggleFullscreen = useCallback(() => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then(() => {
+                setIsFullscreen(true);
+            }).catch(() => { });
+        } else {
+            document.exitFullscreen().then(() => {
+                setIsFullscreen(false);
+            }).catch(() => { });
+        }
+    }, []);
+
+    const toggleFocusMode = useCallback(() => {
+        setIsFocusMode(prev => !prev);
+    }, []);
+
+    // ESC key handler for exiting fullscreen
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
+
+    // Hide footer in focus mode
+    useEffect(() => {
+        const footer = document.querySelector('footer');
+        if (footer) {
+            footer.style.display = isFocusMode || isFullscreen ? 'none' : '';
+        }
+        return () => {
+            if (footer) {
+                footer.style.display = '';
+            }
+        };
+    }, [isFocusMode, isFullscreen]);
+
+    // Load saved scramble on mount
+    useEffect(() => {
+        const { event: storedEvent, scramble: storedScramble } = loadScrambleFromStorage();
+        if (storedScramble && storedEvent === eventId) {
+            // Scramble already loaded via hook
+        }
+    }, [eventId, loadScrambleFromStorage]);
+
+    // Save scramble when it changes
+    useEffect(() => {
+        if (scramble) {
+            saveScrambleToStorage(scramble, eventId);
+        }
+    }, [scramble, eventId, saveScrambleToStorage]);
+
+    // Handle event switch
+    const handleEventSwitch = useCallback(async (newEventId) => {
+        await switchEvent(newEventId);
+    }, [switchEvent]);
+
+    // New session handlers
+    const handleNewSession = useCallback(() => {
+        if (solves && solves.length > 0) {
+            setShowNewSessionDialog(true);
+        } else {
+            handleConfirmNewSession();
+        }
+    }, [solves]);
+
+    const handleConfirmNewSession = useCallback(async () => {
+        setShowNewSessionDialog(false);
+        await createSession();
+        generateScramble();
+    }, [createSession, generateScramble]);
+
+    const handleLoadSession = useCallback(async (session) => {
+        setShowSessionHistory(false);
+        // Switch to the session's event if different
+        if (session.eventId !== eventId) {
+            await handleEventSwitch(session.eventId);
+        }
+        // The session will be loaded automatically
+        refreshSession();
+    }, [eventId, handleEventSwitch, refreshSession]);
+
+    const handleDeleteSession = useCallback(async (sessionId) => {
+        // TODO: Implement delete from IndexedDB
+        console.log('Delete session:', sessionId);
+    }, []);
 
     const bestSingle = useMemo(() => {
         if (!solves || solves.length === 0) return null;
@@ -392,20 +514,52 @@ function TimerPageContent() {
     }, [mergeData]);
 
     return (
-        <div className="min-h-screen bg-[#0f1117]">
-            <TimerHeader syncStatus={syncStatus} onMergeData={syncAllSessions} />
+        <div className={`min-h-screen bg-[#0f1117] ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}>
+            <TimerHeader
+                syncStatus={syncStatus}
+                onMergeData={syncAllSessions}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={toggleFullscreen}
+                isFocusMode={isFocusMode}
+                onToggleFocusMode={toggleFocusMode}
+                sessionName={currentSession?.name || `Session ${currentSession?.createdAt ? new Date(currentSession.createdAt).toLocaleDateString() : '1'}`}
+                onNewSession={handleNewSession}
+                onViewHistory={() => setShowSessionHistory(true)}
+                eventIcon={event?.icon || '🎲'}
+                eventName={event?.name || '3x3x3'}
+            />
 
-            <main className="pt-20 pb-8 px-4">
+            <main className={`${isFullscreen ? 'pt-0' : 'pt-20'} pb-8 px-4 transition-all duration-300`}>
                 <div className="max-w-2xl mx-auto space-y-4">
-                    <EventSelector />
+                    {!isFocusMode && <EventSelector />}
 
-                    <ScrambleCard
-                        scramble={scramble}
-                        onRefresh={generateScramble}
-                        onShowImage={() => setShowScrambleImage(true)}
-                        eventId={eventId}
-                        isLoading={isLoading}
-                    />
+                    <div className="relative">
+                        {/* Floating scramble image - always visible in corner */}
+                        <div className={`absolute top-0 right-0 z-10 ${isFocusMode ? 'top-4' : ''}`}>
+                            <FloatingScrambleImage
+                                scramble={scramble}
+                                eventId={eventId}
+                                onClick={() => setShowScrambleImage(true)}
+                            />
+                        </div>
+
+                        {!isFocusMode && (
+                            <ScrambleCard
+                                scramble={scramble}
+                                onRefresh={generateScramble}
+                                onShowImage={() => setShowScrambleImage(true)}
+                                eventId={eventId}
+                                isLoading={isLoading}
+                            />
+                        )}
+
+                        {/* Focus mode: show minimal scramble text */}
+                        {isFocusMode && scramble && (
+                            <div className="text-center mb-4">
+                                <p className="font-mono text-sm text-zinc-500">{scramble}</p>
+                            </div>
+                        )}
+                    </div>
 
                     <div className="text-center py-8">
                         <div
@@ -445,25 +599,44 @@ function TimerPageContent() {
                         )}
                     </div>
 
-                    <div className="flex justify-center">
-                        <Button variant="ghost" onClick={() => setShowStats(true)} className="text-zinc-400 hover:text-white">
-                            <BarChart3 className="w-4 h-4 mr-2" />View Stats
-                        </Button>
-                    </div>
+                    {!isFocusMode && (
+                        <>
+                            <div className="flex justify-center">
+                                <Button variant="ghost" onClick={() => setShowStats(true)} className="text-zinc-400 hover:text-white">
+                                    <BarChart3 className="w-4 h-4 mr-2" />View Stats
+                                </Button>
+                            </div>
 
-                    <SolveList
-                        solves={solves}
-                        stats={stats}
-                        bestSingle={bestSingle}
-                        onDeleteSolve={deleteSolve}
-                        onUpdatePenalty={updateSolvePenalty}
-                    />
+                            <SolveList
+                                solves={solves}
+                                stats={stats}
+                                bestSingle={bestSingle}
+                                onDeleteSolve={deleteSolve}
+                                onUpdatePenalty={updateSolvePenalty}
+                            />
+                        </>
+                    )}
                 </div>
             </main>
 
             <StatsPanel isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} currentSolve={currentSolve} />
             <ScrambleImageModal isOpen={showScrambleImage} onClose={() => setShowScrambleImage(false)} scramble={scramble} eventId={eventId} />
             <MergeDialog isOpen={showMergePrompt} onClose={() => setShowMergePrompt(false)} onMerge={handleMerge} onKeepLocal={handleKeepLocal} onDiscard={handleDiscard} localSessionCount={0} />
+            <SessionHistoryModal
+                isOpen={showSessionHistory}
+                onClose={() => setShowSessionHistory(false)}
+                sessions={sessions}
+                onLoadSession={handleLoadSession}
+                onDeleteSession={handleDeleteSession}
+                currentSessionId={currentSession?.sessionId}
+            />
+            <NewSessionDialog
+                isOpen={showNewSessionDialog}
+                onClose={() => setShowNewSessionDialog(false)}
+                onConfirm={handleConfirmNewSession}
+                onCancel={() => setShowNewSessionDialog(false)}
+                sessionName={currentSession?.name || 'Current Session'}
+            />
         </div>
     );
 }
