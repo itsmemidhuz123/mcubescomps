@@ -27,6 +27,7 @@ export default function VerificationCenterPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [showAllUsers, setShowAllUsers] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
     const [showActionDialog, setShowActionDialog] = useState(false);
     const [actionType, setActionType] = useState(null);
@@ -47,16 +48,17 @@ export default function VerificationCenterPage() {
         if (user && isSuperAdmin) {
             fetchData();
         }
-    }, [user, isSuperAdmin, statusFilter]);
+    }, [user, isSuperAdmin, statusFilter, showAllUsers]);
 
     async function fetchData() {
         setLoading(true);
         try {
             const authToken = await user.getIdToken();
 
-            console.log('Fetching users from Firebase...');
+            console.log('Fetching users from Firebase...', showAllUsers ? '(all users)' : '(with verification)');
 
-            const res = await fetch('/api/admin/users?type=verification&limit=200', {
+            const type = showAllUsers ? 'all' : 'verification';
+            const res = await fetch(`/api/admin/users?type=${type}&limit=200`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`
                 }
@@ -95,6 +97,7 @@ export default function VerificationCenterPage() {
     const verifiedUsers = filteredUsers.filter(u => u.verificationStatus === 'VERIFIED');
     const rejectedUsers = filteredUsers.filter(u => u.verificationStatus === 'REJECTED');
     const blockedUsers = filteredUsers.filter(u => u.verificationStatus === 'BLOCKED');
+    const unverifiedUsers = filteredUsers.filter(u => !u.verificationStatus || u.verificationStatus === 'UNVERIFIED');
     const duplicateUsers = filteredUsers.filter(u => u.duplicateDetected === true);
 
     async function handleAction() {
@@ -218,6 +221,12 @@ export default function VerificationCenterPage() {
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
                         </Button>
+                        <Button
+                            variant={showAllUsers ? "default" : "outline"}
+                            onClick={() => setShowAllUsers(!showAllUsers)}
+                        >
+                            {showAllUsers ? 'Showing All' : 'Show All Users'}
+                        </Button>
                     </div>
                 </div>
 
@@ -292,6 +301,7 @@ export default function VerificationCenterPage() {
                 <Tabs defaultValue="all" className="space-y-4">
                     <TabsList>
                         <TabsTrigger value="all">All Users ({filteredUsers.length})</TabsTrigger>
+                        <TabsTrigger value="unverified">Unverified ({unverifiedUsers.length})</TabsTrigger>
                         <TabsTrigger value="pending">Pending ({pendingUsers.length})</TabsTrigger>
                         <TabsTrigger value="verified">Verified ({verifiedUsers.length})</TabsTrigger>
                         <TabsTrigger value="rejected">Rejected ({rejectedUsers.length})</TabsTrigger>
@@ -317,6 +327,7 @@ export default function VerificationCenterPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="ALL">All Status</SelectItem>
+                                        <SelectItem value="UNVERIFIED">Unverified</SelectItem>
                                         <SelectItem value="PENDING">Pending</SelectItem>
                                         <SelectItem value="VERIFIED">Verified</SelectItem>
                                         <SelectItem value="REJECTED">Rejected</SelectItem>
