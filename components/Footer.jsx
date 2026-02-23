@@ -4,6 +4,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Facebook, Twitter, Instagram, Youtube, Linkedin, Github } from 'lucide-react';
 
+const APP_VERSION = '1.0.07';
+
 const Footer = () => {
     const currentYear = new Date().getFullYear();
 
@@ -59,7 +61,12 @@ const Footer = () => {
                                     className="rounded-lg object-cover"
                                 />
                             </div>
-                            <span className="text-xl font-bold text-zinc-900 dark:text-white">MCUBES</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl font-bold text-zinc-900 dark:text-white">MCUBES</span>
+                                <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-700">
+                                    BETA
+                                </span>
+                            </div>
                         </div>
                         <p className="text-sm text-zinc-700 dark:text-zinc-200 mb-6 max-w-xs">
                             The ultimate platform for speedcubers to compete, track progress, and connect with the global cubing community.
@@ -155,9 +162,15 @@ const Footer = () => {
                 {/* Bottom Section */}
                 <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-700">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p className="text-sm text-zinc-700 dark:text-zinc-200 text-center md:text-left">
-                            © {currentYear} MCUBES. All rights reserved.
-                        </p>
+                        <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4">
+                            <p className="text-sm text-zinc-700 dark:text-zinc-200 text-center md:text-left">
+                                © {currentYear} MCUBES. All rights reserved.
+                            </p>
+                            <span className="hidden md:inline text-zinc-400">•</span>
+                            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                                v{APP_VERSION}
+                            </span>
+                        </div>
                         <div className="flex items-center gap-6">
                             <Link href="/sitemap" className="text-sm text-zinc-700 dark:text-zinc-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
                                 Sitemap
