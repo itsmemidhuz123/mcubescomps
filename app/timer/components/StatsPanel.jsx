@@ -5,6 +5,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { formatTime } from '@/lib/timerStats';
 
@@ -24,10 +25,13 @@ export default function StatsPanel({ isOpen, onClose, stats, currentSolve }) {
             <DialogContent className="bg-[#0f1117] border-[#2a2f3a] max-w-sm w-[90vw]">
                 <DialogHeader>
                     <DialogTitle className="text-white">Statistics</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Your solve statistics including best single and averages
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-3">
-                    {statItems.map((item, index) => (
+                    {statItems.map((item) => (
                         <div
                             key={item.label}
                             className={`flex justify-between items-center p-3 rounded-lg ${item.highlight ? 'bg-[#161a23]' : 'bg-transparent'

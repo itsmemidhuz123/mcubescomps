@@ -1,22 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 
-const SCRAMBLE_TO_CUBING = {
-    '333': 'cube',
+const EVENT_TO_PUZZLE = {
+    '333': '3x3x3',
     '222': '2x2x2',
     '444': '4x4x4',
     '555': '5x5x5',
     '666': '6x6x6',
     '777': '7x7x7',
-    'pyram': 'pyram',
+    'pyram': 'pyraminx',
     'skewb': 'skewb',
     'sq1': 'sq1',
     'clock': 'clock',
@@ -25,56 +25,70 @@ const SCRAMBLE_TO_CUBING = {
 
 export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId }) {
     const containerRef = useRef(null);
-    const playerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
+    const scriptLoadedRef = useRef(false);
 
     useEffect(() => {
         if (!isOpen || !scramble) return;
 
         const loadTwistyPlayer = async () => {
             setIsLoading(true);
+            setLoadError(null);
 
-            if (!window.twistyPlayer) {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/cubing@0.0.38/twistyplayer/dist/twistyplayer.js';
-                script.async = true;
-                document.head.appendChild(script);
+            try {
+                if (!scriptLoadedRef.current) {
+                    await new Promise((resolve, reject) => {
+                        const existingScript = document.querySelector('script[src*="cubing/twisty"]');
+                        if (existingScript) {
+                            scriptLoadedRef.current = true;
+                            resolve();
+                            return;
+                        }
 
-                await new Promise((resolve) => {
-                    script.onload = resolve;
-                });
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.cubing.net/js/cubing/twisty';
+                        script.type = 'module';
+                        script.onload = () => {
+                            scriptLoadedRef.current = true;
+                            resolve();
+                        };
+                        script.onerror = () => reject(new Error('Failed to load twisty player'));
+                        document.head.appendChild(script);
+                    });
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+
+                    const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
+
+                    const player = document.createElement('twisty-player');
+                    player.setAttribute('puzzle', puzzle);
+                    player.setAttribute('alg', scramble);
+                    player.setAttribute('hint', 'none');
+                    player.setAttribute('control-panel', 'none');
+                    player.setAttribute('background', 'none');
+                    player.style.width = '100%';
+                    player.style.height = '350px';
+
+                    containerRef.current.appendChild(player);
+                }
+            } catch (err) {
+                console.error('Error loading twisty player:', err);
+                setLoadError(err.message);
+            } finally {
+                setIsLoading(false);
             }
-
-            if (playerRef.current) {
-                playerRef.current.remove();
-            }
-
-            const player = document.createElement('twisty-player');
-            player.setAttribute('animation', 'none');
-            player.setAttribute('hint', 'none');
-            player.setAttribute('background', 'none');
-            player.setAttribute('camera-orbit', '45deg 55deg 2.5');
-            player.setAttribute('experimental-time-estimator', 'none');
-
-            const cubingEvent = SCRAMBLE_TO_CUBING[eventId] || 'cube';
-            player.setAttribute('puzzle', cubingEvent);
-            player.setAttribute('scramble', scramble);
-
-            if (containerRef.current) {
-                containerRef.current.innerHTML = '';
-                containerRef.current.appendChild(player);
-                playerRef.current = player;
-            }
-
-            setIsLoading(false);
         };
 
         loadTwistyPlayer();
 
         return () => {
-            if (playerRef.current) {
-                playerRef.current.remove();
-                playerRef.current = null;
+            if (containerRef.current) {
+                containerRef.current.innerHTML = '';
             }
         };
     }, [isOpen, scramble, eventId]);
@@ -84,19 +98,25 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
             <DialogContent className="bg-[#0f1117] border-[#2a2f3a] max-w-lg w-[90vw]">
                 <DialogHeader>
                     <DialogTitle className="text-white">Scramble Visualization</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        3D visualization of the current scramble
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div
                     ref={containerRef}
-                    className="w-full aspect-square flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden"
+                    className="w-full min-h-[350px] flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden"
                 >
                     {isLoading && (
                         <div className="text-zinc-500">Loading 3D view...</div>
                     )}
+                    {loadError && (
+                        <div className="text-red-400">Failed to load: {loadError}</div>
+                    )}
                 </div>
 
                 <div className="text-center">
-                    <p className="font-mono text-sm text-zinc-400">{scramble}</p>
+                    <p className="font-mono text-sm text-zinc-400 break-all">{scramble}</p>
                 </div>
             </DialogContent>
         </Dialog>

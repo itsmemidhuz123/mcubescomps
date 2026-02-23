@@ -7,6 +7,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTimer } from '@/contexts/TimerContext';
@@ -55,6 +56,9 @@ export default function EventSelector() {
                 <DialogContent className="bg-[#0f1117] border-[#2a2f3a] max-w-md w-[90vw]">
                     <DialogHeader>
                         <DialogTitle className="text-white">Select Event</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Choose a WCA event to practice
+                        </DialogDescription>
                     </DialogHeader>
 
                     <ScrollArea className="h-[60vh] pr-4">

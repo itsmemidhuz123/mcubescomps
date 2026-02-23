@@ -1,16 +1,19 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Copy, RefreshCw, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Copy, RefreshCw, Image as ImageIcon, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
+import ScrambleVisualization from './ScrambleVisualization';
 
 export default function ScrambleCard({
     scramble,
     onRefresh,
     onShowImage,
+    eventId,
     isLoading = false
 }) {
     const [copied, setCopied] = useState(false);
+    const [showVisualization, setShowVisualization] = useState(true);
 
     const handleCopy = async () => {
         if (scramble) {
@@ -31,6 +34,18 @@ export default function ScrambleCard({
                     Scramble
                 </span>
                 <div className="flex gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowVisualization(!showVisualization)}
+                        className="h-7 w-7 p-0 text-zinc-400 hover:text-white"
+                    >
+                        {showVisualization ? (
+                            <ChevronUp className="w-4 h-4" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4" />
+                        )}
+                    </Button>
                     {onShowImage && (
                         <Button
                             variant="ghost"
@@ -66,6 +81,16 @@ export default function ScrambleCard({
                 </div>
             </div>
 
+            {showVisualization && scramble && (
+                <div className="mb-3">
+                    <ScrambleVisualization
+                        scramble={scramble}
+                        eventId={eventId}
+                        height="140px"
+                    />
+                </div>
+            )}
+
             <div className="text-center min-h-[40px] flex items-center justify-center">
                 {isLoading ? (
                     <div className="flex items-center gap-2 text-zinc-500">
@@ -73,7 +98,7 @@ export default function ScrambleCard({
                         Generating...
                     </div>
                 ) : (
-                    <p className="font-mono text-lg text-white tracking-wide leading-relaxed">
+                    <p className="font-mono text-sm text-zinc-400 tracking-wide leading-relaxed break-all px-2">
                         {scramble || 'Press refresh to generate scramble'}
                     </p>
                 )}
