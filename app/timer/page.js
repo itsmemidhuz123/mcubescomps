@@ -18,6 +18,7 @@ const TIMER_STATES = {
     IDLE: 'idle',
     ARMED: 'armed',
     INSPECTION: 'inspection',
+    INSPECTION_ARMED: 'inspection_armed',
     RUNNING: 'running',
     STOPPED: 'stopped'
 };
@@ -26,7 +27,7 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
     const { addSolve, settings } = useTimer();
     const [timerState, setTimerState] = useState(TIMER_STATES.IDLE);
     const [displayTime, setDisplayTime] = useState(0);
-    const [inspectionTime, setInspectionTime] = useState(15);
+    const [inspectionRemaining, setInspectionRemaining] = useState(15);
     const [pendingSolve, setPendingSolve] = useState(null);
     const [showPenaltyButtons, setShowPenaltyButtons] = useState(false);
     const [inspectionPenalty, setInspectionPenalty] = useState('none');
@@ -37,29 +38,31 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
     const inspectionRafIdRef = useRef(null);
     const lastBeepRef = useRef(15);
     const timerStateRef = useRef(timerState);
+    const audioContextRef = useRef(null);
 
     useEffect(() => {
         timerStateRef.current = timerState;
     }, [timerState]);
 
-    const formatTime = useCallback((ms) => {
-        if (ms < 0) return '0.00';
-        const seconds = Math.floor(ms / 1000);
-        const centiseconds = Math.floor((ms % 1000) / 10);
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        if (minutes > 0) {
-            return `${minutes}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+    const getAudioContext = useCallback(() => {
+        if (!audioContextRef.current) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                audioContextRef.current = new AudioContext();
+            }
         }
-        return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
+        return audioContextRef.current;
     }, []);
 
-    const playBeep = useCallback((frequency = 800, duration = 100) => {
+    const playBeep = useCallback((frequency = 800, duration = 150) => {
         try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return;
+            const audioContext = getAudioContext();
+            if (!audioContext) return;
 
-            const audioContext = new AudioContext();
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
@@ -77,16 +80,29 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         } catch (e) {
             // Audio not available
         }
+    }, [getAudioContext]);
+
+    const formatTime = useCallback((ms) => {
+        if (ms < 0) return '0.00';
+        const seconds = Math.floor(ms / 1000);
+        const centiseconds = Math.floor((ms % 1000) / 10);
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        if (minutes > 0) {
+            return `${minutes}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+        }
+        return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     }, []);
 
-    const startTimer = useCallback(() => {
+    const startTimer = useCallback((penalty = 'none') => {
         if (inspectionRafIdRef.current) {
             cancelAnimationFrame(inspectionRafIdRef.current);
             inspectionRafIdRef.current = null;
         }
 
+        setInspectionPenalty(penalty);
         setTimerState(TIMER_STATES.RUNNING);
-        setInspectionTime(15);
+        setInspectionRemaining(15);
         startTimeRef.current = performance.now();
 
         const updateDisplay = () => {
@@ -114,7 +130,7 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
 
         const solve = {
             time: finalTime,
-            penalty: inspectionPenalty !== 'none' ? inspectionPenalty : 'none',
+            penalty: inspectionPenalty,
             createdAt: Date.now()
         };
 
@@ -126,42 +142,37 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         if (inspectionStartRef.current === null) return;
 
         const elapsed = performance.now() - inspectionStartRef.current;
-        const remaining = Math.max(0, (15 * 1000) - elapsed);
-        const remainingSecs = Math.ceil(remaining / 1000);
+        const elapsedSecs = elapsed / 1000;
+        const remaining = Math.max(0, 15 - elapsedSecs);
+        const remainingSecs = Math.ceil(remaining);
 
-        setInspectionTime(remainingSecs);
+        setInspectionRemaining(remainingSecs);
 
+        // Beep at 8 seconds remaining
         if (remainingSecs <= 8 && lastBeepRef.current > 8) {
             playBeep(800, 150);
             lastBeepRef.current = 8;
         }
+        // Beep at 5 seconds remaining
         if (remainingSecs <= 5 && lastBeepRef.current > 5) {
             playBeep(800, 150);
             lastBeepRef.current = 5;
         }
+        // Beep at 0 seconds (time's up)
         if (remainingSecs <= 0 && lastBeepRef.current > 0) {
             playBeep(1200, 300);
             lastBeepRef.current = 0;
         }
 
-        const elapsedSecs = elapsed / 1000;
-        if (elapsedSecs > 17) {
-            setInspectionPenalty('DNF');
-            startTimer();
-            return;
-        }
-        if (elapsedSecs > 15 && inspectionPenalty !== '+2') {
-            setInspectionPenalty('+2');
-        }
-
-        if (timerStateRef.current === TIMER_STATES.INSPECTION) {
+        if (timerStateRef.current === TIMER_STATES.INSPECTION ||
+            timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
             inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
         }
-    }, [playBeep, startTimer, inspectionPenalty]);
+    }, [playBeep]);
 
     const startInspection = useCallback(() => {
         setTimerState(TIMER_STATES.INSPECTION);
-        setInspectionTime(15);
+        setInspectionRemaining(15);
         setInspectionPenalty('none');
         lastBeepRef.current = 15;
         inspectionStartRef.current = performance.now();
@@ -169,10 +180,51 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
     }, [updateInspection]);
 
     const armTimer = useCallback(() => {
-        if (timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.STOPPED) {
+        const currentState = timerStateRef.current;
+        if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
             setTimerState(TIMER_STATES.ARMED);
+        } else if (currentState === TIMER_STATES.INSPECTION) {
+            setTimerState(TIMER_STATES.INSPECTION_ARMED);
         }
-    }, [timerState]);
+    }, []);
+
+    const unarmTimer = useCallback(() => {
+        const currentState = timerStateRef.current;
+        if (currentState === TIMER_STATES.ARMED) {
+            setTimerState(TIMER_STATES.IDLE);
+        } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
+            setTimerState(TIMER_STATES.INSPECTION);
+        }
+    }, []);
+
+    const releaseFromArmed = useCallback(() => {
+        const currentState = timerStateRef.current;
+
+        if (currentState === TIMER_STATES.ARMED) {
+            if (settings.inspectionEnabled) {
+                startInspection();
+            } else {
+                startTimer('none');
+            }
+        } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
+            // Calculate penalty based on elapsed inspection time
+            if (inspectionStartRef.current !== null) {
+                const elapsed = performance.now() - inspectionStartRef.current;
+                const elapsedSecs = elapsed / 1000;
+
+                let penalty = 'none';
+                if (elapsedSecs > 17) {
+                    penalty = 'DNF';
+                } else if (elapsedSecs > 15) {
+                    penalty = '+2';
+                }
+
+                startTimer(penalty);
+            } else {
+                startTimer('none');
+            }
+        }
+    }, [settings.inspectionEnabled, startInspection, startTimer]);
 
     const confirmSolve = useCallback(async (penalty = 'none') => {
         if (!pendingSolve) return;
@@ -187,12 +239,14 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         setInspectionPenalty('none');
         setTimerState(TIMER_STATES.IDLE);
         setDisplayTime(0);
-        setInspectionTime(15);
+        setInspectionRemaining(15);
+        inspectionStartRef.current = null;
 
         generateScramble();
         if (onSolveComplete) onSolveComplete(finalSolve);
     }, [pendingSolve, addSolve, generateScramble, onSolveComplete, inspectionPenalty]);
 
+    // Keyboard handlers
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.code === 'Space' && !e.repeat) {
@@ -201,14 +255,10 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
 
                 if (currentState === TIMER_STATES.RUNNING) {
                     stopTimer();
-                } else if (currentState === TIMER_STATES.IDLE) {
+                } else if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
                     armTimer();
-                } else if (currentState === TIMER_STATES.ARMED) {
-                    if (settings.inspectionEnabled) {
-                        startInspection();
-                    } else {
-                        startTimer();
-                    }
+                } else if (currentState === TIMER_STATES.INSPECTION) {
+                    armTimer(); // Arm in inspection state
                 }
             }
         };
@@ -216,15 +266,7 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
         const handleKeyUp = (e) => {
             if (e.code === 'Space') {
                 e.preventDefault();
-                const currentState = timerStateRef.current;
-
-                if (currentState === TIMER_STATES.ARMED) {
-                    if (settings.inspectionEnabled) {
-                        startInspection();
-                    } else {
-                        startTimer();
-                    }
-                }
+                releaseFromArmed();
             }
         };
 
@@ -237,56 +279,76 @@ function TimerEngine({ onSolveComplete, generateScramble }) {
             if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
             if (inspectionRafIdRef.current) cancelAnimationFrame(inspectionRafIdRef.current);
         };
-    }, [settings.inspectionEnabled, stopTimer, armTimer, startInspection, startTimer]);
+    }, [stopTimer, armTimer, releaseFromArmed]);
 
-    const handlePressStart = useCallback(() => {
+    // Touch handlers
+    const handleTouchStart = useCallback((e) => {
+        e.preventDefault();
         const currentState = timerStateRef.current;
 
         if (currentState === TIMER_STATES.RUNNING) {
             stopTimer();
-        } else if (currentState === TIMER_STATES.IDLE) {
+        } else if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
             armTimer();
-        } else if (currentState === TIMER_STATES.ARMED) {
-            if (settings.inspectionEnabled) {
-                startInspection();
-            } else {
-                startTimer();
-            }
+        } else if (currentState === TIMER_STATES.INSPECTION) {
+            armTimer();
         }
-    }, [stopTimer, armTimer, startInspection, startTimer, settings.inspectionEnabled]);
+    }, [stopTimer, armTimer]);
+
+    const handleTouchEnd = useCallback((e) => {
+        e.preventDefault();
+        releaseFromArmed();
+    }, [releaseFromArmed]);
 
     const getTimerColor = useCallback(() => {
         const currentState = timerStateRef.current;
 
-        if (currentState === TIMER_STATES.ARMED) return 'text-green-500';
-        if (currentState === TIMER_STATES.RUNNING) return 'text-white';
+        if (currentState === TIMER_STATES.ARMED || currentState === TIMER_STATES.INSPECTION_ARMED) {
+            return 'text-green-500';
+        }
+        if (currentState === TIMER_STATES.RUNNING) {
+            return 'text-white';
+        }
         if (currentState === TIMER_STATES.INSPECTION) {
-            if (inspectionTime <= 3) return 'text-red-500';
-            if (inspectionTime <= 8) return 'text-yellow-500';
+            if (inspectionRemaining <= 0) return 'text-red-500 animate-pulse';
+            if (inspectionRemaining <= 3) return 'text-red-500';
+            if (inspectionRemaining <= 8) return 'text-yellow-500';
             return 'text-yellow-400';
         }
         return 'text-white';
-    }, [inspectionTime]);
+    }, [inspectionRemaining]);
 
     const getStatusText = useCallback(() => {
         const currentState = timerStateRef.current;
 
-        if (currentState === TIMER_STATES.RUNNING) return 'Press SPACE to stop';
-        if (currentState === TIMER_STATES.INSPECTION) return 'Inspection...';
+        if (currentState === TIMER_STATES.RUNNING) return 'Press SPACE or tap to stop';
+        if (currentState === TIMER_STATES.INSPECTION) return 'Hold SPACE or tap to start';
+        if (currentState === TIMER_STATES.INSPECTION_ARMED) return 'Release to start';
         if (currentState === TIMER_STATES.ARMED) return 'Release to start';
         if (currentState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
-        return 'Hold SPACE to start';
+        return 'Hold SPACE or tap to start';
     }, [showPenaltyButtons]);
+
+    const getDisplayValue = useCallback(() => {
+        const currentState = timerStateRef.current;
+
+        if (currentState === TIMER_STATES.INSPECTION || currentState === TIMER_STATES.INSPECTION_ARMED) {
+            return inspectionRemaining;
+        }
+        return formatTime(displayTime);
+    }, [inspectionRemaining, displayTime, formatTime]);
 
     return {
         timerState,
         displayTime,
-        inspectionTime,
+        inspectionRemaining,
         inspectionPenalty,
         formatTime,
         getTimerColor,
         getStatusText,
-        handlePressStart,
+        getDisplayValue,
+        handleTouchStart,
+        handleTouchEnd,
         showPenaltyButtons,
         pendingSolve,
         confirmSolve
@@ -348,12 +410,11 @@ function TimerPageContent() {
                     <div className="text-center py-8">
                         <div
                             className={`text-8xl md:text-9xl font-mono font-bold transition-colors cursor-pointer select-none ${timer.getTimerColor()}`}
-                            onTouchStart={timer.handlePressStart}
+                            onTouchStart={timer.handleTouchStart}
+                            onTouchEnd={timer.handleTouchEnd}
+                            onContextMenu={(e) => e.preventDefault()}
                         >
-                            {timer.timerState === TIMER_STATES.INSPECTION
-                                ? timer.inspectionTime
-                                : timer.formatTime(timer.displayTime)
-                            }
+                            {timer.getDisplayValue()}
                         </div>
                         <p className="text-zinc-400 mt-4 mb-6">{timer.getStatusText()}</p>
 
