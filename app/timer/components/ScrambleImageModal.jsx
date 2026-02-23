@@ -23,93 +23,86 @@ const EVENT_TO_PUZZLE = {
     'minx': 'megaminx'
 };
 
-export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId }) {
+function ScrambleModalInner({ scramble, eventId }) {
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
-    const cleanupRef = useRef(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
 
     useEffect(() => {
-        if (!isOpen || !scramble) return;
+        if (!scramble) return;
 
-        let mounted = true;
-        const container = containerRef.current;
-        if (!container) return;
+        let cancelled = false;
+        let element = null;
 
-        // Cleanup previous
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
-        }
-
-        const loadTwistyPlayer = async () => {
+        const init = async () => {
             setIsLoading(true);
             setLoadError(null);
 
             try {
-                const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
-                if (!existingScript) {
+                let script = document.getElementById('twisty-script-modal');
+
+                if (!script) {
+                    script = document.createElement('script');
+                    script.id = 'twisty-script-modal';
+                    script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+                    script.type = 'module';
+                    document.head.appendChild(script);
+
                     await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                        script.type = 'module';
                         script.onload = resolve;
-                        script.onerror = () => reject(new Error('Failed to load twisty player'));
-                        document.head.appendChild(script);
+                        script.onerror = () => reject(new Error('Failed to load'));
                     });
                 }
 
-                if (!mounted) return;
+                if (cancelled) return;
 
                 await new Promise(r => setTimeout(r, 100));
 
-                if (!mounted || !containerRef.current) return;
+                if (cancelled || !containerRef.current) return;
 
-                // Safe cleanup
-                try {
-                    containerRef.current.innerHTML = '';
-                } catch (e) {
-                    // Ignore
-                }
+                element = document.createElement('twisty-player');
+                element.setAttribute('puzzle', puzzle);
+                element.setAttribute('alg', scramble);
+                element.setAttribute('hint', 'none');
+                element.setAttribute('control-panel', 'none');
+                element.setAttribute('background', 'none');
+                element.style.width = '100%';
+                element.style.height = '350px';
 
-                const player = document.createElement('twisty-player');
-                player.setAttribute('puzzle', puzzle);
-                player.setAttribute('alg', scramble);
-                player.setAttribute('hint', 'none');
-                player.setAttribute('control-panel', 'none');
-                player.setAttribute('background', 'none');
-                player.style.width = '100%';
-                player.style.height = '350px';
-
-                containerRef.current.appendChild(player);
+                containerRef.current.appendChild(element);
             } catch (err) {
-                console.error('Error loading twisty player:', err);
-                if (mounted) setLoadError(err.message);
+                if (!cancelled) setLoadError(err.message);
             } finally {
-                if (mounted) setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
-        loadTwistyPlayer();
-
-        // Cleanup function
-        cleanupRef.current = () => {
-            mounted = false;
-        };
+        init();
 
         return () => {
-            mounted = false;
-            try {
-                if (containerRef.current) {
-                    containerRef.current.innerHTML = '';
-                }
-            } catch (e) {
-                // Ignore
-            }
+            cancelled = true;
         };
-    }, [isOpen, scramble, puzzle]);
+    }, [scramble, puzzle]);
+
+    return (
+        <div
+            ref={containerRef}
+            className="w-full min-h-[350px] flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden"
+        >
+            {isLoading && (
+                <div className="text-zinc-500">Loading 3D view...</div>
+            )}
+            {loadError && (
+                <div className="text-red-400">Failed to load: {loadError}</div>
+            )}
+        </div>
+    );
+}
+
+export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId }) {
+    const key = useMemo(() => `${scramble}_${eventId}`, [scramble, eventId]);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -121,17 +114,7 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
                     </DialogDescription>
                 </DialogHeader>
 
-                <div
-                    ref={containerRef}
-                    className="w-full min-h-[350px] flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden"
-                >
-                    {isLoading && (
-                        <div className="text-zinc-500">Loading 3D view...</div>
-                    )}
-                    {loadError && (
-                        <div className="text-red-400">Failed to load: {loadError}</div>
-                    )}
-                </div>
+                {scramble && <ScrambleModalInner key={key} scramble={scramble} eventId={eventId} />}
 
                 <div className="text-center">
                     <p className="font-mono text-sm text-zinc-400 break-all">{scramble}</p>

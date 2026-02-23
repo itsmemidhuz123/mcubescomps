@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Maximize2, Box } from 'lucide-react';
 
 const EVENT_TO_PUZZLE = {
@@ -31,124 +31,80 @@ const EVENT_TO_DISPLAY = {
     'minx': 'megaminx'
 };
 
-export default function FloatingScrambleImage({
-    scramble,
-    eventId,
-    onClick,
-    visualization = '2d',
-    className = ''
-}) {
+function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
-    const cleanupRef = useRef(null);
 
     useEffect(() => {
         if (!scramble) return;
 
-        let mounted = true;
-        const container = containerRef.current;
-        if (!container) return;
+        let cancelled = false;
+        let element = null;
 
-        // Cleanup previous
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
-        }
-
-        const loadScramble = async () => {
+        const init = async () => {
             try {
-                // Load the appropriate module based on visualization type
-                if (visualization === '3d') {
-                    const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
-                    if (!existingScript) {
-                        await new Promise((resolve, reject) => {
-                            const script = document.createElement('script');
-                            script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                            script.type = 'module';
-                            script.onload = resolve;
-                            script.onerror = reject;
-                            document.head.appendChild(script);
-                        });
-                    }
-                } else {
-                    const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/scramble-display"]');
-                    if (!existingScript) {
-                        await new Promise((resolve, reject) => {
-                            const script = document.createElement('script');
-                            script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
-                            script.type = 'module';
-                            script.onload = resolve;
-                            script.onerror = reject;
-                            document.head.appendChild(script);
-                        });
-                    }
+                const scriptId = visualization === '3d' ? 'twisty-script-float' : 'scramble-display-script-float';
+                let script = document.getElementById(scriptId);
+
+                if (!script) {
+                    script = document.createElement('script');
+                    script.id = scriptId;
+                    script.src = visualization === '3d'
+                        ? 'https://cdn.cubing.net/v0/js/cubing/twisty'
+                        : 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
+                    script.type = 'module';
+                    document.head.appendChild(script);
+
+                    await new Promise((resolve, reject) => {
+                        script.onload = resolve;
+                        script.onerror = reject;
+                    });
                 }
 
-                if (!mounted || !containerRef.current) return;
+                if (cancelled) return;
 
-                await new Promise(r => setTimeout(r, 50));
+                await new Promise(r => setTimeout(r, 100));
 
-                if (!mounted || !containerRef.current) return;
+                if (cancelled || !containerRef.current) return;
 
-                // Safe cleanup - just clear innerHTML
-                try {
-                    containerRef.current.innerHTML = '';
-                } catch (e) {
-                    // Ignore
-                }
+                const container = containerRef.current;
 
                 if (visualization === '3d') {
-                    const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
-                    const player = document.createElement('twisty-player');
-                    player.setAttribute('puzzle', puzzle);
-                    player.setAttribute('alg', scramble);
-                    player.setAttribute('hint', 'none');
-                    player.setAttribute('control-panel', 'none');
-                    player.setAttribute('background', 'none');
-                    player.setAttribute('animation', 'none');
-                    player.style.width = '100%';
-                    player.style.height = '100%';
-                    containerRef.current.appendChild(player);
+                    element = document.createElement('twisty-player');
+                    element.setAttribute('puzzle', EVENT_TO_PUZZLE[eventId] || '3x3x3');
+                    element.setAttribute('hint', 'none');
+                    element.setAttribute('control-panel', 'none');
+                    element.setAttribute('background', 'none');
+                    element.setAttribute('animation', 'none');
                 } else {
-                    const display = document.createElement('scramble-display');
-                    display.setAttribute('event', EVENT_TO_DISPLAY[eventId] || '3x3x3');
-                    display.setAttribute('scramble', scramble);
-                    display.setAttribute('visualization', '2D');
-                    display.setAttribute('checkered', 'true');
-                    display.style.width = '100%';
-                    display.style.height = '100%';
-                    containerRef.current.appendChild(display);
+                    element = document.createElement('scramble-display');
+                    element.setAttribute('event', EVENT_TO_DISPLAY[eventId] || '3x3x3');
+                    element.setAttribute('visualization', '2D');
+                    element.setAttribute('checkered', 'true');
                 }
 
+                element.setAttribute('alg', scramble);
+                element.style.width = '100%';
+                element.style.height = '100%';
+
+                container.appendChild(element);
                 setIsLoaded(true);
             } catch (err) {
-                console.error('Error loading scramble:', err);
+                console.error('Error:', err);
             }
         };
 
-        loadScramble();
-
-        // Cleanup function
-        cleanupRef.current = () => {
-            mounted = false;
-        };
+        init();
 
         return () => {
-            mounted = false;
-            try {
-                if (containerRef.current) {
-                    containerRef.current.innerHTML = '';
-                }
-            } catch (e) {
-                // Ignore
-            }
+            cancelled = true;
         };
     }, [scramble, eventId, visualization]);
 
     return (
         <button
             onClick={onClick}
-            className={`relative group cursor-pointer ${className}`}
+            className="relative group cursor-pointer"
             title={visualization === '3d' ? 'View 3D scramble' : 'View 2D scramble'}
         >
             <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden hover:border-blue-500/50 transition-colors">
@@ -165,5 +121,34 @@ export default function FloatingScrambleImage({
                 <Maximize2 className="w-6 h-6 text-white" />
             </div>
         </button>
+    );
+}
+
+export default function FloatingScrambleImage({
+    scramble,
+    eventId,
+    onClick,
+    visualization = '2d',
+    className = ''
+}) {
+    const key = useMemo(() => `${scramble}_${visualization}_${eventId}`, [scramble, visualization, eventId]);
+
+    if (!scramble) {
+        return (
+            <button
+                onClick={onClick}
+                className={`relative group cursor-pointer ${className}`}
+            >
+                <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden">
+                    <Box className="w-6 h-6 text-zinc-600 m-auto mt-4" />
+                </div>
+            </button>
+        );
+    }
+
+    return (
+        <div className={className}>
+            <FloatingScrambleInner key={key} scramble={scramble} eventId={eventId} visualization={visualization} onClick={onClick} />
+        </div>
     );
 }
