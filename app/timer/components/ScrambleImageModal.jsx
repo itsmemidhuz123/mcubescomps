@@ -32,6 +32,11 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
     useEffect(() => {
         if (!isOpen || !scramble) return;
 
+        const container = containerRef.current;
+        if (!container) return;
+
+        let cancelled = false;
+
         const loadTwistyPlayer = async () => {
             setIsLoading(true);
             setLoadError(null);
@@ -60,22 +65,22 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
 
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                if (containerRef.current) {
-                    containerRef.current.innerHTML = '';
+                if (cancelled || !container) return;
 
-                    const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
+                container.innerHTML = '';
 
-                    const player = document.createElement('twisty-player');
-                    player.setAttribute('puzzle', puzzle);
-                    player.setAttribute('alg', scramble);
-                    player.setAttribute('hint', 'none');
-                    player.setAttribute('control-panel', 'none');
-                    player.setAttribute('background', 'none');
-                    player.style.width = '100%';
-                    player.style.height = '350px';
+                const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
 
-                    containerRef.current.appendChild(player);
-                }
+                const player = document.createElement('twisty-player');
+                player.setAttribute('puzzle', puzzle);
+                player.setAttribute('alg', scramble);
+                player.setAttribute('hint', 'none');
+                player.setAttribute('control-panel', 'none');
+                player.setAttribute('background', 'none');
+                player.style.width = '100%';
+                player.style.height = '350px';
+
+                container.appendChild(player);
             } catch (err) {
                 console.error('Error loading twisty player:', err);
                 setLoadError(err.message);
@@ -87,8 +92,9 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
         loadTwistyPlayer();
 
         return () => {
-            if (containerRef.current) {
-                containerRef.current.innerHTML = '';
+            cancelled = true;
+            if (container) {
+                container.innerHTML = '';
             }
         };
     }, [isOpen, scramble, eventId]);
