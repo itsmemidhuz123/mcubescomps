@@ -43,13 +43,9 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
     const rafIdRef = useRef(null);
     const inspectionRafIdRef = useRef(null);
     const lastBeepRef = useRef(15);
-    const timerStateRef = useRef(timerState);
     const audioContextRef = useRef(null);
+    const inspectionZeroTimeRef = useRef(null);
     const inspectionActiveRef = useRef(false);
-
-    useEffect(() => {
-        timerStateRef.current = timerState;
-    }, [timerState]);
 
     const getAudioContext = useCallback(() => {
         if (!audioContextRef.current) {
@@ -65,28 +61,20 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         try {
             const audioContext = getAudioContext();
             if (!audioContext) return;
-
             if (audioContext.state === 'suspended') {
                 audioContext.resume();
             }
-
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-
             oscillator.frequency.value = frequency;
             oscillator.type = 'sine';
-
             gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
-
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + duration / 1000);
-        } catch (e) {
-            // Audio not available
-        }
+        } catch (e) { }
     }, [getAudioContext]);
 
     const formatTime = useCallback((ms) => {
@@ -106,20 +94,21 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             cancelAnimationFrame(inspectionRafIdRef.current);
             inspectionRafIdRef.current = null;
         }
-
+        inspectionActiveRef.current = false;
         setInspectionPenalty(penalty);
         setTimerState(TIMER_STATES.RUNNING);
         setInspectionRemaining(15);
         startTimeRef.current = performance.now();
+        inspectionStartRef.current = null;
+        inspectionZeroTimeRef.current = null;
 
         const updateDisplay = () => {
-            if (startTimeRef.current !== null && timerStateRef.current === TIMER_STATES.RUNNING) {
+            if (startTimeRef.current !== null) {
                 const elapsed = performance.now() - startTimeRef.current;
                 setDisplayTime(elapsed);
                 rafIdRef.current = requestAnimationFrame(updateDisplay);
             }
         };
-
         rafIdRef.current = requestAnimationFrame(updateDisplay);
     }, []);
 
@@ -128,191 +117,86 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             cancelAnimationFrame(rafIdRef.current);
             rafIdRef.current = null;
         }
-
         const finalTime = startTimeRef.current !== null ? performance.now() - startTimeRef.current : 0;
         startTimeRef.current = null;
-        inspectionActiveRef.current = false;
-
         setTimerState(TIMER_STATES.STOPPED);
         setDisplayTime(finalTime);
-
-        const solve = {
-            time: finalTime,
-            penalty: inspectionPenalty,
-            createdAt: Date.now()
-        };
-
+        const solve = { time: finalTime, penalty: inspectionPenalty, createdAt: Date.now() };
         setPendingSolve(solve);
         setShowPenaltyButtons(true);
     }, [inspectionPenalty]);
 
-    const inspectionZeroTimeRef = useRef(null);
-
-    // Auto-complete inspection as DNF (when exceeding -2 seconds)
-    const autoCompleteAsDnf = useCallback(async () => {
-        const solve = {
-            time: 0,
-            penalty: 'DNF',
-            createdAt: Date.now()
-        };
-
-        await addSolve(solve);
-
-        setTimerState(TIMER_STATES.IDLE);
-        setInspectionRemaining(15);
-        setInspectionPenalty('none');
-        inspectionStartRef.current = null;
-        inspectionZeroTimeRef.current = null;
-        inspectionActiveRef.current = false;
-
-        generateScramble();
-        if (onSolveComplete) onSolveComplete(solve);
-    }, [addSolve, generateScramble, onSolveComplete]);
-
-    const updateInspection = useCallback(() => {
-        if (inspectionStartRef.current === null) return;
-
-        const elapsed = performance.now() - inspectionStartRef.current;
-        const elapsedSecs = elapsed / 1000;
-        const remaining = Math.max(0, 15 - elapsedSecs);
-        const remainingSecs = Math.ceil(remaining);
-
-        // Track when inspection reached 0
-        if (remainingSecs <= 0 && inspectionZeroTimeRef.current === null) {
-            inspectionZeroTimeRef.current = performance.now();
-        }
-
-        // Calculate time after inspection reached 0
-        const timeAfterZero = inspectionZeroTimeRef.current
-            ? (performance.now() - inspectionZeroTimeRef.current) / 1000
-            : 0;
-
-        // Display: show 0, then negative seconds to indicate overtime
-        let displaySecs;
-        if (remainingSecs > 0) {
-            displaySecs = remainingSecs;
-        } else {
-            // After 0, show negative seconds: -1, -2, -3...
-            displaySecs = -Math.ceil(timeAfterZero);
-        }
-        setInspectionRemaining(displaySecs);
-
-        // Beeps
-        if (remainingSecs <= 8 && lastBeepRef.current > 8) {
-            playBeep(800, 150);
-            lastBeepRef.current = 8;
-        }
-        if (remainingSecs <= 5 && lastBeepRef.current > 5) {
-            playBeep(800, 150);
-            lastBeepRef.current = 5;
-        }
-        if (remainingSecs <= 0 && lastBeepRef.current > 0) {
-            playBeep(1200, 300);
-            lastBeepRef.current = 0;
-        }
-
-        // If user is NOT holding (INSPECTION state):
-        // - 0-2s after inspection 0: +2 penalty when released
-        // - 2s+ after inspection 0: auto-DNF immediately
-        if (timerStateRef.current === TIMER_STATES.INSPECTION && timeAfterZero > 2) {
-            autoCompleteAsDnf();
-            return;
-        }
-
-        // If user is holding (INSPECTION_ARMED):
-        // - 15-17s elapsed (0-2s after 0): release will give +2
-        // - 17s+ elapsed (2s+ after 0): auto-DNF
-        if (elapsedSecs > 17 && timerStateRef.current === TIMER_STATES.INSPECTION_ARMED) {
-            autoCompleteAsDnf();
-            return;
-        }
-
-        // Continue loop if inspection is active
-        if (inspectionActiveRef.current) {
-            inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
-        }
-    }, [playBeep, autoCompleteAsDnf]);
-
     const startInspection = useCallback(() => {
+        inspectionActiveRef.current = true;
         setTimerState(TIMER_STATES.INSPECTION);
         setInspectionRemaining(15);
         setInspectionPenalty('none');
         lastBeepRef.current = 15;
         inspectionStartRef.current = performance.now();
         inspectionZeroTimeRef.current = null;
-        inspectionActiveRef.current = true;
+
+        const updateInspection = () => {
+            if (!inspectionActiveRef.current || inspectionStartRef.current === null) return;
+
+            const elapsed = performance.now() - inspectionStartRef.current;
+            const elapsedSecs = elapsed / 1000;
+            const remaining = Math.max(0, 15 - elapsedSecs);
+            const remainingSecs = Math.ceil(remaining);
+
+            if (remainingSecs <= 0 && inspectionZeroTimeRef.current === null) {
+                inspectionZeroTimeRef.current = performance.now();
+            }
+
+            const timeAfterZero = inspectionZeroTimeRef.current ? (performance.now() - inspectionZeroTimeRef.current) / 1000 : 0;
+
+            let displaySecs;
+            if (remainingSecs > 0) {
+                displaySecs = remainingSecs;
+            } else {
+                displaySecs = -Math.ceil(timeAfterZero);
+            }
+            setInspectionRemaining(displaySecs);
+
+            if (remainingSecs <= 8 && lastBeepRef.current > 8) {
+                playBeep(800, 150);
+                lastBeepRef.current = 8;
+            }
+            if (remainingSecs <= 5 && lastBeepRef.current > 5) {
+                playBeep(800, 150);
+                lastBeepRef.current = 5;
+            }
+            if (remainingSecs <= 0 && lastBeepRef.current > 0) {
+                playBeep(1200, 300);
+                lastBeepRef.current = 0;
+            }
+
+            if (timeAfterZero > 2) {
+                // Auto DNF
+                const solve = { time: 0, penalty: 'DNF', createdAt: Date.now() };
+                addSolve(solve);
+                inspectionActiveRef.current = false;
+                inspectionStartRef.current = null;
+                inspectionZeroTimeRef.current = null;
+                setTimerState(TIMER_STATES.IDLE);
+                setInspectionRemaining(15);
+                setInspectionPenalty('none');
+                generateScramble();
+                if (onSolveComplete) onSolveComplete(solve);
+                return;
+            }
+
+            if (inspectionActiveRef.current) {
+                inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
+            }
+        };
         inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
-    }, [updateInspection]);
-
-    const armTimer = useCallback(() => {
-        const currentState = timerStateRef.current;
-        if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
-            setTimerState(TIMER_STATES.ARMED);
-        } else if (currentState === TIMER_STATES.INSPECTION) {
-            setTimerState(TIMER_STATES.INSPECTION_ARMED);
-        }
-    }, []);
-
-    const releaseFromArmed = useCallback(() => {
-        const currentState = timerStateRef.current;
-
-        if (currentState === TIMER_STATES.ARMED) {
-            if (settings.inspectionEnabled) {
-                startInspection();
-            } else {
-                startTimer('none');
-            }
-        } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
-            // User was holding - check elapsed time
-            if (inspectionStartRef.current !== null) {
-                const elapsed = performance.now() - inspectionStartRef.current;
-                const elapsedSecs = elapsed / 1000;
-
-                let penalty = 'none';
-                if (elapsedSecs > 17) {
-                    penalty = 'DNF';
-                } else if (elapsedSecs > 15) {
-                    penalty = '+2';
-                }
-
-                inspectionZeroTimeRef.current = null;
-                startTimer(penalty);
-            } else {
-                startTimer('none');
-            }
-        } else if (currentState === TIMER_STATES.INSPECTION) {
-            // User was NOT holding - check if inspection has ended (0 or negative)
-            // Calculate time after inspection reached 0
-            if (inspectionZeroTimeRef.current !== null) {
-                const timeAfterZero = (performance.now() - inspectionZeroTimeRef.current) / 1000;
-
-                let penalty = 'none';
-                if (timeAfterZero > 2) {
-                    // Already auto-DNF'd, do nothing
-                    inspectionZeroTimeRef.current = null;
-                    return;
-                } else {
-                    // Within 0-2s after inspection 0: +2 penalty
-                    penalty = '+2';
-                }
-
-                inspectionZeroTimeRef.current = null;
-                startTimer(penalty);
-            } else {
-                // Inspection not yet at 0, normal start
-                startTimer('none');
-            }
-        }
-    }, [settings.inspectionEnabled, startInspection, startTimer]);
+    }, [playBeep, addSolve, generateScramble, onSolveComplete]);
 
     const confirmSolve = useCallback(async (penalty = 'none') => {
         if (!pendingSolve) return;
-
         const finalPenalty = inspectionPenalty !== 'none' ? inspectionPenalty : penalty;
         const finalSolve = { ...pendingSolve, penalty: finalPenalty };
-
         await addSolve(finalSolve);
-
         setPendingSolve(null);
         setShowPenaltyButtons(false);
         setInspectionPenalty('none');
@@ -321,180 +205,112 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         setInspectionRemaining(15);
         inspectionStartRef.current = null;
         inspectionActiveRef.current = false;
-
         generateScramble();
         if (onSolveComplete) onSolveComplete(finalSolve);
     }, [pendingSolve, addSolve, generateScramble, onSolveComplete, inspectionPenalty]);
+
+    // Event handlers using refs for state
+    const handlePress = useCallback((action) => {
+        const currentState = timerState;
+
+        if (action === 'start') {
+            // Press/hold
+            if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
+                setTimerState(TIMER_STATES.ARMED);
+            } else if (currentState === TIMER_STATES.INSPECTION) {
+                setTimerState(TIMER_STATES.INSPECTION_ARMED);
+            } else if (currentState === TIMER_STATES.RUNNING) {
+                stopTimer();
+            }
+        } else if (action === 'end') {
+            // Release
+            if (currentState === TIMER_STATES.ARMED) {
+                if (settings.inspectionEnabled) {
+                    startInspection();
+                } else {
+                    startTimer('none');
+                }
+            } else if (currentState === TIMER_STATES.INSPECTION_ARMED) {
+                const elapsed = inspectionStartRef.current ? performance.now() - inspectionStartRef.current : 0;
+                const elapsedSecs = elapsed / 1000;
+                let penalty = 'none';
+                if (elapsedSecs > 17) penalty = 'DNF';
+                else if (elapsedSecs > 15) penalty = '+2';
+                startTimer(penalty);
+            } else if (currentState === TIMER_STATES.INSPECTION) {
+                if (inspectionZeroTimeRef.current) {
+                    const timeAfterZero = (performance.now() - inspectionZeroTimeRef.current) / 1000;
+                    if (timeAfterZero <= 2) {
+                        startTimer('+2');
+                    }
+                } else {
+                    startTimer('none');
+                }
+            }
+        }
+    }, [timerState, settings.inspectionEnabled, startInspection, startTimer, stopTimer]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.code === 'Space' && !e.repeat) {
                 e.preventDefault();
-
-                // Get current state directly from React state
-                setTimerState(prevState => {
-                    if (prevState === TIMER_STATES.RUNNING) {
-                        stopTimer();
-                        return prevState;
-                    } else if (prevState === TIMER_STATES.IDLE || prevState === TIMER_STATES.STOPPED) {
-                        return TIMER_STATES.ARMED;
-                    } else if (prevState === TIMER_STATES.INSPECTION) {
-                        return TIMER_STATES.INSPECTION_ARMED;
-                    }
-                    return prevState;
-                });
+                handlePress('start');
             }
         };
-
         const handleKeyUp = (e) => {
             if (e.code === 'Space') {
                 e.preventDefault();
-
-                // Get current state directly
-                setTimerState(prevState => {
-                    if (prevState === TIMER_STATES.ARMED) {
-                        if (settings.inspectionEnabled) {
-                            // Start inspection
-                            setTimerState(TIMER_STATES.INSPECTION);
-                            setInspectionRemaining(15);
-                            setInspectionPenalty('none');
-                            lastBeepRef.current = 15;
-                            inspectionStartRef.current = performance.now();
-                            inspectionZeroTimeRef.current = null;
-                            inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
-                            return TIMER_STATES.INSPECTION;
-                        } else {
-                            // Start timer directly without inspection
-                            startTimer('none');
-                            return TIMER_STATES.RUNNING;
-                        }
-                    } else if (prevState === TIMER_STATES.INSPECTION_ARMED) {
-                        // User was holding - check elapsed time and start timer
-                        if (inspectionStartRef.current !== null) {
-                            const elapsed = performance.now() - inspectionStartRef.current;
-                            const elapsedSecs = elapsed / 1000;
-
-                            let penalty = 'none';
-                            if (elapsedSecs > 17) {
-                                penalty = 'DNF';
-                            } else if (elapsedSecs > 15) {
-                                penalty = '+2';
-                            }
-
-                            inspectionZeroTimeRef.current = null;
-                            startTimer(penalty);
-                            return TIMER_STATES.RUNNING;
-                        }
-                    }
-                    return prevState;
-                });
+                handlePress('end');
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
-            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-            if (inspectionRafIdRef.current) cancelAnimationFrame(inspectionRafIdRef.current);
         };
-    }, [settings.inspectionEnabled, stopTimer, startTimer, updateInspection]);
+    }, [handlePress]);
 
     const handleTouchStart = useCallback((e) => {
         e.preventDefault();
-
-        setTimerState(prevState => {
-            if (prevState === TIMER_STATES.RUNNING) {
-                stopTimer();
-                return prevState;
-            } else if (prevState === TIMER_STATES.IDLE || prevState === TIMER_STATES.STOPPED) {
-                return TIMER_STATES.ARMED;
-            } else if (prevState === TIMER_STATES.INSPECTION) {
-                return TIMER_STATES.INSPECTION_ARMED;
-            }
-            return prevState;
-        });
-    }, [stopTimer]);
+        handlePress('start');
+    }, [handlePress]);
 
     const handleTouchEnd = useCallback((e) => {
         e.preventDefault();
-
-        // Process touch end - same logic as key up
-        setTimerState(prevState => {
-            if (prevState === TIMER_STATES.ARMED) {
-                if (settings.inspectionEnabled) {
-                    setTimerState(TIMER_STATES.INSPECTION);
-                    setInspectionRemaining(15);
-                    setInspectionPenalty('none');
-                    lastBeepRef.current = 15;
-                    inspectionStartRef.current = performance.now();
-                    inspectionZeroTimeRef.current = null;
-                    inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
-                    return TIMER_STATES.INSPECTION;
-                } else {
-                    startTimer('none');
-                    return TIMER_STATES.RUNNING;
-                }
-            } else if (prevState === TIMER_STATES.INSPECTION_ARMED) {
-                if (inspectionStartRef.current !== null) {
-                    const elapsed = performance.now() - inspectionStartRef.current;
-                    const elapsedSecs = elapsed / 1000;
-
-                    let penalty = 'none';
-                    if (elapsedSecs > 17) {
-                        penalty = 'DNF';
-                    } else if (elapsedSecs > 15) {
-                        penalty = '+2';
-                    }
-
-                    inspectionZeroTimeRef.current = null;
-                    startTimer(penalty);
-                    return TIMER_STATES.RUNNING;
-                }
-            }
-            return prevState;
-        });
-    }, [settings.inspectionEnabled, startTimer, updateInspection]);
+        handlePress('end');
+    }, [handlePress]);
 
     const getTimerColor = useCallback(() => {
-        const currentState = timerStateRef.current;
-
-        if (currentState === TIMER_STATES.ARMED || currentState === TIMER_STATES.INSPECTION_ARMED) {
+        if (timerState === TIMER_STATES.ARMED || timerState === TIMER_STATES.INSPECTION_ARMED) {
             return 'text-green-500';
         }
-        if (currentState === TIMER_STATES.RUNNING) {
-            return 'text-white';
-        }
-        if (currentState === TIMER_STATES.INSPECTION) {
-            if (inspectionRemaining <= 0) return 'text-red-500 animate-pulse';
+        if (timerState === TIMER_STATES.RUNNING) return 'text-white';
+        if (timerState === TIMER_STATES.INSPECTION) {
+            if (inspectionRemaining <= -2) return 'text-red-500 animate-pulse';
+            if (inspectionRemaining <= 0) return 'text-red-500';
             if (inspectionRemaining <= 3) return 'text-red-500';
             if (inspectionRemaining <= 8) return 'text-yellow-500';
             return 'text-yellow-400';
         }
         return 'text-white';
-    }, [inspectionRemaining]);
+    }, [timerState, inspectionRemaining]);
 
     const getStatusText = useCallback(() => {
-        const currentState = timerStateRef.current;
-
-        if (currentState === TIMER_STATES.RUNNING) return 'Press SPACE or tap to stop';
-        if (currentState === TIMER_STATES.INSPECTION) return 'Hold SPACE or tap to start';
-        if (currentState === TIMER_STATES.INSPECTION_ARMED) return 'Release to start';
-        if (currentState === TIMER_STATES.ARMED) return 'Release to start';
-        if (currentState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
+        if (timerState === TIMER_STATES.RUNNING) return 'Press SPACE or tap to stop';
+        if (timerState === TIMER_STATES.INSPECTION) return 'Hold to start';
+        if (timerState === TIMER_STATES.INSPECTION_ARMED) return 'Release to start';
+        if (timerState === TIMER_STATES.ARMED) return 'Release to start';
+        if (timerState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
         return 'Hold SPACE or tap to start';
-    }, [showPenaltyButtons]);
+    }, [timerState, showPenaltyButtons]);
 
     const getDisplayValue = useCallback(() => {
-        const currentState = timerStateRef.current;
-
-        if (currentState === TIMER_STATES.INSPECTION || currentState === TIMER_STATES.INSPECTION_ARMED) {
+        if (timerState === TIMER_STATES.INSPECTION || timerState === TIMER_STATES.INSPECTION_ARMED) {
             return inspectionRemaining;
         }
         return formatTime(displayTime);
-    }, [inspectionRemaining, displayTime, formatTime]);
+    }, [timerState, inspectionRemaining, displayTime, formatTime]);
 
     return {
         timerState,
