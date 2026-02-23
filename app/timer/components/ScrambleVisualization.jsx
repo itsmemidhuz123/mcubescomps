@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 
 const EVENT_TO_PUZZLE = {
     '333': '3x3x3',
@@ -19,46 +19,39 @@ const EVENT_TO_PUZZLE = {
 export default function ScrambleVisualization({ scramble, eventId, height = '150px' }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
-    const scriptLoadedRef = useRef(false);
+    const playerRef = useRef(null);
+
+    const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
 
     useEffect(() => {
         if (!scramble) return;
 
-        const container = containerRef.current;
-        if (!container) return;
-
-        let cancelled = false;
+        let mounted = true;
 
         const loadTwisty = async () => {
             try {
-                if (!scriptLoadedRef.current) {
+                const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
+                if (!existingScript) {
                     await new Promise((resolve, reject) => {
-                        const existingScript = document.querySelector('script[src*="cubing/twisty"]');
-                        if (existingScript) {
-                            scriptLoadedRef.current = true;
-                            resolve();
-                            return;
-                        }
-
                         const script = document.createElement('script');
-                        script.src = 'https://cdn.cubing.net/js/cubing/twisty';
+                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
                         script.type = 'module';
-                        script.onload = () => {
-                            scriptLoadedRef.current = true;
-                            resolve();
-                        };
+                        script.onload = resolve;
                         script.onerror = reject;
                         document.head.appendChild(script);
                     });
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 50));
+                if (!mounted) return;
 
-                if (cancelled || !container) return;
+                await new Promise(r => setTimeout(r, 50));
 
-                container.innerHTML = '';
+                if (!mounted || !containerRef.current) return;
 
-                const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
+                if (playerRef.current) {
+                    playerRef.current.remove();
+                    playerRef.current = null;
+                }
 
                 const player = document.createElement('twisty-player');
                 player.setAttribute('puzzle', puzzle);
@@ -70,7 +63,8 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
                 player.style.height = height;
                 player.style.display = 'block';
 
-                container.appendChild(player);
+                containerRef.current.appendChild(player);
+                playerRef.current = player;
                 setIsLoaded(true);
             } catch (err) {
                 console.error('Error loading 2D visualization:', err);
@@ -80,12 +74,13 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
         loadTwisty();
 
         return () => {
-            cancelled = true;
-            if (container) {
-                container.innerHTML = '';
+            mounted = false;
+            if (playerRef.current && playerRef.current.parentNode) {
+                playerRef.current.remove();
+                playerRef.current = null;
             }
         };
-    }, [scramble, eventId, height]);
+    }, [scramble, puzzle, height]);
 
     return (
         <div

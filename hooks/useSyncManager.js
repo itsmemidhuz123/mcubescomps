@@ -58,10 +58,8 @@ export const useSyncManager = () => {
                 setSyncStatus(SYNC_STATUS.SYNCED);
             }
         } catch (error) {
-            console.error('Error checking remote data:', error);
-            if (hasLocalData) {
-                setShowMergePrompt(true);
-            }
+            console.warn('Sync unavailable - using local storage only');
+            setSyncStatus(SYNC_STATUS.NOT_SYNCED);
         }
     };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -27,49 +27,42 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
-    const scriptLoadedRef = useRef(false);
+    const playerRef = useRef(null);
+
+    const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
 
     useEffect(() => {
         if (!isOpen || !scramble) return;
 
-        const container = containerRef.current;
-        if (!container) return;
-
-        let cancelled = false;
+        let mounted = true;
 
         const loadTwistyPlayer = async () => {
             setIsLoading(true);
             setLoadError(null);
 
             try {
-                if (!scriptLoadedRef.current) {
+                const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
+                if (!existingScript) {
                     await new Promise((resolve, reject) => {
-                        const existingScript = document.querySelector('script[src*="cubing/twisty"]');
-                        if (existingScript) {
-                            scriptLoadedRef.current = true;
-                            resolve();
-                            return;
-                        }
-
                         const script = document.createElement('script');
-                        script.src = 'https://cdn.cubing.net/js/cubing/twisty';
+                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
                         script.type = 'module';
-                        script.onload = () => {
-                            scriptLoadedRef.current = true;
-                            resolve();
-                        };
+                        script.onload = resolve;
                         script.onerror = () => reject(new Error('Failed to load twisty player'));
                         document.head.appendChild(script);
                     });
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 100));
+                if (!mounted) return;
 
-                if (cancelled || !container) return;
+                await new Promise(r => setTimeout(r, 100));
 
-                container.innerHTML = '';
+                if (!mounted || !containerRef.current) return;
 
-                const puzzle = EVENT_TO_PUZZLE[eventId] || '3x3x3';
+                if (playerRef.current) {
+                    playerRef.current.remove();
+                    playerRef.current = null;
+                }
 
                 const player = document.createElement('twisty-player');
                 player.setAttribute('puzzle', puzzle);
@@ -80,24 +73,26 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
                 player.style.width = '100%';
                 player.style.height = '350px';
 
-                container.appendChild(player);
+                containerRef.current.appendChild(player);
+                playerRef.current = player;
             } catch (err) {
                 console.error('Error loading twisty player:', err);
-                setLoadError(err.message);
+                if (mounted) setLoadError(err.message);
             } finally {
-                setIsLoading(false);
+                if (mounted) setIsLoading(false);
             }
         };
 
         loadTwistyPlayer();
 
         return () => {
-            cancelled = true;
-            if (container) {
-                container.innerHTML = '';
+            mounted = false;
+            if (playerRef.current && playerRef.current.parentNode) {
+                playerRef.current.remove();
+                playerRef.current = null;
             }
         };
-    }, [isOpen, scramble, eventId]);
+    }, [isOpen, scramble, puzzle]);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>

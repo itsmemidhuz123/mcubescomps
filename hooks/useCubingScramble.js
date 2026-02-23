@@ -40,14 +40,14 @@ export const useCubingScramble = (eventId) => {
                 scriptLoadingRef.current = true;
 
                 await new Promise((resolve, reject) => {
-                    const existingScript = document.querySelector('script[src*="cubing/scramble"]');
+                    const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/scramble"]');
                     if (existingScript) {
                         resolve();
                         return;
                     }
 
                     const script = document.createElement('script');
-                    script.src = 'https://cdn.cubing.net/js/cubing/scramble';
+                    script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble';
                     script.type = 'module';
                     script.onload = resolve;
                     script.onerror = () => reject(new Error('Failed to load cubing.js script'));
@@ -66,7 +66,7 @@ export const useCubingScramble = (eventId) => {
 
             const module = await import(
                 /* webpackIgnore: true */
-                'https://cdn.cubing.net/js/cubing/scramble'
+                'https://cdn.cubing.net/v0/js/cubing/scramble'
             );
             scrambleModuleRef.current = module;
             scrambleCache.current = module;

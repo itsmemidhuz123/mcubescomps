@@ -2,18 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-/**
- * Scramble Display Component
- * Renders a visual representation of a scramble using cubing.js scramble-display
- * 
- * @param {Object} props
- * @param {string} props.eventId - WCA event ID (e.g., "333", "444", "pyram")
- * @param {string} props.scramble - The scramble notation string
- * @param {string} props.visualization - "2D" or "3D" (default: "2D")
- * @param {number} props.width - Width in pixels (default: 200)
- * @param {number} props.height - Height in pixels (default: 200)
- * @param {boolean} props.checkered - Show checkered pattern for orientation (default: true)
- */
 export default function ScrambleDisplay({
     eventId,
     scramble,
@@ -27,7 +15,6 @@ export default function ScrambleDisplay({
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
 
-    // Map WCA event IDs to scramble-display event names
     const eventMap = {
         '333': '3x3x3',
         '444': '4x4x4',
@@ -48,13 +35,10 @@ export default function ScrambleDisplay({
         '333mbf': '3x3x3',
     };
 
-    // Check if visualization is supported for this event
     const isVisualizationSupported = (eventId, viz) => {
         if (viz === '2D') {
-            // 2D is only supported for 3x3x3 currently
             return ['333', '333bf', '333oh', '333fm', '333mbf'].includes(eventId);
         }
-        // 3D is supported for all events
         return true;
     };
 
@@ -64,26 +48,26 @@ export default function ScrambleDisplay({
             return;
         }
 
+        const container = containerRef.current;
+        let mounted = true;
+
         const loadScrambleDisplay = async () => {
             setIsLoading(true);
             setHasError(false);
 
             try {
-                // Load the scramble-display module from the CDN at runtime.
-                // webpackIgnore prevents Next/webpack from trying to bundle the URL.
                 await import(/* webpackIgnore: true */ 'https://cdn.cubing.net/v0/js/cubing/scramble-display');
 
-                // Clear previous display
+                if (!mounted) return;
+
                 if (scrambleDisplayRef.current) {
                     scrambleDisplayRef.current.remove();
                 }
 
-                // Determine the actual visualization to use
                 const effectiveVisualization = isVisualizationSupported(eventId, visualization)
                     ? visualization
                     : '3D';
 
-                // Create new scramble display element
                 const display = document.createElement('scramble-display');
                 display.setAttribute('event', eventMap[eventId] || '3x3x3');
                 display.setAttribute('scramble', scramble);
@@ -93,35 +77,32 @@ export default function ScrambleDisplay({
                 display.style.height = `${height}px`;
                 display.style.display = 'block';
 
-                // Add load event listener
                 display.addEventListener('load', () => {
-                    setIsLoading(false);
+                    if (mounted) setIsLoading(false);
                 });
 
                 scrambleDisplayRef.current = display;
-                containerRef.current.appendChild(display);
+                container.appendChild(display);
 
-                // Set a timeout to hide loading if load event doesn't fire
                 setTimeout(() => {
-                    setIsLoading(false);
+                    if (mounted) setIsLoading(false);
                 }, 2000);
 
             } catch (error) {
                 console.error('Error loading scramble display:', error);
-                setHasError(true);
-                setIsLoading(false);
+                if (mounted) {
+                    setHasError(true);
+                    setIsLoading(false);
+                }
             }
         };
 
         loadScrambleDisplay();
 
         return () => {
-            if (scrambleDisplayRef.current && containerRef.current) {
-                try {
-                    containerRef.current.removeChild(scrambleDisplayRef.current);
-                } catch (e) {
-                    // Element might already be removed
-                }
+            mounted = false;
+            if (scrambleDisplayRef.current && scrambleDisplayRef.current.parentNode) {
+                scrambleDisplayRef.current.remove();
                 scrambleDisplayRef.current = null;
             }
         };
@@ -143,7 +124,6 @@ export default function ScrambleDisplay({
             className="relative"
             style={{ width: `${width}px`, height: `${height}px` }}
         >
-            {/* Loading Overlay */}
             {isLoading && (
                 <div
                     className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center z-10"
@@ -156,7 +136,6 @@ export default function ScrambleDisplay({
                 </div>
             )}
 
-            {/* Error State */}
             {hasError && (
                 <div
                     className="bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs p-2 text-center"
@@ -166,7 +145,6 @@ export default function ScrambleDisplay({
                 </div>
             )}
 
-            {/* Scramble Display Container */}
             <div
                 ref={containerRef}
                 className="scramble-display-container"
