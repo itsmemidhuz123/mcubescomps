@@ -16,30 +16,60 @@ const EVENT_TO_PUZZLE = {
     'minx': 'megaminx'
 };
 
-export default function ScrambleVisualization({ scramble, eventId, height = '150px' }) {
+const EVENT_TO_DISPLAY = {
+    '333': '3x3x3',
+    '222': '2x2x2',
+    '444': '4x4x4',
+    '555': '5x5x5',
+    '666': '6x6x6',
+    '777': '7x7x7',
+    'pyram': 'pyraminx',
+    'skewb': 'skewb',
+    'sq1': 'square1',
+    'clock': 'clock',
+    'minx': 'megaminx'
+};
+
+export default function ScrambleVisualization({ scramble, eventId, height = '150px', visualization = '2d' }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
-    const playerRef = useRef(null);
+    const displayRef = useRef(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
+    const displayEvent = useMemo(() => EVENT_TO_DISPLAY[eventId] || '3x3x3', [eventId]);
 
     useEffect(() => {
         if (!scramble) return;
 
         let mounted = true;
 
-        const loadTwisty = async () => {
+        const loadScramble = async () => {
             try {
-                const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
-                if (!existingScript) {
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                        script.type = 'module';
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
+                // Load the appropriate module based on visualization type
+                if (visualization === '3d') {
+                    const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/twisty"]');
+                    if (!existingScript) {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+                            script.type = 'module';
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.head.appendChild(script);
+                        });
+                    }
+                } else {
+                    const existingScript = document.querySelector('script[src*="cubing/v0/js/cubing/scramble-display"]');
+                    if (!existingScript) {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
+                            script.type = 'module';
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.head.appendChild(script);
+                        });
+                    }
                 }
 
                 if (!mounted) return;
@@ -48,39 +78,54 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
 
                 if (!mounted || !containerRef.current) return;
 
-                if (playerRef.current) {
-                    playerRef.current.remove();
-                    playerRef.current = null;
+                if (displayRef.current) {
+                    displayRef.current.remove();
+                    displayRef.current = null;
                 }
 
-                const player = document.createElement('twisty-player');
-                player.setAttribute('puzzle', puzzle);
-                player.setAttribute('alg', scramble);
-                player.setAttribute('hint', 'none');
-                player.setAttribute('control-panel', 'none');
-                player.setAttribute('background', 'none');
-                player.style.width = '100%';
-                player.style.height = height;
-                player.style.display = 'block';
+                containerRef.current.innerHTML = '';
 
-                containerRef.current.appendChild(player);
-                playerRef.current = player;
+                if (visualization === '3d') {
+                    const player = document.createElement('twisty-player');
+                    player.setAttribute('puzzle', puzzle);
+                    player.setAttribute('alg', scramble);
+                    player.setAttribute('hint', 'none');
+                    player.setAttribute('control-panel', 'none');
+                    player.setAttribute('background', 'none');
+                    player.style.width = '100%';
+                    player.style.height = height;
+                    player.style.display = 'block';
+                    containerRef.current.appendChild(player);
+                    displayRef.current = player;
+                } else {
+                    const display = document.createElement('scramble-display');
+                    display.setAttribute('event', displayEvent);
+                    display.setAttribute('scramble', scramble);
+                    display.setAttribute('visualization', '2D');
+                    display.setAttribute('checkered', 'true');
+                    display.style.width = '100%';
+                    display.style.height = height;
+                    display.style.display = 'block';
+                    containerRef.current.appendChild(display);
+                    displayRef.current = display;
+                }
+
                 setIsLoaded(true);
             } catch (err) {
-                console.error('Error loading 2D visualization:', err);
+                console.error('Error loading visualization:', err);
             }
         };
 
-        loadTwisty();
+        loadScramble();
 
         return () => {
             mounted = false;
-            if (playerRef.current && playerRef.current.parentNode) {
-                playerRef.current.remove();
-                playerRef.current = null;
+            if (displayRef.current && displayRef.current.parentNode) {
+                displayRef.current.remove();
+                displayRef.current = null;
             }
         };
-    }, [scramble, puzzle, height]);
+    }, [scramble, puzzle, displayEvent, height, visualization]);
 
     return (
         <div

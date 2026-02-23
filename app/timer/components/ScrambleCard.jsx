@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Copy, RefreshCw, Image as ImageIcon, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, RefreshCw, Image as ImageIcon, Loader2, ChevronDown, ChevronUp, Box, BoxSelect } from 'lucide-react';
 import { useState } from 'react';
 import ScrambleVisualization from './ScrambleVisualization';
 
@@ -10,7 +10,9 @@ export default function ScrambleCard({
     onRefresh,
     onShowImage,
     eventId,
-    isLoading = false
+    isLoading = false,
+    scrambleVisualization = '2d',
+    onScrambleVisualizationChange
 }) {
     const [copied, setCopied] = useState(false);
     const [showVisualization, setShowVisualization] = useState(true);
@@ -27,6 +29,11 @@ export default function ScrambleCard({
         }
     };
 
+    const toggleVisualization = () => {
+        const newViz = scrambleVisualization === '2d' ? '3d' : '2d';
+        onScrambleVisualizationChange?.(newViz);
+    };
+
     return (
         <div className="bg-[#161a23] border border-[#2a2f3a] rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
@@ -34,6 +41,19 @@ export default function ScrambleCard({
                     Scramble
                 </span>
                 <div className="flex gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleVisualization}
+                        className="h-7 w-7 p-0 text-zinc-400 hover:text-white"
+                        title={scrambleVisualization === '2d' ? 'Switch to 3D' : 'Switch to 2D'}
+                    >
+                        {scrambleVisualization === '2d' ? (
+                            <Box className="w-4 h-4" />
+                        ) : (
+                            <BoxSelect className="w-4 h-4" />
+                        )}
+                    </Button>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -87,6 +107,7 @@ export default function ScrambleCard({
                         scramble={scramble}
                         eventId={eventId}
                         height="140px"
+                        visualization={scrambleVisualization}
                     />
                 </div>
             )}
