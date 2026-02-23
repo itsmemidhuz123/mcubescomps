@@ -201,6 +201,31 @@ export default function TournamentManagementPage() {
             return;
         }
 
+        const currentRoundNum = competition.currentRound || 1;
+        const nextRound = currentRoundNum + 1;
+        const nextRoundData = competition.rounds?.find(r => r.roundNumber === nextRound);
+        const nextEvents = nextRoundData?.events || [];
+
+        const missingScrambles = [];
+        for (const eventId of nextEvents) {
+            const eventScrambles = competition.scrambles?.[eventId]?.[nextRound];
+            const scrambleCount = eventScrambles ? (Array.isArray(eventScrambles) ? eventScrambles.length : Object.keys(eventScrambles).length) : 0;
+            if (scrambleCount === 0) {
+                missingScrambles.push(eventId);
+            }
+        }
+
+        if (missingScrambles.length > 0) {
+            const proceed = confirm(
+                `WARNING: The following events are missing scrambles for Round ${nextRound}: ${missingScrambles.map(e => getEventName(e)).join(', ')}.\n\nCompetitors may see "Scramble not yet released" errors.\n\nDo you want to proceed anyway?`
+            );
+            if (!proceed) {
+                console.log('Admin cancelled round advancement due to missing scrambles');
+                return;
+            }
+            console.warn('Admin alert: Missing scrambles for events:', missingScrambles, 'Round:', nextRound);
+        }
+
         setProcessing(true);
         try {
             const batch = writeBatch(db);
@@ -290,6 +315,32 @@ export default function TournamentManagementPage() {
     }
 
     async function setTournamentStatus(status) {
+        if (status === TournamentStatus.ROUND_LIVE) {
+            const currentRound = competition.currentRound || 1;
+            const roundData = competition.rounds?.find(r => r.roundNumber === currentRound);
+            const events = roundData?.events || [];
+
+            const missingScrambles = [];
+            for (const eventId of events) {
+                const eventScrambles = competition.scrambles?.[eventId]?.[currentRound];
+                const scrambleCount = eventScrambles ? (Array.isArray(eventScrambles) ? eventScrambles.length : Object.keys(eventScrambles).length) : 0;
+                if (scrambleCount === 0) {
+                    missingScrambles.push(eventId);
+                }
+            }
+
+            if (missingScrambles.length > 0) {
+                const proceed = confirm(
+                    `WARNING: The following events are missing scrambles for Round ${currentRound}: ${missingScrambles.map(e => getEventName(e)).join(', ')}.\n\nCompetitors may see "Scramble not yet released" errors.\n\nDo you want to proceed anyway?`
+                );
+                if (!proceed) {
+                    console.log('Admin cancelled round start due to missing scrambles');
+                    return;
+                }
+                console.warn('Admin alert: Missing scrambles for events:', missingScrambles, 'Round:', currentRound);
+            }
+        }
+
         try {
             await updateDoc(doc(db, 'competitions', params.competitionId), {
                 tournamentStatus: status,

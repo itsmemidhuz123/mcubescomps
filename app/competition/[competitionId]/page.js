@@ -847,6 +847,18 @@ function CompetitionDetail() {
 
     function handleStartCompetition() {
         if (!registration || !selectedEvents.length) return;
+
+        const currentRound = competition.currentRound || 1;
+        const requiresVerification = competition.verificationMandatory &&
+            currentRound >= (competition.verificationRequiredFromRound || 1);
+        const isVerified = userProfile?.verificationStatus === 'VERIFIED';
+
+        if (requiresVerification && !isVerified) {
+            alert(`ID Verification Required\n\nYou must complete verification before starting Round ${currentRound}.\n\nContinue verification from your profile.`);
+            router.push('/profile');
+            return;
+        }
+
         router.push(`/compete/${params.competitionId}/${selectedEvents[0]}`);
     }
 
@@ -896,10 +908,12 @@ function CompetitionDetail() {
         competition.currentRound >= (competition.verificationRequiredFromRound || 1);
     const isVerified = userProfile?.verificationStatus === 'VERIFIED';
 
+    const verificationRequiredRound = competition.verificationRequiredFromRound || 1;
+
     if (user && requiresVerification && !isVerified) {
         return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full">
+                <Card className="max-w-md w-full border-red-200 dark:border-red-800">
                     <CardContent className="p-6">
                         <div className="text-center">
                             <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
@@ -907,23 +921,23 @@ function CompetitionDetail() {
                             </div>
 
                             <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">
-                                Identity Verification Required
+                                ID Verification Required
                             </h2>
 
                             <p className="text-zinc-600 dark:text-zinc-400 mb-4">
-                                This competition requires identity verification to participate.
+                                You must complete verification before starting Round {competition.currentRound || 1}.
                             </p>
 
                             <p className="text-sm text-zinc-500 mb-6">
-                                Verification is required from round {competition.verificationRequiredFromRound || 1}.
-                                Please verify your identity to continue.
+                                Verification is mandatory to participate in this round.
+                                Continue verification from your profile.
                             </p>
 
                             <Button
                                 onClick={() => router.push('/profile')}
-                                className="w-full"
+                                className="w-full bg-red-600 hover:bg-red-700"
                             >
-                                Go to Profile to Verify
+                                Go to Profile
                             </Button>
                         </div>
                     </CardContent>

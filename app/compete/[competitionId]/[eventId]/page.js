@@ -183,6 +183,23 @@ function TimerPage() {
                 return;
             }
 
+            // Check verification requirement
+            const currentRound = compData.currentRound || 1;
+            const requiresVerification = compData.verificationMandatory &&
+                currentRound >= (compData.verificationRequiredFromRound || 1);
+
+            if (requiresVerification) {
+                const userProfileQuery = query(collection(db, 'users'), where('uid', '==', user.uid));
+                const userProfileSnapshot = await getDocs(userProfileQuery);
+                const isVerified = !userProfileSnapshot.empty && userProfileSnapshot.docs[0].data().verificationStatus === 'VERIFIED';
+
+                if (!isVerified) {
+                    alert(`ID Verification Required\n\nYou must complete verification before starting Round ${currentRound}.\n\nContinue verification from your profile.`);
+                    router.push(`/competition/${params.competitionId}`);
+                    return;
+                }
+            }
+
             // Tournament mode checks
             if (compData.mode === CompetitionMode.TOURNAMENT) {
                 const participantId = `${user.uid}_${params.competitionId}`;
@@ -229,23 +246,10 @@ function TimerPage() {
                         return;
                     }
 
-                    if (roundStatus === 'verification') {
-                        setRoundLocked(true);
-                        setRoundLockedReason('Current round is under verification. Please wait for results to be verified.');
-                        setLoading(false);
-                        return;
-                    }
-
-                    if (roundStatus === 'advancing') {
-                        setRoundLocked(true);
-                        setRoundLockedReason('Round advancement in progress. Please wait.');
-                        setLoading(false);
-                        return;
-                    }
-
                     if (roundStatus === 'completed') {
                         setRoundLocked(true);
                         setRoundLockedReason('This round has been completed.');
+                        setPhase('eliminated');
                         setLoading(false);
                         return;
                     }
@@ -1460,7 +1464,7 @@ function TimerPage() {
                                 <div className="flex flex-col md:flex-row items-center justify-center gap-6">
                                     {/* Scramble Text */}
                                     <p className="text-2xl font-mono text-yellow-300 break-words bg-gray-900 p-4 rounded-lg border border-gray-700 flex-1">
-                                        {currentScramble || 'No scramble available. Contact admin.'}
+                                        {currentScramble || 'Scramble not yet released. Please try again shortly.'}
                                     </p>
 
                                     {/* Scramble Visualization */}

@@ -591,6 +591,30 @@ export default function ResultsManagementPage() {
     async function confirmQualification() {
         if (!simulationData) return;
 
+        const nextRound = selectedRound + 1;
+        const nextRoundData = competition.rounds?.find(r => r.roundNumber === nextRound);
+        const nextEvents = nextRoundData?.events || [];
+
+        const missingScrambles = [];
+        for (const eventId of nextEvents) {
+            const eventScrambles = competition.scrambles?.[eventId]?.[nextRound];
+            const scrambleCount = eventScrambles ? (Array.isArray(eventScrambles) ? eventScrambles.length : Object.keys(eventScrambles).length) : 0;
+            if (scrambleCount === 0) {
+                missingScrambles.push(eventId);
+            }
+        }
+
+        if (missingScrambles.length > 0) {
+            const proceed = confirm(
+                `WARNING: The following events are missing scrambles for Round ${nextRound}: ${missingScrambles.map(e => getEventName(e)).join(', ')}.\n\nCompetitors may see "Scramble not yet released" errors.\n\nDo you want to proceed anyway?`
+            );
+            if (!proceed) {
+                console.log('Admin cancelled round advancement due to missing scrambles');
+                return;
+            }
+            console.warn('Admin alert: Missing scrambles for events:', missingScrambles, 'Round:', nextRound);
+        }
+
         if (!confirm(`Confirm qualification?\n\n${simulationData.qualifiedCount} users will qualify for next round.`)) {
             return;
         }
