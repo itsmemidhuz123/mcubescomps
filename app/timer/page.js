@@ -326,22 +326,64 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         const handleKeyDown = (e) => {
             if (e.code === 'Space' && !e.repeat) {
                 e.preventDefault();
-                const currentState = timerStateRef.current;
 
-                if (currentState === TIMER_STATES.RUNNING) {
-                    stopTimer();
-                } else if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
-                    armTimer();
-                } else if (currentState === TIMER_STATES.INSPECTION) {
-                    armTimer();
-                }
+                // Get current state directly from React state
+                setTimerState(prevState => {
+                    if (prevState === TIMER_STATES.RUNNING) {
+                        stopTimer();
+                        return prevState;
+                    } else if (prevState === TIMER_STATES.IDLE || prevState === TIMER_STATES.STOPPED) {
+                        return TIMER_STATES.ARMED;
+                    } else if (prevState === TIMER_STATES.INSPECTION) {
+                        return TIMER_STATES.INSPECTION_ARMED;
+                    }
+                    return prevState;
+                });
             }
         };
 
         const handleKeyUp = (e) => {
             if (e.code === 'Space') {
                 e.preventDefault();
-                releaseFromArmed();
+
+                // Get current state directly
+                setTimerState(prevState => {
+                    if (prevState === TIMER_STATES.ARMED) {
+                        if (settings.inspectionEnabled) {
+                            // Start inspection
+                            setTimerState(TIMER_STATES.INSPECTION);
+                            setInspectionRemaining(15);
+                            setInspectionPenalty('none');
+                            lastBeepRef.current = 15;
+                            inspectionStartRef.current = performance.now();
+                            inspectionZeroTimeRef.current = null;
+                            inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
+                            return TIMER_STATES.INSPECTION;
+                        } else {
+                            // Start timer directly without inspection
+                            startTimer('none');
+                            return TIMER_STATES.RUNNING;
+                        }
+                    } else if (prevState === TIMER_STATES.INSPECTION_ARMED) {
+                        // User was holding - check elapsed time and start timer
+                        if (inspectionStartRef.current !== null) {
+                            const elapsed = performance.now() - inspectionStartRef.current;
+                            const elapsedSecs = elapsed / 1000;
+
+                            let penalty = 'none';
+                            if (elapsedSecs > 17) {
+                                penalty = 'DNF';
+                            } else if (elapsedSecs > 15) {
+                                penalty = '+2';
+                            }
+
+                            inspectionZeroTimeRef.current = null;
+                            startTimer(penalty);
+                            return TIMER_STATES.RUNNING;
+                        }
+                    }
+                    return prevState;
+                });
             }
         };
 
@@ -354,25 +396,63 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
             if (inspectionRafIdRef.current) cancelAnimationFrame(inspectionRafIdRef.current);
         };
-    }, [stopTimer, armTimer, releaseFromArmed]);
+    }, [settings.inspectionEnabled, stopTimer, startTimer, updateInspection]);
 
     const handleTouchStart = useCallback((e) => {
         e.preventDefault();
-        const currentState = timerStateRef.current;
 
-        if (currentState === TIMER_STATES.RUNNING) {
-            stopTimer();
-        } else if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
-            armTimer();
-        } else if (currentState === TIMER_STATES.INSPECTION) {
-            armTimer();
-        }
-    }, [stopTimer, armTimer]);
+        setTimerState(prevState => {
+            if (prevState === TIMER_STATES.RUNNING) {
+                stopTimer();
+                return prevState;
+            } else if (prevState === TIMER_STATES.IDLE || prevState === TIMER_STATES.STOPPED) {
+                return TIMER_STATES.ARMED;
+            } else if (prevState === TIMER_STATES.INSPECTION) {
+                return TIMER_STATES.INSPECTION_ARMED;
+            }
+            return prevState;
+        });
+    }, [stopTimer]);
 
     const handleTouchEnd = useCallback((e) => {
         e.preventDefault();
-        releaseFromArmed();
-    }, [releaseFromArmed]);
+
+        // Process touch end - same logic as key up
+        setTimerState(prevState => {
+            if (prevState === TIMER_STATES.ARMED) {
+                if (settings.inspectionEnabled) {
+                    setTimerState(TIMER_STATES.INSPECTION);
+                    setInspectionRemaining(15);
+                    setInspectionPenalty('none');
+                    lastBeepRef.current = 15;
+                    inspectionStartRef.current = performance.now();
+                    inspectionZeroTimeRef.current = null;
+                    inspectionRafIdRef.current = requestAnimationFrame(updateInspection);
+                    return TIMER_STATES.INSPECTION;
+                } else {
+                    startTimer('none');
+                    return TIMER_STATES.RUNNING;
+                }
+            } else if (prevState === TIMER_STATES.INSPECTION_ARMED) {
+                if (inspectionStartRef.current !== null) {
+                    const elapsed = performance.now() - inspectionStartRef.current;
+                    const elapsedSecs = elapsed / 1000;
+
+                    let penalty = 'none';
+                    if (elapsedSecs > 17) {
+                        penalty = 'DNF';
+                    } else if (elapsedSecs > 15) {
+                        penalty = '+2';
+                    }
+
+                    inspectionZeroTimeRef.current = null;
+                    startTimer(penalty);
+                    return TIMER_STATES.RUNNING;
+                }
+            }
+            return prevState;
+        });
+    }, [settings.inspectionEnabled, startTimer, updateInspection]);
 
     const getTimerColor = useCallback(() => {
         const currentState = timerStateRef.current;
