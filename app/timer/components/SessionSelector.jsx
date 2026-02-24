@@ -14,13 +14,14 @@ import { ChevronDown, Plus, Edit3, Trash2, FolderOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function SessionSelector({ onNewSession, onViewHistory }) {
-    const { currentSession, sessions, switchEvent, deleteSession, renameSession, createSession, currentEvent } = useTimer();
+    const { currentSession, sessions = [], switchEvent, deleteSession, renameSession, createSession, currentEvent } = useTimer();
     const [isOpen, setIsOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const router = useRouter();
 
     const getSessionDisplayName = (session) => {
+        if (!session) return 'Select Session';
         if (session.name) return session.name;
         const eventName = session.eventId === '333' ? '3x3' :
             session.eventId === '222' ? '2x2' :
@@ -76,7 +77,7 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
                     >
                         <FolderOpen className="w-3 h-3" />
                         <span className="max-w-[120px] truncate">
-                            {currentSession?.name || getSessionDisplayName(currentSession)}
+                            {currentSession ? getSessionDisplayName(currentSession) : 'Select Session'}
                         </span>
                         <ChevronDown className="w-3 h-3 opacity-50" />
                     </Button>
@@ -89,34 +90,40 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
 
                     <DropdownMenuSeparator className="bg-zinc-700" />
 
-                    {sessions.map((session) => (
-                        <DropdownMenuItem
-                            key={session.sessionId}
-                            onClick={() => handleSessionSelect(session.sessionId)}
-                            className="flex items-center justify-between text-white hover:bg-zinc-800 cursor-pointer"
-                        >
-                            <div className="flex-1 min-w-0">
-                                <div className="truncate text-sm">
-                                    {session.sessionId === currentSession?.sessionId && (
-                                        <span className="text-blue-400 mr-1">●</span>
-                                    )}
-                                    {getSessionDisplayName(session)}
+                    {sessions && sessions.length > 0 ? (
+                        sessions.map((session) => (
+                            <DropdownMenuItem
+                                key={session?.sessionId}
+                                onClick={() => handleSessionSelect(session?.sessionId)}
+                                className="flex items-center justify-between text-white hover:bg-zinc-800 cursor-pointer"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <div className="truncate text-sm">
+                                        {session?.sessionId === currentSession?.sessionId && (
+                                            <span className="text-blue-400 mr-1">●</span>
+                                        )}
+                                        {getSessionDisplayName(session)}
+                                    </div>
+                                    <div className="text-xs text-zinc-500">
+                                        {session?.solves?.length || 0} solves
+                                    </div>
                                 </div>
-                                <div className="text-xs text-zinc-500">
-                                    {session.solves?.length || 0} solves
-                                </div>
-                            </div>
-                            {session.sessionId !== currentSession?.sessionId && (
-                                <button
-                                    onClick={(e) => handleDelete(session.sessionId, e)}
-                                    className="p-1 hover:bg-red-900/50 rounded text-zinc-500 hover:text-red-400"
-                                    title="Delete session"
-                                >
-                                    <Trash2 className="w-3 h-3" />
-                                </button>
-                            )}
-                        </DropdownMenuItem>
-                    ))}
+                                {session?.sessionId !== currentSession?.sessionId && (
+                                    <button
+                                        onClick={(e) => handleDelete(session?.sessionId, e)}
+                                        className="p-1 hover:bg-red-900/50 rounded text-zinc-500 hover:text-red-400"
+                                        title="Delete session"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </DropdownMenuItem>
+                        ))
+                    ) : (
+                        <div className="px-2 py-4 text-center text-zinc-500 text-sm">
+                            No sessions yet
+                        </div>
+                    )}
 
                     <DropdownMenuSeparator className="bg-zinc-700" />
 
