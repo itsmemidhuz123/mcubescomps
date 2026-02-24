@@ -16,6 +16,23 @@ import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
 import { Button } from '@/components/ui/button';
 import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3 } from 'lucide-react';
 
+function StatBox({ label, value, highlight = 'blue', className = '' }) {
+    const colors = {
+        green: 'bg-green-500/20 border-green-500/30 text-green-400',
+        blue: 'bg-blue-500/20 border-blue-500/30 text-blue-400',
+        red: 'bg-red-500/20 border-red-500/30 text-red-400',
+        purple: 'bg-purple-500/20 border-purple-500/30 text-purple-400',
+        orange: 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+    };
+
+    return (
+        <div className={`p-3 rounded-lg border ${colors[highlight]} ${className}`}>
+            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{label}</div>
+            <div className="font-mono font-semibold text-lg">{value}</div>
+        </div>
+    );
+}
+
 const TIMER_STATES = {
     IDLE: 'idle',
     ARMED: 'armed',
@@ -497,22 +514,182 @@ function TimerPageContent() {
     }, [mergeData]);
 
     return (
-        <div className={`min-h-screen bg-[#0f1117] ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}>
-            <TimerWidget
-                syncStatus={syncStatus}
-                onSync={syncAllSessions}
-                isFullscreen={isFullscreen}
-                onToggleFullscreen={toggleFullscreen}
-                isFocusMode={isFocusMode}
-                onToggleFocusMode={toggleFocusMode}
-                sessionName={currentSession?.name || `Session ${currentSession?.createdAt ? new Date(currentSession.createdAt).toLocaleDateString() : '1'}`}
-                onNewSession={handleNewSession}
-                onViewHistory={() => setShowSessionHistory(true)}
-            />
+        <div className={`min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}>
+            {/* Background gradient effect */}
+            {!isFullscreen && (
+                <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent pointer-events-none" />
+            )}
 
-            <main className={`${isFullscreen ? 'pt-0' : 'pt-28'} pb-8 px-4 transition-all duration-300`}>
-                <div className="max-w-2xl mx-auto space-y-4">
-                    <div className="relative">
+            {/* Header - Clean like CubeDesk */}
+            {!isFullscreen && (
+                <header className="sticky top-0 z-30 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/50">
+                    <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">M</span>
+                            </div>
+                            <span className="font-semibold text-white">Timer</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={toggleFocusMode}
+                                className="text-zinc-400 hover:text-white"
+                            >
+                                <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={toggleFullscreen}
+                                className="text-zinc-400 hover:text-white"
+                            >
+                                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                            </Button>
+                        </div>
+                    </div>
+                </header>
+            )}
+
+            {/* Fullscreen header */}
+            {isFullscreen && (
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleFullscreen}
+                        className="bg-zinc-900/80 backdrop-blur text-zinc-400 hover:text-white border border-zinc-700"
+                    >
+                        <Minimize2 className="w-4 h-4 mr-1" /> Exit
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleFocusMode}
+                        className="bg-zinc-900/80 backdrop-blur text-zinc-400 hover:text-white border border-zinc-700"
+                    >
+                        <EyeOff className="w-4 h-4 mr-1" /> Focus
+                    </Button>
+                </div>
+            )}
+
+            <main className={`${isFullscreen ? 'pt-16' : 'pt-4'} pb-24 px-4 transition-all duration-300`}>
+                {/* Desktop Layout - 3 Column */}
+                <div className="max-w-7xl mx-auto hidden lg:block">
+                    <div className="grid grid-cols-12 gap-6">
+                        {/* Left Column - Solve List */}
+                        <div className="col-span-4">
+                            <SolveList
+                                solves={solves}
+                                stats={stats}
+                                bestSingle={bestSingle}
+                                onDeleteSolve={deleteSolve}
+                                onUpdatePenalty={updateSolvePenalty}
+                            />
+                        </div>
+
+                        {/* Center Column - Timer & Scramble */}
+                        <div className="col-span-5">
+                            <div className="flex flex-col items-center justify-center min-h-[70vh]">
+                                {/* Scramble Card - Glass Effect */}
+                                <div className="w-full mb-8">
+                                    {!isFocusMode && (
+                                        <ScrambleCard
+                                            scramble={scramble}
+                                            onRefresh={generateScramble}
+                                            onShowImage={() => setShowScrambleImage(true)}
+                                            eventId={eventId}
+                                            isLoading={isLoading}
+                                            scrambleVisualization={scrambleVisualization}
+                                            onScrambleVisualizationChange={(viz) => {
+                                                setScrambleVisualization(viz);
+                                                saveVisualizationPreference(viz);
+                                            }}
+                                        />
+                                    )}
+                                    {/* Focus mode scramble text */}
+                                    {isFocusMode && scramble && (
+                                        <div className="text-center mb-4">
+                                            <p className="font-mono text-sm text-zinc-500 bg-zinc-900/50 py-2 px-4 rounded-lg inline-block">{scramble}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Timer Display */}
+                                <div className="text-center py-8">
+                                    <div
+                                        className={`text-9xl md:text-[10rem] font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${timer.timerState === 'armed' || timer.timerState === 'inspection_armed' ? 'drop-shadow-lg' : ''}`}
+                                        onTouchStart={timer.handleTouchStart}
+                                        onTouchEnd={timer.handleTouchEnd}
+                                        onContextMenu={(e) => e.preventDefault()}
+                                    >
+                                        {timer.getDisplayValue()}
+                                    </div>
+                                    <p className="text-zinc-500 mt-4 mb-6">{timer.getStatusText()}</p>
+
+                                    {/* Penalty Buttons */}
+                                    {timer.showPenaltyButtons && timer.pendingSolve && (
+                                        <div className="flex gap-3 justify-center animate-in fade-in slide-in-from-bottom-2">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => timer.confirmSolve('+2')}
+                                                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20"
+                                            >
+                                                +2
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => timer.confirmSolve('DNF')}
+                                                className="border-red-500/50 text-red-400 hover:bg-red-500/20"
+                                            >
+                                                DNF
+                                            </Button>
+                                            <Button
+                                                variant="default"
+                                                onClick={() => timer.confirmSolve('none')}
+                                                className="bg-green-600 hover:bg-green-700"
+                                            >
+                                                Confirm
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right Column - Stats Panel (Inline) */}
+                        <div className="col-span-3">
+                            <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800/50 rounded-xl p-4 space-y-4">
+                                <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Statistics</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <StatBox label="Best" value={stats.bestTime ? timer.formatTime(stats.bestTime) : '-'} highlight="green" />
+                                    <StatBox label="Average" value={stats.average ? timer.formatTime(stats.average) : '-'} highlight="blue" />
+                                    <StatBox label="Worst" value={stats.worstTime ? timer.formatTime(stats.worstTime) : '-'} highlight="red" />
+                                    <StatBox label="Ao5" value={stats.ao5 ? timer.formatTime(stats.ao5) : '-'} highlight="purple" />
+                                    <StatBox label="Ao12" value={stats.ao12 ? timer.formatTime(stats.ao12) : '-'} highlight="orange" className="col-span-2" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile/Tablet Layout - Vertical Stack */}
+                <div className="lg:hidden">
+                    {/* Event & Session Info */}
+                    {!isFocusMode && (
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="text-sm text-zinc-400">
+                                {currentSession?.name || `Session ${new Date().toLocaleDateString()}`}
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setShowStats(true)} className="text-zinc-400">
+                                <BarChart3 className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Scramble Card */}
+                    <div className="mb-6">
                         {!isFocusMode && (
                             <ScrambleCard
                                 scramble={scramble}
@@ -527,75 +704,54 @@ function TimerPageContent() {
                                 }}
                             />
                         )}
-
-                        {/* Focus mode: show scramble text instead of card */}
                         {isFocusMode && scramble && (
                             <div className="text-center mb-4">
-                                <p className="font-mono text-sm text-zinc-500">{scramble}</p>
+                                <p className="font-mono text-sm text-zinc-500 bg-zinc-900/50 py-2 px-4 rounded-lg inline-block">{scramble}</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="text-center py-8">
+                    {/* Timer */}
+                    <div className="text-center py-6">
                         <div
-                            className={`text-8xl md:text-9xl font-mono font-bold transition-colors cursor-pointer select-none ${timer.getTimerColor()}`}
+                            className={`text-7xl md:text-8xl font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()}`}
                             onTouchStart={timer.handleTouchStart}
                             onTouchEnd={timer.handleTouchEnd}
                             onContextMenu={(e) => e.preventDefault()}
                         >
                             {timer.getDisplayValue()}
                         </div>
-                        <p className="text-zinc-400 mt-4 mb-6">{timer.getStatusText()}</p>
+                        <p className="text-zinc-500 mt-3 mb-4">{timer.getStatusText()}</p>
 
                         {timer.showPenaltyButtons && timer.pendingSolve && (
-                            <div className="flex gap-3 justify-center animate-in fade-in">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => timer.confirmSolve('+2')}
-                                    className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20"
-                                >
-                                    +2
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => timer.confirmSolve('DNF')}
-                                    className="border-red-500/50 text-red-400 hover:bg-red-500/20"
-                                >
-                                    DNF
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    onClick={() => timer.confirmSolve('none')}
-                                    className="bg-green-600 hover:bg-green-700"
-                                >
-                                    Confirm
-                                </Button>
+                            <div className="flex gap-2 justify-center animate-in fade-in">
+                                <Button variant="outline" size="sm" onClick={() => timer.confirmSolve('+2')} className="border-orange-500/50 text-orange-400">+2</Button>
+                                <Button variant="outline" size="sm" onClick={() => timer.confirmSolve('DNF')} className="border-red-500/50 text-red-400">DNF</Button>
+                                <Button variant="default" size="sm" onClick={() => timer.confirmSolve('none')} className="bg-green-600">OK</Button>
                             </div>
                         )}
                     </div>
 
+                    {/* Solve List - Collapsible on mobile */}
                     {!isFocusMode && (
-                        <>
-                            <div className="flex justify-center">
-                                <Button variant="ghost" onClick={() => setShowStats(true)} className="text-zinc-400 hover:text-white">
-                                    <BarChart3 className="w-4 h-4 mr-2" />View Stats
-                                </Button>
-                            </div>
-
-                            <SolveList
-                                solves={solves}
-                                stats={stats}
-                                bestSingle={bestSingle}
-                                onDeleteSolve={deleteSolve}
-                                onUpdatePenalty={updateSolvePenalty}
-                            />
-                        </>
+                        <SolveList
+                            solves={solves}
+                            stats={stats}
+                            bestSingle={bestSingle}
+                            onDeleteSolve={deleteSolve}
+                            onUpdatePenalty={updateSolvePenalty}
+                        />
                     )}
                 </div>
             </main>
 
+            {/* Stats Modal */}
             <StatsPanel isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} currentSolve={currentSolve} />
+
+            {/* Scramble Image Modal */}
             <ScrambleImageModal isOpen={showScrambleImage} onClose={() => setShowScrambleImage(false)} scramble={scramble} eventId={eventId} />
+
+            {/* Other Modals */}
             <MergeDialog isOpen={showMergePrompt} onClose={() => setShowMergePrompt(false)} onMerge={handleMerge} onKeepLocal={handleKeepLocal} onDiscard={handleDiscard} localSessionCount={0} />
             <SessionHistoryModal
                 isOpen={showSessionHistory}
@@ -613,20 +769,9 @@ function TimerPageContent() {
                 sessionName={currentSession?.name || 'Current Session'}
             />
 
-            {/* Focus Mode Exit Button */}
-            {isFocusMode && (
-                <button
-                    onClick={toggleFocusMode}
-                    className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-[#161a23] border border-[#2a2f3a] flex items-center justify-center text-zinc-400 hover:text-white hover:border-[#3a3f4a] transition-colors"
-                    title="Exit Focus Mode"
-                >
-                    <X className="w-5 h-5" />
-                </button>
-            )}
-
             {/* Floating Scramble Image - Bottom Right */}
-            {scramble && (
-                <div className={`fixed z-40 ${isFullscreen ? 'bottom-8 right-8' : 'bottom-6 right-6'}`}>
+            {scramble && !isFocusMode && (
+                <div className="fixed z-40 bottom-6 right-6">
                     <FloatingScrambleImage
                         scramble={scramble}
                         eventId={eventId}
