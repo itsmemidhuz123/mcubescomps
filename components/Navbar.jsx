@@ -62,6 +62,16 @@ function hasSuperAdminAccess(userProfile) {
 }
 
 function EventSelectorWithProvider({ compact }) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        return null;
+    }
+
     return (
         <TimerProvider>
             <EventSelector compact={compact} />
