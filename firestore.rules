@@ -251,9 +251,8 @@ service cloud.firestore {
       allow update, delete: if isModerator();
     }
     
-    // Timer Data (User's personal timer sessions and solves)
-    match /users/{userId}/timerData/{document=**} {
-      // Only owner can read/write their own timer data
+    // Timer Sessions (per-user timing data)
+    match /users/{userId}/timerSessions/{sessionId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
     
