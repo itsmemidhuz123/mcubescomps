@@ -14,7 +14,8 @@ import FloatingScrambleImage from '@/app/timer/components/FloatingScrambleImage'
 import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
 import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3 } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3, Settings } from 'lucide-react';
+import Link from 'next/link';
 
 function StatBox({ label, value, highlight = 'blue', className = '' }) {
     const colors = {
@@ -611,6 +612,15 @@ function TimerPageContent() {
                             >
                                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                             </Button>
+                            <Link href="/timer/settings">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-zinc-400 hover:text-white"
+                                >
+                                    <Settings className="w-4 h-4" />
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </header>
@@ -635,6 +645,15 @@ function TimerPageContent() {
                     >
                         <EyeOff className="w-4 h-4 mr-1" /> Focus
                     </Button>
+                    <Link href="/timer/settings">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="bg-zinc-900/80 backdrop-blur text-zinc-400 hover:text-white border border-zinc-700"
+                        >
+                            <Settings className="w-4 h-4 mr-1" /> Settings
+                        </Button>
+                    </Link>
                 </div>
             )}
 
