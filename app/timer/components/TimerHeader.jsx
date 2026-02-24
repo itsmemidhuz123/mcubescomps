@@ -80,6 +80,10 @@ export default function TimerHeader({
         >
             <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2 md:gap-3">
+                    <div className="flex items-center gap-2 pl-1">
+                        <div className="w-6 h-6 rounded bg-[#7C3AED] flex items-center justify-center text-white font-bold">M</div>
+                        <span className="text-white font-semibold">mcubes</span>
+                    </div>
                     <div className="ml-1">
                         <EventSelector compact={true} />
                     </div>
