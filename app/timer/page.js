@@ -616,15 +616,19 @@ function TimerPageContent() {
                 <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent pointer-events-none" />
             )}
 
-            {/* Header - Clean like CubeDesk */}
+            {/* Header - Minimal timer header without logo */}
             {!isFullscreen && (
                 <header className="sticky top-0 z-30 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/50">
                     <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center">
-                                <span className="text-white font-bold text-sm">M</span>
-                            </div>
-                            <span className="font-semibold text-white">Timer</span>
+                        {/* Event Selector - visible on all devices */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowEventSelector(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg hover:border-blue-500/50 transition-colors"
+                            >
+                                <span className="text-lg">{event?.icon || '🎲'}</span>
+                                <span className="text-sm text-white font-medium">{event?.name || '3x3'}</span>
+                            </button>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button
@@ -700,6 +704,7 @@ function TimerPageContent() {
                                 bestSingle={bestSingle}
                                 onDeleteSolve={deleteSolve}
                                 onUpdatePenalty={updateSolvePenalty}
+                                onViewAll={() => setShowSolvesDrawer(true)}
                             />
                         </div>
 
@@ -817,10 +822,6 @@ function TimerPageContent() {
                     )}
 
                     {/* Scramble Card */}
-                    <div className="mb-6 flex items-center justify-between md:justify-start gap-2 md:gap-4">
-                        <span className="text-xs text-zinc-400 md:hidden">Solves</span>
-                        <button className="px-3 py-1 rounded bg-zinc-800 text-white text-xs md:hidden" onClick={() => setShowSolvesDrawer(true)}>View All Solves</button>
-                    </div>
                     <div className="mb-6">
                         {!isFocusMode && showScrambleImage && (
                             <ScrambleCard
@@ -872,6 +873,7 @@ function TimerPageContent() {
                             bestSingle={bestSingle}
                             onDeleteSolve={deleteSolve}
                             onUpdatePenalty={updateSolvePenalty}
+                            onViewAll={() => setShowSolvesDrawer(true)}
                         />
                     )}
                 </div>
