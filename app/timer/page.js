@@ -610,7 +610,7 @@ function TimerPageContent() {
     }, []);
 
     return (
-        <div className={`min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-950 to-black overflow-x-hidden ${isFullscreen ? 'fixed inset-0 z-[9999] overflow-hidden' : ''}`}>
+        <div className={`timer-page min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-950 to-black overflow-x-hidden ${isFullscreen ? 'fixed inset-0 z-[9999] overflow-hidden' : ''}`}>
             {/* Background gradient effect */}
             {!isFullscreen && (
                 <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent pointer-events-none" />
