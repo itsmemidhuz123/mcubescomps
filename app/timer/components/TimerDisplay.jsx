@@ -109,7 +109,16 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
     }, [handleKeyDown, handleKeyUp]);
 
     const getTimerColor = () => {
-        if (timerState === TIMER_STATES.ARMED) return 'text-green-500';
+        if (settings.highContrast) {
+            if (timerState === TIMER_STATES.RUNNING) return 'text-yellow-300';
+            if (timerState === TIMER_STATES.INSPECTION) {
+                if (inspectionRemaining <= 3) return 'text-red-500';
+                if (inspectionRemaining <= 8) return 'text-orange-500';
+                return 'text-green-400';
+            }
+            return 'text-white';
+        }
+        if (timerState === TIMER_STATES.ARMED) return settings.disableGlow ? 'text-green-500' : 'text-green-400';
         if (timerState === TIMER_STATES.RUNNING) return 'text-white';
         if (timerState === TIMER_STATES.INSPECTION) {
             if (inspectionRemaining <= 3) return 'text-red-500';
@@ -117,6 +126,32 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             return 'text-yellow-400';
         }
         return 'text-white';
+    };
+
+    const getFontSizeClass = () => {
+        const sizes = {
+            small: 'text-4xl md:text-5xl',
+            medium: 'text-6xl md:text-7xl',
+            large: 'text-7xl md:text-8xl',
+            xlarge: 'text-8xl md:text-9xl'
+        };
+        return sizes[settings.timerFontSize] || sizes.medium;
+    };
+
+    const getFontStyleClass = () => {
+        const styles = {
+            monospace: 'font-mono',
+            sansSerif: 'font-sans',
+            statement: 'font-serif'
+        };
+        return styles[settings.timerFontStyle] || styles.monospace;
+    };
+
+    const getGlowClass = () => {
+        if (settings.disableGlow) return '';
+        if (timerState === TIMER_STATES.ARMED) return 'drop-shadow-[0_0_15px_rgba(34,197,94,0.6)]';
+        if (timerState === TIMER_STATES.RUNNING) return 'drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]';
+        return '';
     };
 
     const getStatusText = () => {
@@ -146,10 +181,10 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
     return (
         <div className="flex flex-col items-center">
             <div
-                className="relative cursor-pointer select-none"
+                className={`relative cursor-pointer select-none ${settings.reduceMotion ? '' : 'transition-all'}`}
                 onTouchStart={handleTouchStart}
             >
-                <div className={`text-8xl md:text-9xl font-mono font-bold transition-colors ${getTimerColor()}`}>
+                <div className={`${getFontSizeClass()} ${getFontStyleClass()} font-bold transition-colors ${getTimerColor()} ${getGlowClass()}`}>
                     {timerState === TIMER_STATES.INSPECTION
                         ? inspectionRemaining
                         : formatTime(displayTime)
@@ -157,7 +192,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
                 </div>
             </div>
 
-            <p className="text-zinc-400 mt-4 mb-6 text-center">
+            <p className={`text-zinc-400 mt-4 mb-6 text-center ${settings.reduceMotion ? '' : 'transition-colors'}`}>
                 {getStatusText()}
             </p>
 

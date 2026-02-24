@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     saveSession,
+    getSession,
     getLatestSession,
     getSessionsByEvent,
     getAllSessions,
     deleteSession as deleteSessionFromDB,
-    generateSessionId
+    generateSessionId,
+    generateSolveHash,
+    updateSessionName
 } from '@/lib/indexedDB';
+import { syncTimerData, SYNC_STATUS } from '@/lib/sync';
 import { calculateAllStats } from '@/lib/timerStats';
 import { DEFAULT_EVENT } from '@/lib/events';
 
@@ -26,6 +30,9 @@ export const useSessionManager = () => {
         totalSolves: 0
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [syncStatus, setSyncStatus] = useState(SYNC_STATUS.UNSYNCED);
+    const syncIntervalRef = useRef(null);
+    const lastSyncRef = useRef(0);
 
     const createNewSession = useCallback(async (eventId) => {
         const newSession = {
@@ -94,10 +101,14 @@ export const useSessionManager = () => {
     const addSolve = useCallback(async (solve) => {
         if (!currentSession) return;
 
+        const createdAt = solve.createdAt || Date.now();
+        const hash = generateSolveHash(currentSession.eventId, solve.time, createdAt);
+
         const newSolve = {
             ...solve,
             id: `solve_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            createdAt: solve.createdAt || Date.now()
+            createdAt,
+            hash
         };
 
         const updatedSolves = [newSolve, ...solves];
@@ -216,6 +227,45 @@ export const useSessionManager = () => {
         loadSessionsForEvent(currentEvent);
     }, [currentEvent, loadLatestSession, loadSessionsForEvent]);
 
+    useEffect(() => {
+        if (user?.uid && !syncIntervalRef.current) {
+            syncIntervalRef.current = setInterval(async () => {
+                const now = Date.now();
+                if (now - lastSyncRef.current > 30000) {
+                    try {
+                        setSyncStatus(SYNC_STATUS.SYNCING);
+                        await syncTimerData(user.uid);
+                        setSyncStatus(SYNC_STATUS.SYNCED);
+                        lastSyncRef.current = now;
+                    } catch (error) {
+                        console.error('Auto-sync error:', error);
+                        setSyncStatus(SYNC_STATUS.ERROR);
+                    }
+                }
+            }, 30000);
+        }
+
+        return () => {
+            if (syncIntervalRef.current) {
+                clearInterval(syncIntervalRef.current);
+                syncIntervalRef.current = null;
+            }
+        };
+    }, [user]);
+
+    const manualSync = useCallback(async () => {
+        if (!user?.uid) return;
+        try {
+            setSyncStatus(SYNC_STATUS.SYNCING);
+            await syncTimerData(user.uid);
+            setSyncStatus(SYNC_STATUS.SYNCED);
+            lastSyncRef.current = Date.now();
+        } catch (error) {
+            console.error('Manual sync error:', error);
+            setSyncStatus(SYNC_STATUS.ERROR);
+        }
+    }, [user]);
+
     return {
         currentEvent,
         currentSession,
@@ -223,6 +273,7 @@ export const useSessionManager = () => {
         solves,
         stats,
         isLoading,
+        syncStatus,
         switchEvent,
         addSolve,
         updateSolvePenalty,
@@ -230,6 +281,7 @@ export const useSessionManager = () => {
         createSession,
         deleteSession,
         renameSession,
-        refreshSession: () => loadLatestSession(currentEvent)
+        refreshSession: () => loadLatestSession(currentEvent),
+        manualSync
     };
 };
