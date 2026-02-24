@@ -17,7 +17,8 @@ const DEFAULT_SETTINGS = {
     enableSounds: true,
     enablePBAnimation: false,
     focusModeDefault: false,
-    fullscreenOnStart: false
+    fullscreenOnStart: false,
+    defaultScrambleVisualization: '2d'
 };
 
 const TimerContext = createContext(null);

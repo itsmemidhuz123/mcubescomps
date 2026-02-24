@@ -86,22 +86,24 @@ export function Navbar() {
     return (
         <header className="relative z-30 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md transition-colors duration-200">
             <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                {/* Logo */}
-                <Link href="/" className="flex items-center gap-2 group">
-                    <div className="relative h-10 w-40">
-                        <img
-                            src={LOGO_LIGHT}
-                            alt="MCUBES"
-                            className="h-full w-full object-contain object-left dark:hidden"
-                        />
-                        <img
-                            src={LOGO_DARK}
-                            alt="MCUBES"
-                            className="h-full w-full object-contain object-left hidden dark:block"
-                        />
-                    </div>
-                </Link>
-                {/* Event selector relocated to header in timer mode */}
+                {/* Logo replaced with Event Selector for Timer */}
+                <div className="flex items-center gap-2">
+                    <Link href="/" className="flex items-center gap-2 group">
+                        <div className="relative h-10 w-32">
+                            <img
+                                src={LOGO_LIGHT}
+                                alt="MCUBES"
+                                className="h-full w-full object-contain object-left dark:hidden"
+                            />
+                            <img
+                                src={LOGO_DARK}
+                                alt="MCUBES"
+                                className="h-full w-full object-contain object-left hidden dark:block"
+                            />
+                        </div>
+                    </Link>
+                </div>
+                {/* Event selector relocated to header in timer mode - shown in TimerHeader component */}
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">

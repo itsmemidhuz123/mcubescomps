@@ -429,6 +429,15 @@ function TimerPageContent() {
     const showLargeAverages = settings.showLargeAverages;
     const enableSounds = settings.enableSounds;
     const fullscreenOnStart = settings.fullscreenOnStart;
+    const defaultScrambleVisualization = settings.defaultScrambleVisualization || '2d';
+
+    // Use setting for default, but allow user toggle
+    const [scrambleVisualization, setScrambleVisualization] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem(VISUALIZATION_KEY) || defaultScrambleVisualization;
+        }
+        return defaultScrambleVisualization;
+    });
 
     // Force 2D for events that have issues with 3D (sq1, clock)
     const safeVisualization = (eventId === 'sq1' || eventId === 'clock') ? '2d' : scrambleVisualization;
@@ -948,28 +957,15 @@ function TimerPageContent() {
                 sessionName={currentSession?.name || 'Current Session'}
             />
 
-            {/* Floating Scramble Image - Bottom Right */}
+            {/* Floating Scramble Image - Bottom Right - Only on desktop */}
             {scramble && !isFocusMode && showScrambleImage && (
-                <div className="fixed z-40 bottom-6 right-6">
+                <div className="fixed z-40 bottom-6 right-6 hidden md:block">
                     <FloatingScrambleImage
                         scramble={scramble}
                         eventId={eventId}
                         onClick={() => setShowScrambleImageModal(true)}
                         visualization={safeVisualization}
                     />
-                </div>
-            )}
-
-            {/* Floating Event Selector - Bottom Left */}
-            {!isFocusMode && (
-                <div className="fixed z-40 bottom-6 left-6">
-                    <button
-                        onClick={() => setShowEventSelector(true)}
-                        className="flex items-center gap-2 px-4 py-3 bg-[#161a23] border border-[#2a2f3a] rounded-xl hover:border-blue-500/50 transition-colors shadow-lg"
-                    >
-                        <span className="text-xl">{event?.icon || '🎲'}</span>
-                        <span className="text-white font-medium text-sm">{event?.name || '3x3'}</span>
-                    </button>
                 </div>
             )}
 
