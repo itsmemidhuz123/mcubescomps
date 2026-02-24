@@ -18,7 +18,15 @@ const DEFAULT_SETTINGS = {
     enablePBAnimation: false,
     focusModeDefault: false,
     fullscreenOnStart: false,
-    defaultScrambleVisualization: '2d'
+    defaultScrambleVisualization: '2d',
+    timerFontSize: 'medium',
+    timerFontStyle: 'monospace',
+    timerDisplayMode: 'live',
+    reduceMotion: false,
+    disableGlow: false,
+    highContrast: false,
+    syncEnabled: true,
+    lastSyncedAt: null
 };
 
 const TimerContext = createContext(null);
@@ -82,7 +90,9 @@ export const TimerProvider = ({ children }) => {
         setScramble,
         scrambleImageUrl,
         setScrambleImageUrl,
-        isLoading
+        isLoading,
+        syncStatus: sessionManager.syncStatus,
+        manualSync: sessionManager.manualSync
     };
 
     return (
