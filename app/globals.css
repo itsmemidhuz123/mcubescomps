@@ -49,6 +49,13 @@
     }
 }
 
+/* Timer page: hide global left sidebar/rail when displaying timer settings */
+.timer-page .left-rail,
+.timer-page .sidebar,
+.timer-page .nav-rail {
+    display: none !important;
+}
+
 @layer base {
     * {
         @apply border-border;
