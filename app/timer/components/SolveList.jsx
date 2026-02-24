@@ -49,6 +49,17 @@ export default function SolveList({
                     Recent Solves <span className="text-zinc-500">({solves.length})</span>
                 </h3>
             </div>
+            <div className="md:hidden p-2">
+                {/* Mobile quick view: show last 3 solves horizontally */}
+                <div className="flex gap-2 overflow-x-auto">
+                    {solves.slice(0, 3).map((solve, idx) => (
+                        <div key={solve.id || idx} className="min-w-[120px] bg-[#1b202b] rounded-md px-3 py-2 flex-shrink-0 text-xs text-white">
+                            <div className="font-mono">{formatTime(solve.time, solve.penalty)}</div>
+                            <div className="text-xs opacity-70">{solve.penalty || '—'}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
 
             <div
                 ref={listRef}
