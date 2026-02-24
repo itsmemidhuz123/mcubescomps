@@ -33,6 +33,7 @@ const EVENT_TO_DISPLAY = {
 function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [error, setError] = useState(false);
     const id = useMemo(() => `scramble_${Math.random().toString(36).substr(2, 9)}`, []);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
@@ -45,6 +46,7 @@ function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
         let element = null;
 
         const init = async () => {
+            setError(false);
             try {
                 const scriptId = visualization === '3d' ? 'twisty-script' : 'scramble-display-script';
                 let script = document.getElementById(scriptId);
@@ -91,7 +93,8 @@ function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
                 container.appendChild(element);
                 setIsLoaded(true);
             } catch (err) {
-                console.error('Error:', err);
+                console.error('Scramble display error:', err);
+                if (!cancelled) setError(true);
             }
         };
 
@@ -102,6 +105,20 @@ function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
             // Don't remove element manually - let React handle it
         };
     }, [scramble, puzzle, displayEvent, visualization, height]);
+
+    if (error) {
+        return (
+            <div
+                className="w-full flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden border border-[#2a2f3a]"
+                style={{ minHeight: height }}
+            >
+                <div className="text-zinc-500 text-sm text-center px-4">
+                    <div className="font-medium mb-1">{EVENT_TO_DISPLAY[eventId] || eventId}</div>
+                    <div className="text-xs">{scramble}</div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div

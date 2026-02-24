@@ -34,6 +34,7 @@ const EVENT_TO_DISPLAY = {
 function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [error, setError] = useState(false);
 
     useEffect(() => {
         if (!scramble) return;
@@ -90,7 +91,8 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
                 container.appendChild(element);
                 setIsLoaded(true);
             } catch (err) {
-                console.error('Error:', err);
+                console.error('Scramble display error:', err);
+                setError(true);
             }
         };
 
@@ -100,6 +102,25 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
             cancelled = true;
         };
     }, [scramble, eventId, visualization]);
+
+    if (error) {
+        return (
+            <button
+                onClick={onClick}
+                className="relative group cursor-pointer"
+                title="View scramble"
+            >
+                <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden">
+                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs px-1 text-center">
+                        {eventId}
+                    </div>
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                    <Maximize2 className="w-6 h-6 text-white" />
+                </div>
+            </button>
+        );
+    }
 
     return (
         <button
