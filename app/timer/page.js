@@ -408,27 +408,8 @@ function TimerPageContent() {
     const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
     const [showPBAnimation, setShowPBAnimation] = useState(false);
     const [showEventSelector, setShowEventSelector] = useState(false);
-    const [scrambleVisualization, setScrambleVisualization] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem(VISUALIZATION_KEY) || '2d';
-        }
-        return '2d';
-    });
 
-    // Initialize focus mode from settings
-    useEffect(() => {
-        if (!isSettingsLoading && settings.focusModeDefault) {
-            setIsFocusMode(true);
-        }
-    }, [isSettingsLoading, settings.focusModeDefault]);
-
-    // Get local setting values for render
-    const showScrambleImage = settings.showScrambleImage;
-    const showSessionStatsPanel = settings.showSessionStatsPanel;
-    const decimalPoints = settings.decimalPoints;
-    const showLargeAverages = settings.showLargeAverages;
-    const enableSounds = settings.enableSounds;
-    const fullscreenOnStart = settings.fullscreenOnStart;
+    // Get setting for default scramble visualization
     const defaultScrambleVisualization = settings.defaultScrambleVisualization || '2d';
 
     // Use setting for default, but allow user toggle
@@ -439,7 +420,7 @@ function TimerPageContent() {
         return defaultScrambleVisualization;
     });
 
-    // Force 2D for events that have issues with 3D (sq1, clock)
+    // Initialize focus mode from settings
     const safeVisualization = (eventId === 'sq1' || eventId === 'clock') ? '2d' : scrambleVisualization;
 
     const timer = TimerEngine({
