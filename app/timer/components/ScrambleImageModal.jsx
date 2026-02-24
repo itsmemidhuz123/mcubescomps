@@ -23,12 +23,30 @@ const EVENT_TO_PUZZLE = {
     'minx': 'megaminx'
 };
 
+const EVENT_TO_DISPLAY = {
+    '333': '3x3x3',
+    '222': '2x2x2',
+    '444': '4x4x4',
+    '555': '5x5x5',
+    '666': '6x6x6',
+    '777': '7x7x7',
+    'pyram': 'pyraminx',
+    'skewb': 'skewb',
+    'sq1': 'square1',
+    'clock': 'clock',
+    'minx': 'megaminx'
+};
+
+const PROBLEMATIC_EVENTS = ['sq1', 'clock'];
+
 function ScrambleModalInner({ scramble, eventId }) {
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
+    const displayEvent = useMemo(() => EVENT_TO_DISPLAY[eventId] || '3x3x3', [eventId]);
+    const use2D = PROBLEMATIC_EVENTS.includes(eventId);
 
     useEffect(() => {
         if (!scramble) return;
@@ -41,33 +59,60 @@ function ScrambleModalInner({ scramble, eventId }) {
             setLoadError(null);
 
             try {
-                let script = document.getElementById('twisty-script-modal');
+                if (use2D) {
+                    let script = document.getElementById('scramble-display-modal');
 
-                if (!script) {
-                    script = document.createElement('script');
-                    script.id = 'twisty-script-modal';
-                    script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                    script.type = 'module';
-                    document.head.appendChild(script);
+                    if (!script) {
+                        script = document.createElement('script');
+                        script.id = 'scramble-display-modal';
+                        script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
+                        script.type = 'module';
+                        document.head.appendChild(script);
 
-                    await new Promise((resolve, reject) => {
-                        script.onload = resolve;
-                        script.onerror = () => reject(new Error('Failed to load'));
-                    });
+                        await new Promise((resolve, reject) => {
+                            script.onload = resolve;
+                            script.onerror = () => reject(new Error('Failed to load'));
+                        });
+                    }
+
+                    if (cancelled) return;
+                    await new Promise(r => setTimeout(r, 100));
+
+                    if (cancelled || !containerRef.current) return;
+
+                    element = document.createElement('scramble-display');
+                    element.setAttribute('event', displayEvent);
+                    element.setAttribute('visualization', '2D');
+                    element.setAttribute('checkered', 'true');
+                } else {
+                    let script = document.getElementById('twisty-script-modal');
+
+                    if (!script) {
+                        script = document.createElement('script');
+                        script.id = 'twisty-script-modal';
+                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+                        script.type = 'module';
+                        document.head.appendChild(script);
+
+                        await new Promise((resolve, reject) => {
+                            script.onload = resolve;
+                            script.onerror = () => reject(new Error('Failed to load'));
+                        });
+                    }
+
+                    if (cancelled) return;
+                    await new Promise(r => setTimeout(r, 100));
+
+                    if (cancelled || !containerRef.current) return;
+
+                    element = document.createElement('twisty-player');
+                    element.setAttribute('puzzle', puzzle);
+                    element.setAttribute('hint', 'none');
+                    element.setAttribute('control-panel', 'none');
+                    element.setAttribute('background', 'none');
                 }
 
-                if (cancelled) return;
-
-                await new Promise(r => setTimeout(r, 100));
-
-                if (cancelled || !containerRef.current) return;
-
-                element = document.createElement('twisty-player');
-                element.setAttribute('puzzle', puzzle);
                 element.setAttribute('alg', scramble);
-                element.setAttribute('hint', 'none');
-                element.setAttribute('control-panel', 'none');
-                element.setAttribute('background', 'none');
                 element.style.width = '100%';
                 element.style.height = '350px';
 
@@ -84,7 +129,18 @@ function ScrambleModalInner({ scramble, eventId }) {
         return () => {
             cancelled = true;
         };
-    }, [scramble, puzzle]);
+    }, [scramble, puzzle, displayEvent, use2D]);
+
+    if (loadError) {
+        return (
+            <div className="w-full min-h-[350px] flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden">
+                <div className="text-center px-4">
+                    <p className="text-zinc-400 mb-2">Visualization unavailable</p>
+                    <p className="font-mono text-sm text-zinc-500">{scramble}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div
@@ -92,10 +148,7 @@ function ScrambleModalInner({ scramble, eventId }) {
             className="w-full min-h-[350px] flex items-center justify-center bg-[#161a23] rounded-lg overflow-hidden"
         >
             {isLoading && (
-                <div className="text-zinc-500">Loading 3D view...</div>
-            )}
-            {loadError && (
-                <div className="text-red-400">Failed to load: {loadError}</div>
+                <div className="text-zinc-500">Loading...</div>
             )}
         </div>
     );
@@ -110,7 +163,7 @@ export default function ScrambleImageModal({ isOpen, onClose, scramble, eventId 
                 <DialogHeader>
                     <DialogTitle className="text-white">Scramble Visualization</DialogTitle>
                     <DialogDescription className="sr-only">
-                        3D visualization of the current scramble
+                        Visualization of the current scramble
                     </DialogDescription>
                 </DialogHeader>
 
