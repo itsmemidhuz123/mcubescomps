@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Menu, X, User, Moon, Sun, Users, Settings, Crown } from 'lucide-react';
 import EventSelector from '@/app/timer/components/EventSelector';
 import { useState, useEffect } from 'react';
-import EventSelector from '@/app/timer/components/EventSelector';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
