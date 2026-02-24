@@ -37,7 +37,7 @@ function StatBox({ label, value, highlight = 'blue', className = '' }) {
 }
 
 function TimerPageContent() {
-    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, refreshSession, settings, isLoading: isSettingsLoading } = useTimer();
+    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, deleteSession, refreshSession, settings, isLoading: isSettingsLoading } = useTimer();
     const eventId = event?.id || '333';
     const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(eventId);
     const { syncStatus, showMergePrompt, setShowMergePrompt, syncAllSessions, mergeData } = useSyncManager();
