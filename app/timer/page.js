@@ -420,7 +420,15 @@ function TimerPageContent() {
         return defaultScrambleVisualization;
     });
 
-    // Initialize focus mode from settings
+    // Get local setting values for render
+    const showScrambleImage = settings.showScrambleImage;
+    const showSessionStatsPanel = settings.showSessionStatsPanel;
+    const decimalPoints = settings.decimalPoints;
+    const showLargeAverages = settings.showLargeAverages;
+    const enableSounds = settings.enableSounds;
+    const fullscreenOnStart = settings.fullscreenOnStart;
+
+    // Force 2D for events that have issues with 3D (sq1, clock)
     const safeVisualization = (eventId === 'sq1' || eventId === 'clock') ? '2d' : scrambleVisualization;
 
     const timer = TimerEngine({
