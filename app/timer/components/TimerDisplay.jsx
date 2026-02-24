@@ -130,10 +130,10 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
     const getFontSizeClass = () => {
         const sizes = {
-            small: 'text-4xl md:text-5xl',
-            medium: 'text-6xl md:text-7xl',
-            large: 'text-7xl md:text-8xl',
-            xlarge: 'text-8xl md:text-9xl'
+            small: 'text-5xl md:text-6xl',
+            medium: 'text-7xl md:text-8xl',
+            large: 'text-8xl md:text-9xl',
+            xlarge: 'text-9xl md:text-[10rem]'
         };
         return sizes[settings.timerFontSize] || sizes.medium;
     };

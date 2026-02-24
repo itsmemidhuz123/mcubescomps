@@ -147,7 +147,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble, setti
         rafIdRef.current = requestAnimationFrame(updateDisplay);
     }, [settings.fullscreenOnStart]);
 
-    const stopTimer = useCallback(() => {
+    const stopTimer = useCallback(async () => {
         if (rafIdRef.current) {
             cancelAnimationFrame(rafIdRef.current);
             rafIdRef.current = null;
@@ -158,8 +158,26 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble, setti
         setDisplayTime(finalTime);
         const solve = { time: finalTime, penalty: inspectionPenalty, createdAt: Date.now() };
         setPendingSolve(solve);
-        setShowPenaltyButtons(true);
-    }, [inspectionPenalty]);
+
+        // Auto confirm if enabled
+        if (settings.autoConfirmSolve) {
+            const finalPenalty = inspectionPenalty !== 'none' ? inspectionPenalty : 'none';
+            const finalSolve = { ...solve, penalty: finalPenalty };
+            await addSolve(finalSolve);
+            setPendingSolve(null);
+            setShowPenaltyButtons(false);
+            setInspectionPenalty('none');
+            setTimerState(TIMER_STATES.IDLE);
+            setDisplayTime(0);
+            setInspectionRemaining(15);
+            inspectionStartRef.current = null;
+            inspectionActiveRef.current = false;
+            generateScramble();
+            if (onSolveComplete) onSolveComplete(finalSolve);
+        } else {
+            setShowPenaltyButtons(true);
+        }
+    }, [inspectionPenalty, settings.autoConfirmSolve, addSolve, generateScramble, onSolveComplete]);
 
     const startInspection = useCallback(() => {
         inspectionActiveRef.current = true;
