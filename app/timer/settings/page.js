@@ -74,7 +74,7 @@ function TimerSettingsContent() {
 
     return (
         <div className="min-h-screen bg-[#0f1117]">
-            <div className="container mx-auto px-4 py-6 max-w-2xl">
+            <div className="w-full px-4 py-6">
                 <div className="flex items-center gap-4 mb-6">
                     <Button variant="ghost" size="sm" onClick={() => router.push('/timer')} className="text-zinc-400 hover:text-white">
                         <ArrowLeft className="w-4 h-4 mr-2" />
