@@ -733,11 +733,10 @@ function TimerPageContent() {
                                 {/* Timer Display */}
                                 <div className="text-center py-8">
                                     <div
-                                        className={`text-9xl md:text-[10rem] font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${timer.timerState === 'armed' || timer.timerState === 'inspection_armed' ? 'drop-shadow-lg' : ''} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
+                                        className={`text-9xl md:text-[10rem] font-mono font-bold tracking-tight transition-colors cursor-pointer select-none outline-none ${timer.getTimerColor()} ${timer.timerState === 'armed' || timer.timerState === 'inspection_armed' ? 'drop-shadow-lg' : ''} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
                                         onTouchStart={timer.handleTouchStart}
                                         onTouchEnd={timer.handleTouchEnd}
                                         onContextMenu={(e) => e.preventDefault()}
-                                        tabIndex={0}
                                     >
                                         {timer.getDisplayValue()}
                                     </div>
@@ -837,11 +836,10 @@ function TimerPageContent() {
                     {/* Timer */}
                     <div className="text-center py-6">
                         <div
-                            className={`text-7xl md:text-8xl font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
+                            className={`text-7xl md:text-8xl font-mono font-bold tracking-tight transition-colors cursor-pointer select-none outline-none ${timer.getTimerColor()} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
                             onTouchStart={timer.handleTouchStart}
                             onTouchEnd={timer.handleTouchEnd}
                             onContextMenu={(e) => e.preventDefault()}
-                            tabIndex={0}
                         >
                             {timer.getDisplayValue()}
                         </div>
