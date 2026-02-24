@@ -15,6 +15,7 @@ import FloatingScrambleImage from '@/app/timer/components/FloatingScrambleImage'
 import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
 import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
 import { Button } from '@/components/ui/button';
+import SolveDrawer from '@/app/timer/components/SolveDrawer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3, Settings } from 'lucide-react';
@@ -398,6 +399,7 @@ function TimerPageContent() {
     const { syncStatus, showMergePrompt, setShowMergePrompt, syncAllSessions, mergeData } = useSyncManager();
 
     const [showStats, setShowStats] = useState(false);
+    const [showSolvesDrawer, setShowSolvesDrawer] = useState(false);
     const [currentSolve, setCurrentSolve] = useState(null);
     const [showScrambleImageModal, setShowScrambleImageModal] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -817,6 +819,10 @@ function TimerPageContent() {
                     )}
 
                     {/* Scramble Card */}
+                    <div className="mb-6 flex items-center justify-between md:justify-start gap-2 md:gap-4">
+                        <span className="text-xs text-zinc-400 md:hidden">Solves</span>
+                        <button className="px-3 py-1 rounded bg-zinc-800 text-white text-xs md:hidden" onClick={() => setShowSolvesDrawer(true)}>View All Solves</button>
+                    </div>
                     <div className="mb-6">
                         {!isFocusMode && showScrambleImage && (
                             <ScrambleCard
@@ -978,6 +984,9 @@ function TimerPageContent() {
                     </div>
                 </div>
             )}
+
+            {/* Mobile Solve Drawer */}
+            <SolveDrawer isOpen={showSolvesDrawer} onClose={() => setShowSolvesDrawer(false)} solves={solves} onDeleteSolve={deleteSolve} onUpdatePenalty={updateSolvePenalty} />
         </div>
     );
 }
