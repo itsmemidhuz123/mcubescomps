@@ -1,89 +1,35 @@
-'use client';
+'use client'
 
-import { useState, useEffect, useCallback } from 'react';
-import { TimerProvider, useTimer } from '@/contexts/TimerContext';
-import { useSyncManager } from '@/hooks/useSyncManager';
-import { useCubingScramble } from '@/hooks/useCubingScramble';
-import TimerDisplay from '@/app/timer/components/TimerDisplay';
-import ScrambleCard from '@/app/timer/components/ScrambleCard';
-import SolveList from '@/app/timer/components/SolveList';
-import StatsPanel from '@/app/timer/components/StatsPanel';
-import ScrambleImageModal from '@/app/timer/components/ScrambleImageModal';
-import FloatingScrambleImage from '@/app/timer/components/FloatingScrambleImage';
-import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
-import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
-import EventSelector from '@/app/timer/components/EventSelector';
-import SessionSelector from '@/app/timer/components/SessionSelector';
-import SolveDrawer from '@/app/timer/components/SolveDrawer';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Eye, EyeOff, Maximize2, Minimize2, Settings, Plus, History, Cloud, CloudOff } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { RotateCcw, Settings, Clock, FolderOpen, Plus } from 'lucide-react';
 import Link from 'next/link';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-function StatBox({ label, value, highlight = 'blue', className = '' }) {
-    const colors = {
-        green: "bg-green-500/20 border-green-500/30 text-green-400",
-        blue: "bg-blue-500/20 border-blue-500/30 text-blue-400",
-        red: "bg-red-500/20 border-red-500/30 text-red-400",
-        purple: "bg-purple-500/20 border-purple-500/30 text-purple-400",
-        orange: "bg-orange-500/20 border-orange-500/30 text-orange-400",
-    };
-
-    return (
-        <div className={`p-3 rounded-lg border ${colors[highlight]} ${className}`}>
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{label}</div>
-            <div className="font-mono font-semibold text-lg">{value}</div>
-        </div>
-    );
-}
-
-function TimerPageContent() {
-    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, deleteSession, refreshSession, settings, isLoading: isSettingsLoading } = useTimer();
-    const eventId = event?.id || '333';
-    const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(eventId);
-    const { syncStatus, showMergePrompt, setShowMergePrompt, syncAllSessions, mergeData } = useSyncManager();
-
-    const [showStats, setShowStats] = useState(false);
-    const [showSolvesDrawer, setShowSolvesDrawer] = useState(false);
-    const [currentSolve, setCurrentSolve] = useState(null);
-    const [showScrambleImageModal, setShowScrambleImageModal] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [isFocusMode, setIsFocusMode] = useState(false);
-    const [showSessionHistory, setShowSessionHistory] = useState(false);
-    const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
-    const [showPBAnimation, setShowPBAnimation] = useState(false);
-
-    const toggleFullscreen = useCallback(() => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().then(() => {
-                setIsFullscreen(true);
-            }).catch(() => { });
-        } else {
-            document.exitFullscreen().then(() => {
-                setIsFullscreen(false);
-            }).catch(() => { });
-        }
-    }, []);
-
-    const toggleFocusMode = useCallback(() => {
-        setIsFocusMode(prev => !prev);
-    }, []);
-
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    }, []);
-
-    const handleNewSession = async () => {
-        await createSession();
-        await generateScramble();
-        setShowNewSessionDialog(false);
-    };
+function TimerPage() {
+    const [time, setTime] = useState(0);
+    const [isRunning, setIsRunning] = useState(false);
+    const [isInspecting, setIsInspecting] = useState(false);
+    const [currentSessionName, setCurrentSessionName] = useState('Session 1');
+    const [sessions, setSessions] = useState([]);
+    const [inspectionTime, setInspectionTime] = useState(15);
+    const [solves, setSolves] = useState([]);
+    const [isHolding, setIsHolding] = useState(false);
+    const [canStart, setCanStart] = useState(false);
+    const holdTimerRef = useRef(null);
+    const intervalRef = useRef(null);
 
     const formatTime = (ms) => {
-        if (ms === null || ms === undefined) return '--';
         if (ms < 0) return '0.00';
         const seconds = Math.floor(ms / 1000);
         const centiseconds = Math.floor((ms % 1000) / 10);
@@ -96,172 +42,228 @@ function TimerPageContent() {
         return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     };
 
-    const formatAo = (ao) => {
-        if (!ao) return '--';
-        return formatTime(ao);
+    const startTimer = useCallback(() => {
+        setIsRunning(true);
+        setIsInspecting(false);
+        const startTime = Date.now();
+        intervalRef.current = setInterval(() => {
+            setTime(Date.now() - startTime);
+        }, 10);
+    }, []);
+
+    const stopTimer = useCallback(() => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
+        setIsRunning(false);
+        setSolves(prev => [time, ...prev].slice(0, 12));
+    }, [time]);
+
+    const startInspection = useCallback(() => {
+        setIsInspecting(true);
+        setInspectionTime(15);
+        intervalRef.current = setInterval(() => {
+            setInspectionTime(prev => {
+                if (prev <= 1) {
+                    clearInterval(intervalRef.current);
+                    startTimer();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, [startTimer]);
+
+    const handleKeyDown = useCallback((e) => {
+        if (e.code === 'Space' && !isHolding) {
+            e.preventDefault();
+            if (isRunning) {
+                stopTimer();
+            } else if (!isInspecting) {
+                setIsHolding(true);
+                holdTimerRef.current = setTimeout(() => {
+                    setCanStart(true);
+                }, 300);
+            }
+        }
+    }, [isRunning, isInspecting, isHolding, stopTimer]);
+
+    const handleKeyUp = useCallback((e) => {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (holdTimerRef.current) {
+                clearTimeout(holdTimerRef.current);
+            }
+            if (canStart && !isRunning) {
+                startTimer();
+            }
+            setIsHolding(false);
+            setCanStart(false);
+        }
+    }, [canStart, isRunning, startTimer]);
+
+    useEffect(() => {
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+        };
+    }, [handleKeyDown, handleKeyUp]);
+
+    const reset = () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setTime(0);
+        setIsRunning(false);
+        setIsInspecting(false);
+        setInspectionTime(15);
     };
 
-    if (isSettingsLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-[#0f1117]">
-                <div className="text-white">Loading...</div>
-            </div>
-        );
-    }
+    const calculateAo5 = () => {
+        if (solves.length < 5) return null;
+        const last5 = solves.slice(0, 5);
+        const sorted = [...last5].sort((a, b) => a - b);
+        const middle3 = sorted.slice(1, 4);
+        return middle3.reduce((a, b) => a + b, 0) / 3;
+    };
+
+    const ao5 = calculateAo5();
+    const best = solves.length > 0 ? Math.min(...solves) : null;
 
     return (
-        <div className="min-h-screen bg-[#0f1117] text-white">
-            {/* Background gradient */}
-            {!isFullscreen && (
-                <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent pointer-events-none" />
-            )}
-
+        <div className="min-h-screen bg-gradient-to-b from-zinc-100 to-zinc-50 dark:from-zinc-900 dark:to-black">
             {/* Header */}
-            {!isFullscreen && !isFocusMode && (
-                <header className="sticky top-0 z-30 bg-[#0f1117]/95 backdrop-blur-md border-b border-zinc-800">
-                    <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <EventSelector compact={true} />
-                            <SessionSelector
-                                onNewSession={() => setShowNewSessionDialog(true)}
-                                onViewHistory={() => setShowSessionHistory(true)}
-                            />
-                        </div>
-
-                        <h1 className="text-lg font-bold tracking-wider">TIMER</h1>
-
-                        <div className="flex items-center gap-1">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={toggleFocusMode}
-                                className="text-zinc-400 hover:text-white"
-                            >
-                                <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={toggleFullscreen}
-                                className="text-zinc-400 hover:text-white"
-                            >
-                                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                            </Button>
-                            <Link href="/timer/settings">
-                                <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white">
-                                    <Settings className="w-4 h-4" />
+            <div className="border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                <div className="container mx-auto px-4">
+                    <div className="flex items-center justify-end h-12 gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-zinc-700 dark:text-zinc-300 gap-1">
+                                    <FolderOpen className="w-4 h-4" />
+                                    <span>{currentSessionName}</span>
                                 </Button>
-                            </Link>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-56 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
+                                <div className="px-2 py-1.5 text-xs text-zinc-500 font-medium">
+                                    Sessions
+                                </div>
+                                <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-700" />
+                                <DropdownMenuItem className="cursor-pointer">
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    New Session
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Link href="/timer/settings">
+                            <Button variant="ghost" size="icon" className="text-zinc-600 dark:text-zinc-400">
+                                <Settings className="w-4 h-4" />
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            </div>
+
+            <div className="container mx-auto px-4 py-8">
+                <div className="max-w-4xl mx-auto">
+                    {/* Timer Display */}
+                    <div className="text-center mb-8">
+                        <div
+                            className={`text-9xl font-mono font-bold mb-4 transition-colors ${isHolding && !canStart ? 'text-red-500' :
+                                    canStart ? 'text-green-500' :
+                                        isRunning ? 'text-zinc-900 dark:text-white' :
+                                            isInspecting ? 'text-yellow-500' : 'text-zinc-900 dark:text-white'
+                                }`}
+                        >
+                            {isInspecting ? inspectionTime : formatTime(time)}
+                        </div>
+
+                        <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+                            {isRunning ? 'Press SPACE to stop' :
+                                isInspecting ? 'Inspection...' :
+                                    isHolding ? (canStart ? 'Release to start!' : 'Hold...') :
+                                        'Hold SPACE to start'}
+                        </p>
+
+                        <div className="flex justify-center gap-4">
+                            <Button
+                                variant="outline"
+                                onClick={reset}
+                                className="border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                                <RotateCcw className="w-4 h-4 mr-2" />
+                                Reset
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={startInspection}
+                                disabled={isRunning || isInspecting}
+                                className="border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                                <Clock className="w-4 h-4 mr-2" />
+                                Start Inspection
+                            </Button>
                         </div>
                     </div>
-                </header>
-            )}
-
-            {/* Focus Mode Header */}
-            {isFocusMode && !isFullscreen && (
-                <header className="sticky top-0 z-30 bg-[#0f1117]/95 backdrop-blur-md border-b border-zinc-800">
-                    <div className="container mx-auto px-4 h-14 flex items-center justify-end gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={toggleFocusMode}
-                            className="text-zinc-400 hover:text-white"
-                        >
-                            <EyeOff className="w-4 h-4 mr-1" />
-                            <span className="text-xs">Exit</span>
-                        </Button>
-                    </div>
-                </header>
-            )}
-
-            {/* Main Content */}
-            <main className={`container mx-auto px-4 py-8 ${isFocusMode ? 'pt-20' : ''}`}>
-                <div className="max-w-2xl mx-auto space-y-8">
-                    {/* Timer Display */}
-                    <TimerDisplay
-                        onTimerStop={(solve) => setCurrentSolve(solve.time)}
-                        onGenerateScramble={generateScramble}
-                    />
-
-                    {/* Scramble */}
-                    {!isFocusMode && (
-                        <ScrambleCard
-                            scramble={scramble}
-                            eventId={eventId}
-                            isLoading={scrambleLoading}
-                            onRefresh={generateScramble}
-                        />
-                    )}
 
                     {/* Stats */}
-                    {!isFocusMode && settings.showSessionStatsPanel && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <StatBox label="Best" value={formatTime(stats.bestSingle)} highlight="green" />
-                            <StatBox label="Ao5" value={formatAo(stats.ao5)} highlight="blue" />
-                            <StatBox label="Ao12" value={formatAo(stats.ao12)} highlight="purple" />
-                            <StatBox label="Solves" value={stats.totalSolves || 0} highlight="orange" />
-                        </div>
-                    )}
+                    <div className="grid grid-cols-3 gap-4 mb-8">
+                        <Card className="bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
+                            <CardContent className="p-4 text-center">
+                                <div className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">Best</div>
+                                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                                    {best ? formatTime(best) : '-'}
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
+                            <CardContent className="p-4 text-center">
+                                <div className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">Ao5</div>
+                                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                                    {ao5 ? formatTime(ao5) : '-'}
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
+                            <CardContent className="p-4 text-center">
+                                <div className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">Solves</div>
+                                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                                    {solves.length}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
 
-                    {/* Recent Solves */}
-                    {!isFocusMode && (
-                        <SolveList
-                            solves={solves}
-                            onDelete={deleteSolve}
-                            onUpdatePenalty={updateSolvePenalty}
-                            onViewAll={() => setShowSolvesDrawer(true)}
-                        />
-                    )}
+                    {/* Solves List */}
+                    <Card className="bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700">
+                        <CardContent className="p-4">
+                            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-4">Recent Solves</h3>
+                            {solves.length === 0 ? (
+                                <p className="text-zinc-500 dark:text-zinc-400 text-center py-8">No solves yet. Press SPACE to start!</p>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-2">
+                                    {solves.map((solve, index) => (
+                                        <div
+                                            key={index}
+                                            className={`p-3 rounded-lg text-center ${solve === best ? 'bg-green-100 dark:bg-green-900/50 border border-green-200 dark:border-green-700' : 'bg-zinc-100 dark:bg-zinc-700'
+                                                }`}
+                                        >
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">#{solves.length - index}</div>
+                                            <div className={`font-mono font-bold ${solve === best ? 'text-green-600 dark:text-green-400' : 'text-zinc-900 dark:text-white'
+                                                }`}>
+                                                {formatTime(solve)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
-            </main>
-
-            {/* Floating Scramble Image */}
-            {settings.showScrambleImage && scramble && !isFocusMode && (
-                <FloatingScrambleImage
-                    scramble={scramble}
-                    eventId={eventId}
-                />
-            )}
-
-            {/* Modals */}
-            <SolveDrawer
-                isOpen={showSolvesDrawer}
-                onClose={() => setShowSolvesDrawer(false)}
-                solves={solves}
-                onDeleteSolve={deleteSolve}
-                onUpdatePenalty={updateSolvePenalty}
-            />
-
-            <SessionHistoryModal
-                isOpen={showSessionHistory}
-                onClose={() => setShowSessionHistory(false)}
-                sessions={sessions}
-                currentSessionId={currentSession?.sessionId}
-                onLoadSession={switchEvent}
-                onDeleteSession={deleteSession}
-            />
-
-            <NewSessionDialog
-                isOpen={showNewSessionDialog}
-                onClose={() => setShowNewSessionDialog(false)}
-                onConfirm={handleNewSession}
-                sessionName={currentSession?.name || 'Current Session'}
-            />
-
-            <ScrambleImageModal
-                open={showScrambleImageModal}
-                onClose={() => setShowScrambleImageModal(false)}
-                scramble={scramble}
-                eventId={eventId}
-            />
+            </div>
         </div>
     );
 }
 
-export default function TimerPage() {
-    return (
-        <TimerProvider>
-            <TimerPageContent />
-        </TimerProvider>
-    );
-}
+export default TimerPage;
