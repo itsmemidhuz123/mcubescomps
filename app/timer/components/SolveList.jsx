@@ -3,14 +3,15 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { formatTime, getFinalTime } from '@/lib/timerStats';
-import { Trash2, Plus, X } from 'lucide-react';
+import { Trash2, Plus, X, ChevronUp, List } from 'lucide-react';
 
 export default function SolveList({
     solves,
     stats,
     bestSingle,
     onDeleteSolve,
-    onUpdatePenalty
+    onUpdatePenalty,
+    onViewAll
 }) {
     const listRef = useRef(null);
     const bestSingleTime = bestSingle;
@@ -44,10 +45,21 @@ export default function SolveList({
 
     return (
         <div className="bg-[#161a23] border border-[#2a2f3a] rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-[#2a2f3a]">
+            <div className="p-4 border-b border-[#2a2f3a] flex items-center justify-between">
                 <h3 className="text-sm font-medium text-zinc-400">
                     Recent Solves <span className="text-zinc-500">({solves.length})</span>
                 </h3>
+                {/* Up arrow button to view all solves */}
+                {onViewAll && solves.length > 3 && (
+                    <button
+                        onClick={onViewAll}
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                        <List className="w-3 h-3" />
+                        <span>View All</span>
+                        <ChevronUp className="w-3 h-3" />
+                    </button>
+                )}
             </div>
             <div className="md:hidden p-2">
                 {/* Mobile quick view: show last 3 solves horizontally */}
