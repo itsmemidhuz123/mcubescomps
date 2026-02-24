@@ -27,7 +27,7 @@ export default function NewSessionDialog({
                         Start New Session?
                     </DialogTitle>
                     <DialogDescription className="text-zinc-400">
-                        Your current session "{sessionName}" will be archived. You can view it in session history later.
+                        Your current session &quot;{sessionName}&quot; will be archived. You can view it in session history later.
                     </DialogDescription>
                 </DialogHeader>
 
