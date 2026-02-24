@@ -11,8 +11,12 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useTimer } from '@/contexts/TimerContext';
+import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
+import { Eye as EyeIcon } from 'lucide-react';
 import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Maximize2, Minimize2, Eye, EyeOff, Plus, History, Edit3 } from 'lucide-react';
 import Link from 'next/link';
+import EventSelector from '@/app/timer/components/EventSelector';
 import { useRouter } from 'next/navigation';
 
 const SyncStatus = ({ status }) => {
@@ -50,6 +54,8 @@ export default function TimerHeader({
     eventName = '3x3x3'
 }) {
     const { user, userProfile, signOut } = useAuth();
+    const { currentEvent, currentSession, sessions, switchEvent, createSession, refreshSession } = useTimer();
+    const [showSessionHistory, setShowSessionHistory] = useState(false);
     const router = useRouter();
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -76,6 +82,10 @@ export default function TimerHeader({
                     <div className="flex items-center gap-2 px-2 py-1 bg-[#161a23] rounded-lg border border-[#2a2f3a]">
                         <span className="text-lg">{eventIcon}</span>
                         <span className="text-sm text-white font-medium">{eventName}</span>
+                    </div>
+                    {/* Header Event Selector (header scope) */}
+                    <div className="hidden md:block ml-2">
+                        <EventSelector compact={true} />
                     </div>
                     <Button
                         variant="ghost"
@@ -188,6 +198,27 @@ export default function TimerHeader({
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
+                {/* Session history quick access in header */}
+                <Button variant="ghost" size="icon" onClick={() => setShowSessionHistory(true)} className="text-zinc-400 hover:text-white" title="Sessions">
+                    <EyeIcon className="w-4 h-4" />
+                </Button>
+                <SessionHistoryModal
+                    isOpen={showSessionHistory}
+                    onClose={() => setShowSessionHistory(false)}
+                    sessions={sessions}
+                    currentSessionId={currentSession?.sessionId}
+                    onLoadSession={(s) => {
+                        // Switch event if needed and load session data
+                        if (s.eventId && s.eventId !== currentEvent?.id) {
+                            switchEvent(s.eventId);
+                        }
+                        // Refresh current session data
+                        refreshSession();
+                        setShowSessionHistory(false);
+                    }}
+                    onDeleteSession={(id) => { /* implement later if needed */ }}
+                    onRenameSession={(id, name) => { /* implement later if needed */ }}
+                />
             </div>
         </header>
     );

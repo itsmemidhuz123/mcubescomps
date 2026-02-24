@@ -7,7 +7,7 @@ import { TimerProvider } from '@/contexts/TimerContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Menu, X, User, Moon, Sun, Users, Settings, Crown } from 'lucide-react';
-import EventSelector from '@/app/timer/components/EventSelector';
+// EventSelector moved to timer header; removed from global navbar.
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -61,23 +61,7 @@ function hasSuperAdminAccess(userProfile) {
     return userProfile.role?.toUpperCase() === 'SUPER_ADMIN';
 }
 
-function EventSelectorWithProvider({ compact }) {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) {
-        return null;
-    }
-
-    return (
-        <TimerProvider>
-            <EventSelector compact={compact} />
-        </TimerProvider>
-    );
-}
+// Event selector is now rendered inside the timer header to ensure context
 
 export function Navbar() {
     const { user, userProfile, signOut, isAdmin, isSuperAdmin, isModerator, hasPermission, loading } = useAuth();
@@ -117,10 +101,7 @@ export function Navbar() {
                         />
                     </div>
                 </Link>
-                {/* Timer Event Selector in header (compact) */}
-                <div className="hidden md:block ml-2 flex-shrink-0">
-                    <EventSelectorWithProvider compact={true} />
-                </div>
+                {/* Event selector relocated to header in timer mode */}
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
