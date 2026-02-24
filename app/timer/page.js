@@ -46,8 +46,8 @@ const SCRAMBLE_STORAGE_KEY = 'timer_current_scramble';
 const SCRAMBLE_EVENT_KEY = 'timer_current_event';
 const VISUALIZATION_KEY = 'timer_visualization';
 
-function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
-    const { addSolve, settings } = useTimer();
+function TimerEngine({ onSolveComplete, generateScramble, initialScramble, settings }) {
+    const { addSolve } = useTimer();
     const [timerState, setTimerState] = useState(TIMER_STATES.IDLE);
     const [displayTime, setDisplayTime] = useState(0);
     const [inspectionRemaining, setInspectionRemaining] = useState(15);
@@ -63,6 +63,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
     const audioContextRef = useRef(null);
     const inspectionZeroTimeRef = useRef(null);
     const inspectionActiveRef = useRef(false);
+    const pressStartRef = useRef(null);
 
     const getAudioContext = useCallback(() => {
         if (!audioContextRef.current) {
@@ -75,6 +76,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
     }, []);
 
     const playBeep = useCallback((frequency = 800, duration = 150) => {
+        if (!settings.enableSounds) return;
         try {
             const audioContext = getAudioContext();
             if (!audioContext) return;
@@ -92,7 +94,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + duration / 1000);
         } catch (e) { }
-    }, [getAudioContext]);
+    }, [getAudioContext, settings.enableSounds]);
 
     const formatTime = useCallback((ms) => {
         if (ms < 0) return '0.00';
@@ -100,11 +102,16 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         const centiseconds = Math.floor((ms % 1000) / 10);
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
+
+        const decimal = settings.decimalPoints === 3
+            ? centiseconds.toString().padStart(3, '0').slice(0, 3)
+            : centiseconds.toString().padStart(2, '0').slice(0, 2);
+
         if (minutes > 0) {
-            return `${minutes}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+            return `${minutes}:${secs.toString().padStart(2, '0')}.${decimal}`;
         }
-        return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
-    }, []);
+        return `${secs}.${decimal}`;
+    }, [settings.decimalPoints]);
 
     const startTimer = useCallback((penalty = 'none') => {
         if (inspectionRafIdRef.current) {
@@ -119,6 +126,11 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         inspectionStartRef.current = null;
         inspectionZeroTimeRef.current = null;
 
+        // Auto fullscreen if enabled
+        if (settings.fullscreenOnStart && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => { });
+        }
+
         const updateDisplay = () => {
             if (startTimeRef.current !== null) {
                 const elapsed = performance.now() - startTimeRef.current;
@@ -127,7 +139,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
             }
         };
         rafIdRef.current = requestAnimationFrame(updateDisplay);
-    }, []);
+    }, [settings.fullscreenOnStart]);
 
     const stopTimer = useCallback(() => {
         if (rafIdRef.current) {
@@ -213,27 +225,45 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         if (!pendingSolve) return;
         const finalPenalty = inspectionPenalty !== 'none' ? inspectionPenalty : penalty;
         const finalSolve = { ...pendingSolve, penalty: finalPenalty };
-        await addSolve(finalSolve);
-        setPendingSolve(null);
-        setShowPenaltyButtons(false);
-        setInspectionPenalty('none');
-        setTimerState(TIMER_STATES.IDLE);
-        setDisplayTime(0);
-        setInspectionRemaining(15);
-        inspectionStartRef.current = null;
-        inspectionActiveRef.current = false;
-        generateScramble();
-        if (onSolveComplete) onSolveComplete(finalSolve);
-    }, [pendingSolve, addSolve, generateScramble, onSolveComplete, inspectionPenalty]);
+
+        // Auto confirm if enabled
+        if (settings.autoConfirmSolve) {
+            await addSolve(finalSolve);
+            setPendingSolve(null);
+            setShowPenaltyButtons(false);
+            setInspectionPenalty('none');
+            setTimerState(TIMER_STATES.IDLE);
+            setDisplayTime(0);
+            setInspectionRemaining(15);
+            inspectionStartRef.current = null;
+            inspectionActiveRef.current = false;
+            generateScramble();
+            if (onSolveComplete) onSolveComplete(finalSolve);
+        } else {
+            await addSolve(finalSolve);
+            setPendingSolve(null);
+            setShowPenaltyButtons(false);
+            setInspectionPenalty('none');
+            setTimerState(TIMER_STATES.IDLE);
+            setDisplayTime(0);
+            setInspectionRemaining(15);
+            inspectionStartRef.current = null;
+            inspectionActiveRef.current = false;
+            generateScramble();
+            if (onSolveComplete) onSolveComplete(finalSolve);
+        }
+    }, [pendingSolve, addSolve, generateScramble, onSolveComplete, inspectionPenalty, settings.autoConfirmSolve]);
 
     // Event handlers using refs for state
     const handlePress = useCallback((action) => {
         const currentState = timerState;
+        const freezeTimeMs = settings.freezeTime * 1000;
 
         if (action === 'start') {
             // Press/hold
             if (currentState === TIMER_STATES.IDLE || currentState === TIMER_STATES.STOPPED) {
                 setTimerState(TIMER_STATES.ARMED);
+                pressStartRef.current = performance.now();
             } else if (currentState === TIMER_STATES.INSPECTION) {
                 setTimerState(TIMER_STATES.INSPECTION_ARMED);
             } else if (currentState === TIMER_STATES.RUNNING) {
@@ -242,6 +272,13 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
         } else if (action === 'end') {
             // Release
             if (currentState === TIMER_STATES.ARMED) {
+                const holdTime = pressStartRef.current ? performance.now() - pressStartRef.current : 0;
+                if (holdTime < freezeTimeMs) {
+                    // Too short - cancel
+                    setTimerState(TIMER_STATES.IDLE);
+                    pressStartRef.current = null;
+                    return;
+                }
                 if (settings.inspectionEnabled) {
                     startInspection();
                 } else {
@@ -265,7 +302,7 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
                 }
             }
         }
-    }, [timerState, settings.inspectionEnabled, startInspection, startTimer, stopTimer]);
+    }, [timerState, settings.inspectionEnabled, settings.freezeTime, startInspection, startTimer, stopTimer]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -347,18 +384,19 @@ function TimerEngine({ onSolveComplete, generateScramble, initialScramble }) {
 }
 
 function TimerPageContent() {
-    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, refreshSession } = useTimer();
+    const { solves, stats, event, deleteSolve, updateSolvePenalty, currentSession, sessions, switchEvent, createSession, refreshSession, settings, isLoading: isSettingsLoading } = useTimer();
     const eventId = event?.id || '333';
     const { scramble, isLoading, generateScramble } = useCubingScramble(eventId);
     const { syncStatus, showMergePrompt, setShowMergePrompt, syncAllSessions, mergeData } = useSyncManager();
 
     const [showStats, setShowStats] = useState(false);
     const [currentSolve, setCurrentSolve] = useState(null);
-    const [showScrambleImage, setShowScrambleImage] = useState(false);
+    const [showScrambleImageModal, setShowScrambleImageModal] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [showSessionHistory, setShowSessionHistory] = useState(false);
     const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
+    const [showPBAnimation, setShowPBAnimation] = useState(false);
     const [scrambleVisualization, setScrambleVisualization] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem(VISUALIZATION_KEY) || '2d';
@@ -366,16 +404,42 @@ function TimerPageContent() {
         return '2d';
     });
 
+    // Initialize focus mode from settings
+    useEffect(() => {
+        if (!isSettingsLoading && settings.focusModeDefault) {
+            setIsFocusMode(true);
+        }
+    }, [isSettingsLoading, settings.focusModeDefault]);
+
+    // Get local setting values for render
+    const showScrambleImage = settings.showScrambleImage;
+    const showSessionStatsPanel = settings.showSessionStatsPanel;
+    const decimalPoints = settings.decimalPoints;
+    const showLargeAverages = settings.showLargeAverages;
+    const enableSounds = settings.enableSounds;
+    const fullscreenOnStart = settings.fullscreenOnStart;
+
     const timer = TimerEngine({
         onSolveComplete: handleSolveComplete,
         generateScramble: () => {
             generateScramble();
             saveScrambleToStorage(scramble, eventId);
-        }
+        },
+        settings
     });
 
     function handleSolveComplete(solve) {
         setCurrentSolve(solve.time);
+
+        // Check for PB if animation is enabled
+        if (settings.enablePBAnimation && solve.penalty !== 'DNF') {
+            const finalTime = solve.penalty === '+2' ? solve.time + 2000 : solve.time;
+            const currentBest = stats.bestTime;
+            if (!currentBest || finalTime < currentBest) {
+                setShowPBAnimation(true);
+                setTimeout(() => setShowPBAnimation(false), 3000);
+            }
+        }
     }
 
     // Scramble persistence
@@ -577,9 +641,9 @@ function TimerPageContent() {
             <main className={`${isFullscreen ? 'pt-16' : 'pt-4'} pb-24 px-4 transition-all duration-300`}>
                 {/* Desktop Layout - 3 Column */}
                 <div className="max-w-7xl mx-auto hidden lg:block">
-                    <div className="grid grid-cols-12 gap-6">
+                    <div className={`grid gap-6 ${showSessionStatsPanel ? 'grid-cols-12' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
                         {/* Left Column - Solve List */}
-                        <div className="col-span-4">
+                        <div className={showSessionStatsPanel ? 'col-span-4' : 'col-span-1'}>
                             <SolveList
                                 solves={solves}
                                 stats={stats}
@@ -590,15 +654,15 @@ function TimerPageContent() {
                         </div>
 
                         {/* Center Column - Timer & Scramble */}
-                        <div className="col-span-5">
+                        <div className={showSessionStatsPanel ? 'col-span-5' : 'col-span-1'}>
                             <div className="flex flex-col items-center justify-center min-h-[70vh]">
                                 {/* Scramble Card - Glass Effect */}
                                 <div className="w-full mb-8">
-                                    {!isFocusMode && (
+                                    {!isFocusMode && showScrambleImage && (
                                         <ScrambleCard
                                             scramble={scramble}
                                             onRefresh={generateScramble}
-                                            onShowImage={() => setShowScrambleImage(true)}
+                                            onShowImage={() => setShowScrambleImageModal(true)}
                                             eventId={eventId}
                                             isLoading={isLoading}
                                             scrambleVisualization={scrambleVisualization}
@@ -619,7 +683,7 @@ function TimerPageContent() {
                                 {/* Timer Display */}
                                 <div className="text-center py-8">
                                     <div
-                                        className={`text-9xl md:text-[10rem] font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${timer.timerState === 'armed' || timer.timerState === 'inspection_armed' ? 'drop-shadow-lg' : ''}`}
+                                        className={`text-9xl md:text-[10rem] font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${timer.timerState === 'armed' || timer.timerState === 'inspection_armed' ? 'drop-shadow-lg' : ''} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
                                         onTouchStart={timer.handleTouchStart}
                                         onTouchEnd={timer.handleTouchEnd}
                                         onContextMenu={(e) => e.preventDefault()}
@@ -659,18 +723,26 @@ function TimerPageContent() {
                         </div>
 
                         {/* Right Column - Stats Panel (Inline) */}
-                        <div className="col-span-3">
-                            <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800/50 rounded-xl p-4 space-y-4">
-                                <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Statistics</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <StatBox label="Best" value={stats.bestTime ? timer.formatTime(stats.bestTime) : '-'} highlight="green" />
-                                    <StatBox label="Average" value={stats.average ? timer.formatTime(stats.average) : '-'} highlight="blue" />
-                                    <StatBox label="Worst" value={stats.worstTime ? timer.formatTime(stats.worstTime) : '-'} highlight="red" />
-                                    <StatBox label="Ao5" value={stats.ao5 ? timer.formatTime(stats.ao5) : '-'} highlight="purple" />
-                                    <StatBox label="Ao12" value={stats.ao12 ? timer.formatTime(stats.ao12) : '-'} highlight="orange" className="col-span-2" />
+                        {showSessionStatsPanel && (
+                            <div className="col-span-3">
+                                <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800/50 rounded-xl p-4 space-y-4">
+                                    <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Statistics</h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatBox label="Best" value={stats.bestTime ? timer.formatTime(stats.bestTime) : '-'} highlight="green" />
+                                        <StatBox label="Average" value={stats.average ? timer.formatTime(stats.average) : '-'} highlight="blue" />
+                                        <StatBox label="Worst" value={stats.worstTime ? timer.formatTime(stats.worstTime) : '-'} highlight="red" />
+                                        <StatBox label="Ao5" value={stats.ao5 ? timer.formatTime(stats.ao5) : '-'} highlight="purple" />
+                                        <StatBox label="Ao12" value={stats.ao12 ? timer.formatTime(stats.ao12) : '-'} highlight="orange" className="col-span-2" />
+                                        {showLargeAverages && (
+                                            <>
+                                                <StatBox label="Ao50" value={stats.ao50 ? timer.formatTime(stats.ao50) : '-'} highlight="blue" className="col-span-2" />
+                                                <StatBox label="Ao100" value={stats.ao100 ? timer.formatTime(stats.ao100) : '-'} highlight="purple" className="col-span-2" />
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -690,11 +762,11 @@ function TimerPageContent() {
 
                     {/* Scramble Card */}
                     <div className="mb-6">
-                        {!isFocusMode && (
+                        {!isFocusMode && showScrambleImage && (
                             <ScrambleCard
                                 scramble={scramble}
                                 onRefresh={generateScramble}
-                                onShowImage={() => setShowScrambleImage(true)}
+                                onShowImage={() => setShowScrambleImageModal(true)}
                                 eventId={eventId}
                                 isLoading={isLoading}
                                 scrambleVisualization={scrambleVisualization}
@@ -714,7 +786,7 @@ function TimerPageContent() {
                     {/* Timer */}
                     <div className="text-center py-6">
                         <div
-                            className={`text-7xl md:text-8xl font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()}`}
+                            className={`text-7xl md:text-8xl font-mono font-bold tracking-tight transition-colors cursor-pointer select-none ${timer.getTimerColor()} ${showPBAnimation ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.8)] animate-pulse' : ''}`}
                             onTouchStart={timer.handleTouchStart}
                             onTouchEnd={timer.handleTouchEnd}
                             onContextMenu={(e) => e.preventDefault()}
@@ -749,7 +821,9 @@ function TimerPageContent() {
             <StatsPanel isOpen={showStats} onClose={() => setShowStats(false)} stats={stats} currentSolve={currentSolve} />
 
             {/* Scramble Image Modal */}
-            <ScrambleImageModal isOpen={showScrambleImage} onClose={() => setShowScrambleImage(false)} scramble={scramble} eventId={eventId} />
+            {showScrambleImage && (
+                <ScrambleImageModal isOpen={showScrambleImageModal} onClose={() => setShowScrambleImageModal(false)} scramble={scramble} eventId={eventId} />
+            )}
 
             {/* Other Modals */}
             <MergeDialog isOpen={showMergePrompt} onClose={() => setShowMergePrompt(false)} onMerge={handleMerge} onKeepLocal={handleKeepLocal} onDiscard={handleDiscard} localSessionCount={0} />
@@ -770,14 +844,26 @@ function TimerPageContent() {
             />
 
             {/* Floating Scramble Image - Bottom Right */}
-            {scramble && !isFocusMode && (
+            {scramble && !isFocusMode && showScrambleImage && (
                 <div className="fixed z-40 bottom-6 right-6">
                     <FloatingScrambleImage
                         scramble={scramble}
                         eventId={eventId}
-                        onClick={() => setShowScrambleImage(true)}
+                        onClick={() => setShowScrambleImageModal(true)}
                         visualization={scrambleVisualization}
                     />
+                </div>
+            )}
+
+            {/* PB Animation Overlay */}
+            {showPBAnimation && (
+                <div className="fixed inset-0 z-[9998] pointer-events-none">
+                    <div className="absolute inset-0 bg-green-500/20 animate-pulse" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-6xl font-bold text-green-400 animate-bounce drop-shadow-[0_0_30px_rgba(74,222,128,0.8)]">
+                            NEW PB!
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
