@@ -802,7 +802,13 @@ function TimerPageContent() {
                     {!isFocusMode && (
                         <div className="flex items-center justify-between mb-4">
                             <div className="text-sm text-zinc-400">
-                                {currentSession?.name || `Session ${new Date().toLocaleDateString()}`}
+                                {currentSession?.name || `Session ${(() => {
+                                    const d = new Date();
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                                    const year = d.getFullYear();
+                                    return `${day}/${month}/${year}`;
+                                })()}`}
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setShowStats(true)} className="text-zinc-400">
                                 <BarChart3 className="w-4 h-4" />
