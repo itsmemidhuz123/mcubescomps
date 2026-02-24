@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTimer } from '@/contexts/TimerContext';
-import { WCA_EVENTS } from '@/lib/events';
+import { WCA_EVENTS, EVENT_ICONS } from '@/lib/events';
 import { ChevronDown } from 'lucide-react';
 
 export default function EventSelector({ compact = false }) {
@@ -19,6 +19,11 @@ export default function EventSelector({ compact = false }) {
     const [isOpen, setIsOpen] = useState(false);
 
     const currentEventData = WCA_EVENTS.find(e => e.id === currentEvent) || WCA_EVENTS[0];
+
+    const EventIcon = (eventId) => {
+        const Icon = EVENT_ICONS[eventId];
+        return Icon ? <Icon className="w-5 h-5 min-w-[20px]" /> : null;
+    };
 
     const handleEventSelect = async (eventId) => {
         setIsOpen(false);
@@ -50,6 +55,7 @@ export default function EventSelector({ compact = false }) {
                     : "w-full bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white"
                 }
             >
+                {EventIcon(currentEvent)}
                 <span className="font-semibold">{currentEventData.name}</span>
                 <ChevronDown className="w-4 h-4 ml-1 opacity-50" />
             </Button>
@@ -79,7 +85,7 @@ export default function EventSelector({ compact = false }) {
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
                                                 }`}
                                         >
-                                            <span className="font-medium min-w-[40px]">{event.icon}</span>
+                                            {EventIcon(event.id)}
                                             <span className="font-medium">{event.name}</span>
                                             <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
                                                 {event.fullName}
