@@ -18,6 +18,7 @@ import EventSelector from '@/app/timer/components/EventSelector';
 import SolveDrawer from '@/app/timer/components/SolveDrawer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3, Settings } from 'lucide-react';
 import Link from 'next/link';
 
