@@ -6,7 +6,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Menu, X, User, Moon, Sun, Users, Settings, Crown } from 'lucide-react';
+import EventSelector from '@/app/timer/components/EventSelector';
 import { useState, useEffect } from 'react';
+import EventSelector from '@/app/timer/components/EventSelector';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -97,6 +99,10 @@ export function Navbar() {
                         />
                     </div>
                 </Link>
+                {/* Timer Event Selector in header (compact) */}
+                <div className="hidden md:block ml-2 flex-shrink-0">
+                    <EventSelector compact={true} />
+                </div>
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
@@ -193,6 +199,10 @@ export function Navbar() {
 
                                 <Button variant="ghost" size="icon" onClick={() => signOut()} title="Logout" className="text-zinc-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
                                     <LogOut className="w-5 h-5" />
+                                </Button>
+                                {/* Timer Settings quick access */}
+                                <Button variant="ghost" size="icon" onClick={() => router.push('/timer/settings')} title="Timer Settings" className="text-zinc-500 dark:text-zinc-400 hover:text-white">
+                                    <Settings className="w-5 h-5" />
                                 </Button>
                             </>
                         ) : (
