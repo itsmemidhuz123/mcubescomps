@@ -46,7 +46,7 @@ export default function TimerSettingsPage() {
 function TimerSettingsContent() {
   const router = useRouter();
   const { settings, updateSettings, resetCurrentSession, resetAllTimerData } = useTimer();
-  
+
   const [showResetSessionDialog, setShowResetSessionDialog] = useState(false);
   const [showResetAllDialog, setShowResetAllDialog] = useState(false);
 
@@ -80,8 +80,8 @@ function TimerSettingsContent() {
               label="Timer Decimal Points"
               description="Number of decimal places shown"
             >
-              <Select 
-                value={settings.decimalPoints.toString()} 
+              <Select
+                value={settings.decimalPoints.toString()}
                 onValueChange={(v) => updateSettings({ decimalPoints: parseInt(v) })}
               >
                 <SelectTrigger className="w-24 bg-zinc-800 border-zinc-700">
@@ -210,8 +210,8 @@ function TimerSettingsContent() {
               label="Reset Current Session"
               description="Clear all solves in current session"
             >
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setShowResetSessionDialog(true)}
                 className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20"
@@ -224,8 +224,8 @@ function TimerSettingsContent() {
               label="Reset All Timer Data"
               description="Clear all sessions, settings, and local data"
             >
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setShowResetAllDialog(true)}
                 className="border-red-500/50 text-red-400 hover:bg-red-500/20"
