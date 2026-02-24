@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { getAllSessions } from '@/lib/indexedDB';
 
 const SYNC_STATUS = {
@@ -46,9 +46,8 @@ export const useSyncManager = () => {
         if (!user) return;
 
         try {
-            const sessionsRef = collection(db, 'timerSessions');
-            const q = query(sessionsRef, where('userId', '==', user.uid));
-            const snapshot = await getDocs(q);
+            const sessionsRef = collection(db, 'users', user.uid, 'timerSessions');
+            const snapshot = await getDocs(sessionsRef);
 
             if (!snapshot.empty) {
                 setSyncStatus(SYNC_STATUS.NOT_SYNCED);
@@ -69,7 +68,7 @@ export const useSyncManager = () => {
         try {
             setSyncStatus(SYNC_STATUS.SYNCING);
 
-            const sessionRef = doc(db, 'timerSessions', session.sessionId);
+            const sessionRef = doc(db, 'users', user.uid, 'timerSessions', session.sessionId);
             await setDoc(sessionRef, {
                 ...session,
                 userId: user.uid,
@@ -99,7 +98,7 @@ export const useSyncManager = () => {
             let failed = 0;
 
             for (const session of localSessions) {
-                const sessionRef = doc(db, 'timerSessions', session.sessionId);
+                const sessionRef = doc(db, 'users', user.uid, 'timerSessions', session.sessionId);
                 try {
                     await setDoc(sessionRef, {
                         ...session,
@@ -129,9 +128,8 @@ export const useSyncManager = () => {
         if (!user) return [];
 
         try {
-            const sessionsRef = collection(db, 'timerSessions');
-            const q = query(sessionsRef, where('userId', '==', user.uid));
-            const snapshot = await getDocs(q);
+            const sessionsRef = collection(db, 'users', user.uid, 'timerSessions');
+            const snapshot = await getDocs(sessionsRef);
 
             return snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -153,7 +151,7 @@ export const useSyncManager = () => {
                 const localSessions = await getAllSessions();
 
                 for (const session of localSessions) {
-                    const sessionRef = doc(db, 'timerSessions', session.sessionId);
+                    const sessionRef = doc(db, 'users', user.uid, 'timerSessions', session.sessionId);
                     const existingDoc = await getDoc(sessionRef);
 
                     if (existingDoc.exists()) {
