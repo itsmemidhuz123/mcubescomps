@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTimer } from '@/contexts/TimerContext';
 import { WCA_EVENTS } from '@/lib/events';
+import { ChevronDown } from 'lucide-react';
 
 export default function EventSelector({ compact = false }) {
     const { currentEvent, switchEvent, sessions } = useTimer();
@@ -45,23 +46,18 @@ export default function EventSelector({ compact = false }) {
                 size={compact ? "sm" : "default"}
                 onClick={() => setIsOpen(true)}
                 className={compact
-                    ? "bg-transparent hover:bg-zinc-800 text-white border-0"
-                    : "w-full bg-[#161a23] border-[#2a2f3a] hover:bg-[#1e2330] hover:border-[#3a3f4a] text-white py-6"
+                    ? "bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white border-0 font-medium"
+                    : "w-full bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white"
                 }
             >
-                <span className={compact ? "text-lg" : "text-2xl"}>{currentEventData.icon}</span>
-                <span className={compact ? "text-sm font-medium ml-1" : "text-lg font-medium ml-3"}>{currentEventData.name}</span>
-                {!compact && (
-                    <span className="ml-auto text-xs text-zinc-400">
-                        {sessions.length > 0 ? `${sessions.length} session${sessions.length > 1 ? 's' : ''}` : 'Tap to change'}
-                    </span>
-                )}
+                <span className="font-semibold">{currentEventData.name}</span>
+                <ChevronDown className="w-4 h-4 ml-1 opacity-50" />
             </Button>
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="bg-[#0f1117] border-[#2a2f3a] max-w-md w-[90vw]">
+                <DialogContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 max-w-md w-[90vw]">
                     <DialogHeader>
-                        <DialogTitle className="text-white">Select Event</DialogTitle>
+                        <DialogTitle className="text-zinc-900 dark:text-white">Select Event</DialogTitle>
                         <DialogDescription className="sr-only">
                             Choose a WCA event to practice
                         </DialogDescription>
@@ -70,7 +66,7 @@ export default function EventSelector({ compact = false }) {
                     <ScrollArea className="h-[60vh] pr-4">
                         {categoryOrder.map(category => (
                             <div key={category} className="mb-6">
-                                <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
                                     {categoryLabels[category]}
                                 </h3>
                                 <div className="space-y-1">
@@ -79,13 +75,13 @@ export default function EventSelector({ compact = false }) {
                                             key={event.id}
                                             onClick={() => handleEventSelect(event.id)}
                                             className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${event.id === currentEvent
-                                                    ? 'bg-blue-600/20 border border-blue-600/50 text-white'
-                                                    : 'bg-[#161a23] border border-[#2a2f3a] hover:bg-[#1e2330] text-zinc-300 hover:text-white'
+                                                    ? 'bg-blue-600/20 border border-blue-600/50 text-blue-700 dark:text-blue-300'
+                                                    : 'bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
                                                 }`}
                                         >
-                                            <span className="text-xl">{event.icon}</span>
+                                            <span className="font-medium min-w-[40px]">{event.icon}</span>
                                             <span className="font-medium">{event.name}</span>
-                                            <span className="ml-auto text-xs text-zinc-500">
+                                            <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
                                                 {event.fullName}
                                             </span>
                                         </button>
