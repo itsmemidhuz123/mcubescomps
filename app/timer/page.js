@@ -24,11 +24,11 @@ import Link from 'next/link';
 
 function StatBox({ label, value, highlight = 'blue', className = '' }) {
     const colors = {
-        green: 'bg-green-500/20 border-green-500/30 text-green-400',
-        blue: 'bg-blue-500/20 border-blue-500/30 text-blue-400',
-        red: 'bg-red-500/20 border-red-500/30 text-red-400',
-        purple: 'bg-purple-500/20 border-purple-500/30 text-purple-400',
-        orange: 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+        green: "bg-green-500/20 border-green-500/30 text-green-400",
+        blue: "bg-blue-500/20 border-blue-500/30 text-blue-400",
+        red: "bg-red-500/20 border-red-500/30 text-red-400",
+        purple: "bg-purple-500/20 border-purple-500/30 text-purple-400",
+        orange: "bg-orange-500/20 border-orange-500/30 text-orange-400",
     };
 
     return (
@@ -422,12 +422,16 @@ function TimerPageContent() {
     const defaultScrambleVisualization = settings.defaultScrambleVisualization || '2d';
 
     // Use setting for default, but allow user toggle
-    const [scrambleVisualization, setScrambleVisualization] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem(VISUALIZATION_KEY) || defaultScrambleVisualization;
+    const [scrambleVisualization, setScrambleVisualization] = useState(defaultScrambleVisualization);
+    const [isHydrated, setIsHydrated] = useState(false);
+
+    useEffect(() => {
+        const saved = localStorage.getItem(VISUALIZATION_KEY);
+        if (saved) {
+            setScrambleVisualization(saved);
         }
-        return defaultScrambleVisualization;
-    });
+        setIsHydrated(true);
+    }, []);
 
     // Get local setting values for render
     const showScrambleImage = settings.showScrambleImage;
