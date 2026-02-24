@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TimerProvider, useTimer } from '@/contexts/TimerContext';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { useCubingScramble } from '@/hooks/useCubingScramble';
+import { WCA_EVENTS } from '@/lib/events';
 import TimerWidget from '@/app/timer/components/TimerWidget';
 import ScrambleCard from '@/app/timer/components/ScrambleCard';
 import SolveList from '@/app/timer/components/SolveList';
@@ -14,6 +15,8 @@ import FloatingScrambleImage from '@/app/timer/components/FloatingScrambleImage'
 import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
 import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { BarChart3, Eye, EyeOff, Maximize2, Minimize2, X, Edit3, Settings } from 'lucide-react';
 import Link from 'next/link';
 
@@ -398,6 +401,7 @@ function TimerPageContent() {
     const [showSessionHistory, setShowSessionHistory] = useState(false);
     const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
     const [showPBAnimation, setShowPBAnimation] = useState(false);
+    const [showEventSelector, setShowEventSelector] = useState(false);
     const [scrambleVisualization, setScrambleVisualization] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem(VISUALIZATION_KEY) || '2d';
@@ -844,6 +848,49 @@ function TimerPageContent() {
                 <ScrambleImageModal isOpen={showScrambleImageModal} onClose={() => setShowScrambleImageModal(false)} scramble={scramble} eventId={eventId} />
             )}
 
+            {/* Event Selector Modal */}
+            <Dialog open={showEventSelector} onOpenChange={setShowEventSelector}>
+                <DialogContent className="bg-[#0f1117] border-[#2a2f3a] max-w-md w-[90vw]">
+                    <DialogHeader>
+                        <DialogTitle className="text-white">Select Event</DialogTitle>
+                    </DialogHeader>
+                    <ScrollArea className="h-[60vh] pr-4">
+                        {['cube', 'bigcube', 'special'].map(category => {
+                            const categoryEvents = WCA_EVENTS.filter(e => e.category === category);
+                            const categoryLabels = { cube: 'Cubes', bigcube: 'Big Cubes', special: 'Special' };
+                            return (
+                                <div key={category} className="mb-6">
+                                    <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                        {categoryLabels[category]}
+                                    </h3>
+                                    <div className="space-y-1">
+                                        {categoryEvents.map(ev => (
+                                            <button
+                                                key={ev.id}
+                                                onClick={async () => {
+                                                    setShowEventSelector(false);
+                                                    if (ev.id !== eventId) {
+                                                        await switchEvent(ev.id);
+                                                    }
+                                                }}
+                                                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${ev.id === eventId
+                                                        ? 'bg-blue-600/20 border border-blue-600/50 text-white'
+                                                        : 'bg-[#161a23] border border-[#2a2f3a] hover:bg-[#1e2330] text-zinc-300 hover:text-white'
+                                                    }`}
+                                            >
+                                                <span className="text-xl">{ev.icon}</span>
+                                                <span className="font-medium">{ev.name}</span>
+                                                <span className="ml-auto text-xs text-zinc-500">{ev.fullName}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </ScrollArea>
+                </DialogContent>
+            </Dialog>
+
             {/* Other Modals */}
             <MergeDialog isOpen={showMergePrompt} onClose={() => setShowMergePrompt(false)} onMerge={handleMerge} onKeepLocal={handleKeepLocal} onDiscard={handleDiscard} localSessionCount={0} />
             <SessionHistoryModal
@@ -871,6 +918,19 @@ function TimerPageContent() {
                         onClick={() => setShowScrambleImageModal(true)}
                         visualization={scrambleVisualization}
                     />
+                </div>
+            )}
+
+            {/* Floating Event Selector - Bottom Left */}
+            {!isFocusMode && (
+                <div className="fixed z-40 bottom-6 left-6">
+                    <button
+                        onClick={() => setShowEventSelector(true)}
+                        className="flex items-center gap-2 px-4 py-3 bg-[#161a23] border border-[#2a2f3a] rounded-xl hover:border-blue-500/50 transition-colors shadow-lg"
+                    >
+                        <span className="text-xl">{event?.icon || '🎲'}</span>
+                        <span className="text-white font-medium text-sm">{event?.name || '3x3'}</span>
+                    </button>
                 </div>
             )}
 
