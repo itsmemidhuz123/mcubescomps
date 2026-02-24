@@ -237,6 +237,8 @@ function TimerPageContent() {
                 onClose={() => setShowSessionHistory(false)}
                 sessions={sessions}
                 currentSessionId={currentSession?.sessionId}
+                onLoadSession={switchEvent}
+                onDeleteSession={deleteSession}
             />
 
             <NewSessionDialog
