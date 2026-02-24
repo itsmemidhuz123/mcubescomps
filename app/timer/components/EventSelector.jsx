@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTimer } from '@/contexts/TimerContext';
 import { WCA_EVENTS } from '@/lib/events';
 
-export default function EventSelector() {
+export default function EventSelector({ compact = false }) {
     const { currentEvent, switchEvent, sessions } = useTimer();
     const [isOpen, setIsOpen] = useState(false);
 
@@ -41,15 +41,21 @@ export default function EventSelector() {
     return (
         <>
             <Button
-                variant="outline"
+                variant={compact ? "ghost" : "outline"}
+                size={compact ? "sm" : "default"}
                 onClick={() => setIsOpen(true)}
-                className="w-full bg-[#161a23] border-[#2a2f3a] hover:bg-[#1e2330] hover:border-[#3a3f4a] text-white py-6"
+                className={compact
+                    ? "bg-transparent hover:bg-zinc-800 text-white border-0"
+                    : "w-full bg-[#161a23] border-[#2a2f3a] hover:bg-[#1e2330] hover:border-[#3a3f4a] text-white py-6"
+                }
             >
-                <span className="text-2xl mr-3">{currentEventData.icon}</span>
-                <span className="text-lg font-medium">{currentEventData.name}</span>
-                <span className="ml-auto text-xs text-zinc-400">
-                    {sessions.length > 0 ? `${sessions.length} session${sessions.length > 1 ? 's' : ''}` : 'Tap to change'}
-                </span>
+                <span className={compact ? "text-lg" : "text-2xl"}>{currentEventData.icon}</span>
+                <span className={compact ? "text-sm font-medium ml-1" : "text-lg font-medium ml-3"}>{currentEventData.name}</span>
+                {!compact && (
+                    <span className="ml-auto text-xs text-zinc-400">
+                        {sessions.length > 0 ? `${sessions.length} session${sessions.length > 1 ? 's' : ''}` : 'Tap to change'}
+                    </span>
+                )}
             </Button>
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
