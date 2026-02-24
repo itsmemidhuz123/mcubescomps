@@ -589,8 +589,28 @@ function TimerPageContent() {
         await mergeData('remote');
     }, [mergeData]);
 
+    // Prevent page scroll when using spacebar for timer
+    useEffect(() => {
+        const preventScroll = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        document.addEventListener('keydown', preventScroll, { passive: false });
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+
+        return () => {
+            document.removeEventListener('keydown', preventScroll);
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+        };
+    }, []);
+
     return (
-        <div className={`min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}>
+        <div className={`min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-950 to-black overflow-x-hidden ${isFullscreen ? 'fixed inset-0 z-[9999] overflow-hidden' : ''}`}>
             {/* Background gradient effect */}
             {!isFullscreen && (
                 <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent pointer-events-none" />
@@ -717,6 +737,7 @@ function TimerPageContent() {
                                         onTouchStart={timer.handleTouchStart}
                                         onTouchEnd={timer.handleTouchEnd}
                                         onContextMenu={(e) => e.preventDefault()}
+                                        tabIndex={0}
                                     >
                                         {timer.getDisplayValue()}
                                     </div>
@@ -820,6 +841,7 @@ function TimerPageContent() {
                             onTouchStart={timer.handleTouchStart}
                             onTouchEnd={timer.handleTouchEnd}
                             onContextMenu={(e) => e.preventDefault()}
+                            tabIndex={0}
                         >
                             {timer.getDisplayValue()}
                         </div>
