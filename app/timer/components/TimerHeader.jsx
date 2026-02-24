@@ -13,8 +13,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTimer } from '@/contexts/TimerContext';
 import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
+import SessionSelector from '@/app/timer/components/SessionSelector';
 import { Eye as EyeIcon } from 'lucide-react';
-import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Maximize2, Minimize2, Eye, EyeOff, Plus, History, Edit3 } from 'lucide-react';
+import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Maximize2, Minimize2, Eye, EyeOff, Plus, History, Edit3, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
 import EventSelector from '@/app/timer/components/EventSelector';
 import { useRouter } from 'next/navigation';
@@ -79,10 +80,15 @@ export default function TimerHeader({
         >
             <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2 md:gap-3">
-                    {/* Header Event Selector - now visible on all devices */}
                     <div className="ml-1">
                         <EventSelector compact={true} />
                     </div>
+
+                    <SessionSelector
+                        onNewSession={onNewSession}
+                        onViewHistory={onViewHistory}
+                    />
+
                     <Button
                         variant="ghost"
                         size="sm"
@@ -90,8 +96,9 @@ export default function TimerHeader({
                         className="text-zinc-400 hover:text-white text-xs gap-1"
                     >
                         <Plus className="w-3 h-3" />
-                        New
+                        <span className="hidden sm:inline">New</span>
                     </Button>
+
                     <Button
                         variant="ghost"
                         size="sm"
@@ -99,6 +106,7 @@ export default function TimerHeader({
                         className="text-zinc-400 hover:text-white text-xs gap-1"
                     >
                         <History className="w-3 h-3" />
+                        <span className="hidden sm:inline">History</span>
                     </Button>
                 </div>
 
@@ -162,7 +170,7 @@ export default function TimerHeader({
                                             className="flex items-center gap-2 text-white focus:bg-[#2a2f3a] focus:text-white"
                                         >
                                             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                                            <span>Sync Now</span>
+                                            <span>{isSyncing ? 'Syncing...' : 'Sync Timer Data'}</span>
                                         </DropdownMenuItem>
                                     )}
 
@@ -179,10 +187,12 @@ export default function TimerHeader({
                             ) : (
                                 <>
                                     <DropdownMenuItem asChild className="focus:bg-[#2a2f3a] focus:text-white">
-                                        <Link href="/auth/login" className="flex items-center gap-2 text-white cursor-pointer">
+                                        <Link href="/login" className="flex items-center gap-2 text-white cursor-pointer">
+                                            <User className="w-4 h-4" />
                                             <span>Sign In</span>
                                         </Link>
                                     </DropdownMenuItem>
+
                                     <DropdownMenuItem asChild className="focus:bg-[#2a2f3a] focus:text-white">
                                         <Link href="/timer/settings" className="flex items-center gap-2 text-white cursor-pointer">
                                             <Settings className="w-4 h-4" />
@@ -194,27 +204,6 @@ export default function TimerHeader({
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-                {/* Session history quick access in header */}
-                <Button variant="ghost" size="icon" onClick={() => setShowSessionHistory(true)} className="text-zinc-400 hover:text-white" title="Sessions">
-                    <EyeIcon className="w-4 h-4" />
-                </Button>
-                <SessionHistoryModal
-                    isOpen={showSessionHistory}
-                    onClose={() => setShowSessionHistory(false)}
-                    sessions={sessions}
-                    currentSessionId={currentSession?.sessionId}
-                    onLoadSession={(s) => {
-                        // Switch event if needed and load session data
-                        if (s.eventId && s.eventId !== currentEvent?.id) {
-                            switchEvent(s.eventId);
-                        }
-                        // Refresh current session data
-                        refreshSession();
-                        setShowSessionHistory(false);
-                    }}
-                    onDeleteSession={(id) => { /* implement later if needed */ }}
-                    onRenameSession={(id, name) => { /* implement later if needed */ }}
-                />
             </div>
         </header>
     );
