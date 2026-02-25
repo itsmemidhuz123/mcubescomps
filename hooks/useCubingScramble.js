@@ -142,9 +142,8 @@ export function useCubingScramble(eventId) {
     return { scramble, isLoading: loading, generateScramble };
 }
 
-function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
-    const containerRef = useRef(null);
-    const [loading, setLoading] = useState(true);
+export function useTwistyPlayer(scramble, eventId, containerRef) {
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
@@ -170,18 +169,16 @@ function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
                 player.setAttribute('alg', scramble);
                 player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
                 player.setAttribute('background', 'none');
-                player.setAttribute('show-controls', 'false');
-                player.setAttribute('show-toolbar', 'false');
-                player.setAttribute('show-options', 'false');
-                player.setAttribute('hint', 'none');
-                player.setAttribute('camera-control', 'none');
-                player.setAttribute('keyboard-shortcuts', 'none');
-                player.setAttribute('animation', 'duration:0');
+                player.setAttribute('control-panel', 'none');
+                player.setAttribute('visualization', '3D');
                 player.style.width = '100%';
                 player.style.height = '100%';
-                player.style.border = 'none';
-                player.style.display = 'block';
-
+                player.style.maxWidth = '100%';
+                player.style.maxHeight = '100%';
+                
+                // Hide default controls
+                player.className = "w-full h-full";
+                
                 container.appendChild(player);
                 setError(null);
             } catch (err) {
@@ -200,8 +197,20 @@ function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
 
         return () => {
             mounted = false;
+            if (container) {
+                container.innerHTML = '';
+            }
         };
-    }, [scramble, eventId]);
+    }, [scramble, eventId, containerRef]);
+
+    return { loading, error };
+}
+
+// Default export included for backward compatibility if used elsewhere, 
+// though we prefer named imports.
+export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
+    const containerRef = useRef(null);
+    const { loading, error } = useTwistyPlayer(scramble, eventId, containerRef);
 
     if (error) {
         return (
@@ -230,5 +239,3 @@ function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
         </div>
     );
 }
-
-export default ScrambleVisualization;
