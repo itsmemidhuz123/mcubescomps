@@ -73,34 +73,34 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1"
+                        className="text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 gap-1 h-8 px-2"
                     >
-                        <FolderOpen className="w-3 h-3" />
-                        <span className="max-w-[120px] truncate">
-                            {currentSession ? getSessionDisplayName(currentSession) : 'Select Session'}
+                        <FolderOpen className="w-4 h-4" />
+                        <span className="max-w-[80px] md:max-w-[120px] truncate text-sm">
+                            {currentSession ? getSessionDisplayName(currentSession) : 'Session'}
                         </span>
                         <ChevronDown className="w-3 h-3 opacity-50" />
                     </Button>
                 </DropdownMenuTrigger>
 
-                <DropdownMenuContent className="w-64 bg-[#161a23] border-zinc-700 max-h-80 overflow-y-auto">
+                <DropdownMenuContent className="w-64 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 max-h-80 overflow-y-auto">
                     <div className="px-2 py-1.5 text-xs text-zinc-500 font-medium">
-                        Sessions ({sessions.length})
+                        Sessions ({sessions.length || 0})
                     </div>
 
-                    <DropdownMenuSeparator className="bg-zinc-700" />
+                    <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-700" />
 
                     {sessions && sessions.length > 0 ? (
                         sessions.map((session) => (
                             <DropdownMenuItem
                                 key={session?.sessionId}
                                 onClick={() => handleSessionSelect(session?.sessionId)}
-                                className="flex items-center justify-between text-white hover:bg-zinc-800 cursor-pointer"
+                                className="flex items-center justify-between text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                             >
                                 <div className="flex-1 min-w-0">
                                     <div className="truncate text-sm">
                                         {session?.sessionId === currentSession?.sessionId && (
-                                            <span className="text-blue-400 mr-1">●</span>
+                                            <span className="text-blue-500 mr-1">●</span>
                                         )}
                                         {getSessionDisplayName(session)}
                                     </div>
@@ -109,13 +109,15 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
                                     </div>
                                 </div>
                                 {session?.sessionId !== currentSession?.sessionId && (
-                                    <button
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         onClick={(e) => handleDelete(session?.sessionId, e)}
-                                        className="p-1 hover:bg-red-900/50 rounded text-zinc-500 hover:text-red-400"
+                                        className="h-6 w-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/50 rounded text-zinc-400 hover:text-red-500"
                                         title="Delete session"
                                     >
                                         <Trash2 className="w-3 h-3" />
-                                    </button>
+                                    </Button>
                                 )}
                             </DropdownMenuItem>
                         ))
@@ -125,11 +127,11 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
                         </div>
                     )}
 
-                    <DropdownMenuSeparator className="bg-zinc-700" />
+                    <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-700" />
 
                     <DropdownMenuItem
                         onClick={handleNewSession}
-                        className="text-blue-400 hover:bg-zinc-800 cursor-pointer"
+                        className="text-blue-600 dark:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                     >
                         <Plus className="w-4 h-4 mr-2" />
                         New Session
@@ -137,7 +139,7 @@ export default function SessionSelector({ onNewSession, onViewHistory }) {
 
                     <DropdownMenuItem
                         onClick={handleViewHistory}
-                        className="text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+                        className="text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                     >
                         <FolderOpen className="w-4 h-4 mr-2" />
                         View All Sessions

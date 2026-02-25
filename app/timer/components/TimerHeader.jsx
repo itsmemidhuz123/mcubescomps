@@ -14,8 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTimer } from '@/contexts/TimerContext';
 import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
 import SessionSelector from '@/app/timer/components/SessionSelector';
-import { Eye as EyeIcon } from 'lucide-react';
-import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Maximize2, Minimize2, Eye, EyeOff, Plus, History, Edit3, FolderOpen } from 'lucide-react';
+import { Eye as EyeIcon, Maximize2, Minimize2, X } from 'lucide-react';
+import { Settings, LogOut, User, Cloud, CloudOff, RefreshCw, Plus } from 'lucide-react';
 import Link from 'next/link';
 import EventSelector from '@/app/timer/components/EventSelector';
 import { useRouter } from 'next/navigation';
@@ -78,84 +78,75 @@ export default function TimerHeader({
             className={`fixed top-0 left-0 right-0 z-50 bg-[#0f1117]/95 backdrop-blur-sm border-b border-[#161a23] transition-opacity duration-300 ${isFullscreen || isFocusMode ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
         >
-            <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2 md:gap-3">
-                    <div className="flex items-center gap-2 pl-1">
-                        <div className="w-6 h-6 rounded bg-[#7C3AED] flex items-center justify-center text-white font-bold">M</div>
-                        <span className="text-white font-semibold">mcubes</span>
-                    </div>
-                    <div className="ml-1">
+            <div className="flex items-center justify-between px-2 py-2 md:px-4 md:py-3">
+                {/* Left Section - Event + Session */}
+                <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
+                    {/* Close Button */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => router.push('/')}
+                        className="h-8 w-8 text-zinc-400 hover:text-white shrink-0"
+                        title="Close Timer"
+                    >
+                        <X className="w-4 h-4" />
+                    </Button>
+
+                    {/* Event Selector */}
+                    <div className="shrink-0">
                         <EventSelector compact={true} />
                     </div>
-
-                    <SessionSelector
-                        onNewSession={onNewSession}
-                        onViewHistory={onViewHistory}
-                    />
-
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onNewSession}
-                        className="text-zinc-400 hover:text-white text-xs gap-1"
-                    >
-                        <Plus className="w-3 h-3" />
-                        <span className="hidden sm:inline">New</span>
-                    </Button>
-
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onViewHistory}
-                        className="text-zinc-400 hover:text-white text-xs gap-1"
-                    >
-                        <History className="w-3 h-3" />
-                        <span className="hidden sm:inline">History</span>
-                    </Button>
                 </div>
 
-                <h1 className="text-lg font-bold text-white tracking-wider">TIMER</h1>
+                {/* Center - Title (Desktop only) */}
+                <h1 className="text-lg font-bold text-white tracking-wider hidden md:block mx-2">TIMER</h1>
 
-                <div className="flex items-center gap-2">
+                {/* Right Section - Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                    {/* Quick New Session - Mobile */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onNewSession}
+                        className="h-8 w-8 text-zinc-400 hover:text-white"
+                        title="New Session"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </Button>
+
+                    {/* Sync Status */}
                     {user && <SyncStatus status={syncStatus} />}
 
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onToggleFullscreen}
-                        className="h-8 w-8 text-zinc-400 hover:text-white"
-                        title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                    >
-                        {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    </Button>
+                    {/* Settings */}
+                    <Link href="/timer/settings">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-400 hover:text-white"
+                            title="Settings"
+                        >
+                            <Settings className="w-4 h-4" />
+                        </Button>
+                    </Link>
 
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onToggleFocusMode}
-                        className="h-8 w-8 text-zinc-400 hover:text-white"
-                        title={isFocusMode ? 'Exit Focus Mode' : 'Focus Mode'}
-                    >
-                        {isFocusMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-
+                    {/* User Menu */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                                <Avatar className="h-8 w-8">
+                            <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
+                                <Avatar className="h-7 w-7">
                                     <AvatarImage src={userProfile?.photoURL || user?.photoURL} alt={user?.displayName} />
-                                    <AvatarFallback className="bg-[#161a23] text-white text-sm">
-                                        {user?.email?.charAt(0).toUpperCase() || '?'}
+                                    <AvatarFallback className="bg-[#161a23] text-white text-xs">
+                                        {user?.email?.charAt(0).toUpperCase() || 'G'}
                                     </AvatarFallback>
                                 </Avatar>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-56 bg-[#161a23] border-[#2a2f3a]" align="end" forceMount>
+                        <DropdownMenuContent className="w-48 bg-[#161a23] border-[#2a2f3a]" align="end" forceMount>
                             {user ? (
                                 <>
                                     <DropdownMenuItem className="flex items-center gap-2 text-white focus:bg-[#2a2f3a] focus:text-white">
                                         <User className="w-4 h-4" />
-                                        <span>{userProfile?.displayName || user.email}</span>
+                                        <span className="text-sm">{userProfile?.displayName || user.email}</span>
                                     </DropdownMenuItem>
 
                                     <DropdownMenuSeparator className="bg-[#2a2f3a]" />

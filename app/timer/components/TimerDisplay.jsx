@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTimerEngine, TIMER_STATES } from '@/hooks/useTimerEngine';
 import { useTimer } from '@/contexts/TimerContext';
@@ -18,6 +18,9 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
     const [pendingSolve, setPendingSolve] = useState(null);
     const [showPenaltyButtons, setShowPenaltyButtons] = useState(false);
+    const [inspectionPenalty, setInspectionPenalty] = useState('none');
+    const touchTimerRef = useRef(null);
+    const isTouchingRef = useRef(false);
 
     const handleTimerStop = useCallback((solve, isPenaltyUpdate = false) => {
         if (isPenaltyUpdate) {
@@ -32,6 +35,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         displayTime,
         inspectionRemaining,
         formatTime,
+        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,
@@ -50,6 +54,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
         setPendingSolve(null);
         setShowPenaltyButtons(false);
+        setInspectionPenalty('none');
 
         if (onTimerStop) {
             onTimerStop(finalSolve);
@@ -74,15 +79,9 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
                 stopTimer();
             } else if (timerState === TIMER_STATES.IDLE) {
                 armTimer();
-            } else if (timerState === TIMER_STATES.ARMED) {
-                if (settings.inspectionEnabled) {
-                    startInspection();
-                } else {
-                    startTimer();
-                }
             }
         }
-    }, [timerState, settings.inspectionEnabled, stopTimer, armTimer, startInspection, startTimer]);
+    }, [timerState, stopTimer, armTimer]);
 
     const handleKeyUp = useCallback((e) => {
         if (e.code === 'Space') {
@@ -108,6 +107,53 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         };
     }, [handleKeyDown, handleKeyUp]);
 
+    const handleTouchStart = (e) => {
+        e.preventDefault();
+        isTouchingRef.current = true;
+
+        if (timerState === TIMER_STATES.RUNNING) {
+            stopTimer();
+        } else if (timerState === TIMER_STATES.IDLE) {
+            armTimer();
+        }
+
+        touchTimerRef.current = setTimeout(() => {
+            if (isTouchingRef.current && timerState === TIMER_STATES.ARMED) {
+                if (settings.inspectionEnabled) {
+                    startInspection();
+                } else {
+                    startTimer();
+                }
+            }
+        }, 300);
+    };
+
+    const handleTouchEnd = (e) => {
+        e.preventDefault();
+        isTouchingRef.current = false;
+
+        if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = null;
+        }
+
+        if (timerState === TIMER_STATES.ARMED) {
+            if (settings.inspectionEnabled) {
+                startInspection();
+            } else {
+                startTimer();
+            }
+        }
+    };
+
+    const handleTouchCancel = () => {
+        isTouchingRef.current = false;
+        if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = null;
+        }
+    };
+
     const getTimerColor = () => {
         if (settings.highContrast) {
             if (timerState === TIMER_STATES.RUNNING) return 'text-yellow-300';
@@ -126,6 +172,14 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             return 'text-yellow-400';
         }
         return 'text-white';
+    };
+
+    const getInspectionDisplay = () => {
+        const time = inspectionRemaining;
+        if (time < 0) {
+            return { text: time.toString(), color: 'text-red-500' };
+        }
+        return { text: time.toString(), color: getTimerColor() };
     };
 
     const getFontSizeClass = () => {
@@ -155,38 +209,30 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
     };
 
     const getStatusText = () => {
-        if (timerState === TIMER_STATES.RUNNING) return 'Press SPACE to stop';
-        if (timerState === TIMER_STATES.INSPECTION) return 'Inspection...';
+        if (timerState === TIMER_STATES.RUNNING) return 'Tap to stop';
+        if (timerState === TIMER_STATES.INSPECTION) {
+            if (inspectionPenalty === '+2') return '+2 added';
+            if (inspectionPenalty === 'DNF') return 'DNF';
+            return 'Inspection...';
+        }
         if (timerState === TIMER_STATES.ARMED) return 'Release to start';
         if (timerState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
-        return 'Hold SPACE to start';
+        return 'Hold to start';
     };
 
-    const handleTouchStart = () => {
-        if (timerState === TIMER_STATES.RUNNING) {
-            stopTimer();
-        } else if (timerState === TIMER_STATES.IDLE) {
-            armTimer();
-        } else if (timerState === TIMER_STATES.ARMED) {
-            if (settings.inspectionEnabled) {
-                startInspection();
-            } else {
-                startTimer();
-            }
-        } else if (timerState === TIMER_STATES.STOPPED && !showPenaltyButtons && pendingSolve) {
-            handleConfirmSolve('none');
-        }
-    };
+    const inspectionDisplay = getInspectionDisplay();
 
     return (
         <div className="flex flex-col items-center">
             <div
                 className={`relative cursor-pointer select-none ${settings.reduceMotion ? '' : 'transition-all'}`}
                 onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchCancel}
             >
-                <div className={`${getFontSizeClass()} ${getFontStyleClass()} font-bold transition-colors ${getTimerColor()} ${getGlowClass()}`}>
+                <div className={`${getFontSizeClass()} ${getFontStyleClass()} font-bold transition-colors ${inspectionDisplay.color} ${getGlowClass()}`}>
                     {timerState === TIMER_STATES.INSPECTION
-                        ? inspectionRemaining
+                        ? inspectionDisplay.text
                         : formatTime(displayTime)
                     }
                 </div>

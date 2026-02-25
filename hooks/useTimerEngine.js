@@ -18,6 +18,7 @@ export const useTimerEngine = (options = {}) => {
     const [timerState, setTimerState] = useState(TIMER_STATES.IDLE);
     const [displayTime, setDisplayTime] = useState(0);
     const [inspectionRemaining, setInspectionRemaining] = useState(inspectionTime);
+    const [inspectionPenalty, setInspectionPenalty] = useState('none');
     const [pendingSolve, setPendingSolve] = useState(null);
 
     const startTimeRef = useRef(null);
@@ -39,6 +40,13 @@ export const useTimerEngine = (options = {}) => {
         return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     };
 
+    const formatInspectionTime = (seconds) => {
+        if (seconds >= 0) {
+            return seconds.toString();
+        }
+        return seconds.toString();
+    };
+
     const updateDisplay = useCallback(() => {
         if (startTimeRef.current !== null) {
             const elapsed = performance.now() - startTimeRef.current;
@@ -50,10 +58,16 @@ export const useTimerEngine = (options = {}) => {
     const updateInspectionDisplay = useCallback(() => {
         if (inspectionStartRef.current !== null) {
             const elapsed = performance.now() - inspectionStartRef.current;
-            const remaining = Math.max(0, (inspectionTime * 1000) - elapsed);
-            setInspectionRemaining(Math.ceil(remaining / 1000));
+            const remaining = (inspectionTime * 1000) - elapsed;
+            const remainingSeconds = Math.ceil(remaining / 1000);
+            setInspectionRemaining(remainingSeconds);
 
-            if (remaining <= 0) {
+            if (remainingSeconds < -2) {
+                setInspectionPenalty('DNF');
+                stopTimer(true);
+            } else if (remainingSeconds < 0) {
+                setInspectionPenalty('+2');
+            } else if (remaining <= 0) {
                 startTimer();
             } else {
                 inspectionRafIdRef.current = requestAnimationFrame(updateInspectionDisplay);
@@ -69,11 +83,15 @@ export const useTimerEngine = (options = {}) => {
 
         setTimerState(TIMER_STATES.RUNNING);
         setInspectionRemaining(inspectionTime);
+        const penalty = inspectionPenalty;
+        setInspectionPenalty('none');
         startTimeRef.current = performance.now();
         rafIdRef.current = requestAnimationFrame(updateDisplay);
-    }, [inspectionTime, updateDisplay]);
 
-    const stopTimer = useCallback(() => {
+        return penalty;
+    }, [inspectionTime, updateDisplay, inspectionPenalty]);
+
+    const stopTimer = useCallback((forceStop = false) => {
         if (rafIdRef.current) {
             cancelAnimationFrame(rafIdRef.current);
             rafIdRef.current = null;
@@ -89,7 +107,7 @@ export const useTimerEngine = (options = {}) => {
 
         const solve = {
             time: finalTime,
-            penalty: 'none',
+            penalty: forceStop ? 'DNF' : 'none',
             createdAt: Date.now()
         };
 
@@ -107,6 +125,7 @@ export const useTimerEngine = (options = {}) => {
 
         setTimerState(TIMER_STATES.INSPECTION);
         setInspectionRemaining(inspectionTime);
+        setInspectionPenalty('none');
         inspectionStartRef.current = performance.now();
         inspectionRafIdRef.current = requestAnimationFrame(updateInspectionDisplay);
     }, [inspectionEnabled, inspectionTime, startTimer, updateInspectionDisplay]);
@@ -174,6 +193,7 @@ export const useTimerEngine = (options = {}) => {
         setTimerState(TIMER_STATES.IDLE);
         setDisplayTime(0);
         setInspectionRemaining(inspectionTime);
+        setInspectionPenalty('none');
         setPendingSolve(null);
     }, [inspectionTime]);
 
@@ -203,8 +223,10 @@ export const useTimerEngine = (options = {}) => {
         timerState,
         displayTime,
         inspectionRemaining,
+        inspectionPenalty,
         pendingSolve,
         formatTime,
+        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,

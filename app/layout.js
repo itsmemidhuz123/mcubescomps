@@ -1,8 +1,7 @@
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { Toaster } from "@/components/ui/toaster"
-import { Navbar } from '@/components/Navbar';
-import Footer from '@/components/Footer';
+import AppShell from '@/components/AppShell';
 import Script from 'next/script';
 import './globals.css';
 
@@ -22,11 +21,9 @@ export default function RootLayout({ children }) {
             <body suppressHydrationWarning className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white antialiased min-h-screen flex flex-col">
                 <ThemeProvider>
                     <AuthProvider>
-                        <Navbar />
-                        <main className="flex-1">
+                        <AppShell>
                             {children}
-                        </main>
-                        <Footer />
+                        </AppShell>
                         <Toaster />
                     </AuthProvider>
                 </ThemeProvider>
