@@ -24,11 +24,12 @@ const PUZZLE_MAP = {
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
     const containerRef = useRef(null);
+    const playerRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const container = containerRef?.current;
+        const container = containerRef.current;
         if (!container || !scramble || !eventId) {
             setLoading(false);
             return;
@@ -36,45 +37,46 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
         let isMounted = true;
 
-        const initPlayer = async () => {
+        const initializePlayer = async () => {
             try {
                 setLoading(true);
                 setError(null);
 
-                // Import and register the twisty-player web component
                 await import('cubing/twisty');
 
-                if (!isMounted || !container) return;
+                if (!isMounted || !containerRef.current) return;
 
-                // Clear previous content
+                const container = containerRef.current;
                 container.innerHTML = '';
 
-                // Create twisty-player element
                 const player = document.createElement('twisty-player');
                 player.setAttribute('alg', scramble);
                 player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
                 player.setAttribute('visualization', '3D');
                 player.setAttribute('background', 'none');
                 player.setAttribute('control-panel', 'none');
+                
                 player.style.width = '100%';
                 player.style.height = '100%';
+                player.style.display = 'flex';
+                player.style.alignItems = 'center';
+                player.style.justifyContent = 'center';
 
-                if (isMounted && container) {
-                    container.appendChild(player);
+                if (isMounted && containerRef.current) {
+                    containerRef.current.appendChild(player);
+                    playerRef.current = player;
+                    setLoading(false);
                 }
             } catch (err) {
-                console.error('Twisty player init error:', err);
+                console.error('Failed to initialize Twisty player:', err);
                 if (isMounted) {
-                    setError('Failed to load 3D preview');
-                }
-            } finally {
-                if (isMounted) {
+                    setError('Failed to load 3D visualization');
                     setLoading(false);
                 }
             }
         };
 
-        initPlayer();
+        initializePlayer();
 
         return () => {
             isMounted = false;
@@ -83,16 +85,11 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
     if (error) {
         return (
-            <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-                <span className="text-red-400 text-sm">Error: {error}</span>
-            </div>
-        );
-    }
-
-    if (!scramble) {
-        return (
-            <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-                <span className="text-zinc-500 text-sm">Loading scramble...</span>
+            <div 
+                className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" 
+                style={{ minHeight: height }}
+            >
+                <span className="text-red-400 text-sm">3D preview unavailable</span>
             </div>
         );
     }
