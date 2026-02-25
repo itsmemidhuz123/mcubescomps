@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-
-const SCRAMBLE_CDN = 'https://cdn.cubing.net/v0/js/cubing/scramble';
-const TWISTY_CDN = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+// We'll use dynamic imports for the heavy cubing library to avoid SSR issues and reduce initial bundle size
 
 const EVENT_MAP = {
     '333': '333',
@@ -45,99 +43,43 @@ const PUZZLE_MAP = {
     '333mbf': '3x3x3'
 };
 
-let scrambleLibPromise = null;
-let twistyLibLoaded = false;
-
-function loadScrambleLib() {
-    if (!scrambleLibPromise) {
-        scrambleLibPromise = new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = SCRAMBLE_CDN;
-            script.type = 'module';
-            script.onload = async () => {
-                try {
-                    const mod = await import(/* webpackIgnore: true */ SCRAMBLE_CDN);
-                    resolve(mod);
-                } catch (e) {
-                    reject(e);
-                }
-            };
-            script.onerror = () => reject(new Error('Failed to load scramble lib'));
-            document.head.appendChild(script);
-        });
-    }
-    return scrambleLibPromise;
-}
-
-async function loadTwistyLib() {
-    if (twistyLibLoaded && customElements.get('twisty-player')) {
-        return true;
-    }
-
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = TWISTY_CDN;
-        script.type = 'module';
-        script.onload = () => {
-            twistyLibLoaded = true;
-            setTimeout(() => resolve(true), 100);
-        };
-        script.onerror = () => reject(new Error('Failed to load twisty lib'));
-        document.head.appendChild(script);
-    });
-}
-
 export function useCubingScramble(eventId) {
-    const [scramble, setScramble] = useState(null);
+    const [scramble, setScramble] = useState('');
     const [loading, setLoading] = useState(true);
     const mountedRef = useRef(true);
 
+    const generateScramble = useCallback(async () => {
+        if (!eventId) return;
+        
+        setLoading(true);
+        try {
+            // Dynamic import to avoid SSR issues
+            const { randomScrambleForEvent } = await import('cubing/scramble');
+            const alg = await randomScrambleForEvent(EVENT_MAP[eventId] || '333');
+            
+            if (mountedRef.current) {
+                setScramble(alg ? alg.toString() : '');
+            }
+        } catch (err) {
+            console.error('Scramble generation error:', err);
+            if (mountedRef.current) {
+                setScramble('');
+            }
+        } finally {
+            if (mountedRef.current) {
+                setLoading(false);
+            }
+        }
+    }, [eventId]);
+
     useEffect(() => {
         mountedRef.current = true;
-        setLoading(true);
-        setScramble(null);
-
-        const generateScramble = async () => {
-            try {
-                const lib = await loadScrambleLib();
-                const { randomScrambleForEvent } = lib;
-                const alg = await randomScrambleForEvent(EVENT_MAP[eventId] || '333');
-                if (mountedRef.current) {
-                    setScramble(alg ? alg.toString() : '');
-                }
-            } catch (err) {
-                console.error('Scramble error:', err);
-                if (mountedRef.current) {
-                    setScramble('');
-                }
-            } finally {
-                if (mountedRef.current) {
-                    setLoading(false);
-                }
-            }
-        };
-
         generateScramble();
 
         return () => {
             mountedRef.current = false;
         };
-    }, [eventId]);
-
-    const generateScramble = useCallback(async () => {
-        setLoading(true);
-        try {
-            const lib = await loadScrambleLib();
-            const { randomScrambleForEvent } = lib;
-            const alg = await randomScrambleForEvent(EVENT_MAP[eventId] || '333');
-            setScramble(alg ? alg.toString() : '');
-        } catch (err) {
-            console.error('Scramble error:', err);
-            setScramble('');
-        } finally {
-            setLoading(false);
-        }
-    }, [eventId]);
+    }, [generateScramble]);
 
     return { scramble, isLoading: loading, generateScramble };
 }
@@ -155,36 +97,34 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
         const initPlayer = async () => {
             try {
                 setLoading(true);
-                await loadTwistyLib();
+                
+                // Import twisty player specifically
+                // This registers the <twisty-player> custom element
+                await import('cubing/twisty');
 
                 if (!mounted || !container) return;
 
-                if (!customElements.get('twisty-player')) {
-                    throw new Error('twisty-player not registered');
-                }
-
+                // Clear previous content
                 container.innerHTML = '';
 
+                // Create and configure the player element
                 const player = document.createElement('twisty-player');
                 player.setAttribute('alg', scramble);
                 player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
+                player.setAttribute('visualization', '3D');
                 player.setAttribute('background', 'none');
                 player.setAttribute('control-panel', 'none');
-                player.setAttribute('visualization', '3D');
+                
+                // Ensure proper sizing
                 player.style.width = '100%';
                 player.style.height = '100%';
-                player.style.maxWidth = '100%';
-                player.style.maxHeight = '100%';
-                
-                // Hide default controls
-                player.className = "w-full h-full";
                 
                 container.appendChild(player);
                 setError(null);
             } catch (err) {
-                console.error('Twisty error:', err);
+                console.error('Twisty player init error:', err);
                 if (mounted) {
-                    setError(err.message);
+                    setError('Failed to load 3D preview');
                 }
             } finally {
                 if (mounted) {
@@ -193,10 +133,12 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
             }
         };
 
-        initPlayer();
+        // Small delay to ensure DOM is ready and avoid race conditions
+        const timeoutId = setTimeout(initPlayer, 50);
 
         return () => {
             mounted = false;
+            clearTimeout(timeoutId);
             if (container) {
                 container.innerHTML = '';
             }
@@ -204,38 +146,4 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
     }, [scramble, eventId, containerRef]);
 
     return { loading, error };
-}
-
-// Default export included for backward compatibility if used elsewhere, 
-// though we prefer named imports.
-export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
-    const containerRef = useRef(null);
-    const { loading, error } = useTwistyPlayer(scramble, eventId, containerRef);
-
-    if (error) {
-        return (
-            <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-                <span className="text-red-400 text-sm">Error: {error}</span>
-            </div>
-        );
-    }
-
-    return (
-        <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-            <div
-                ref={containerRef}
-                style={{
-                    width: '100%',
-                    height: height,
-                    minHeight: height,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}
-            >
-                {!scramble && <span className="text-zinc-500 text-sm">Loading scramble...</span>}
-                {scramble && loading && <span className="text-zinc-500 text-sm">Loading 3D...</span>}
-            </div>
-        </div>
-    );
 }
