@@ -44,25 +44,38 @@ const PUZZLE_MAP = {
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const mountedRef = useRef(true);
+    const lastEventRef = useRef(null);
 
     const generateScramble = useCallback(async () => {
-        if (!eventId) return;
+        if (!eventId) {
+            console.log('[Scramble] No eventId provided');
+            return;
+        }
         
+        console.log('[Scramble] Generating scramble for event:', eventId);
         setLoading(true);
+        
         try {
             const { randomScrambleForEvent } = await import('cubing/scramble');
             const mappedEvent = EVENT_MAP[eventId] || '333';
+            
+            console.log('[Scramble] Mapped event:', mappedEvent);
+            
             const scrambleAlg = await randomScrambleForEvent(mappedEvent);
+            const scrambleString = scrambleAlg ? scrambleAlg.toString() : '';
+            
+            console.log('[Scramble] Generated scramble:', scrambleString);
             
             if (mountedRef.current) {
-                setScramble(scrambleAlg ? scrambleAlg.toString() : '');
+                setScramble(scrambleString);
+                lastEventRef.current = eventId;
             }
         } catch (err) {
-            console.error('Scramble generation error:', err);
+            console.error('[Scramble] Generation error:', err);
             if (mountedRef.current) {
-                setScramble('Error generating scramble');
+                setScramble('Error: Could not generate scramble');
             }
         } finally {
             if (mountedRef.current) {
@@ -72,13 +85,18 @@ export function useCubingScramble(eventId) {
     }, [eventId]);
 
     useEffect(() => {
+        console.log('[Scramble] Hook mounted/updated, eventId:', eventId);
         mountedRef.current = true;
-        generateScramble();
+        
+        if (eventId !== lastEventRef.current) {
+            console.log('[Scramble] Event changed, generating new scramble');
+            generateScramble();
+        }
 
         return () => {
             mountedRef.current = false;
         };
-    }, [generateScramble]);
+    }, [eventId, generateScramble]);
 
     return { scramble, isLoading: loading, generateScramble };
 }
@@ -89,6 +107,8 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
     const playerRef = useRef(null);
 
     useEffect(() => {
+        console.log('[TwistyPlayer] Effect triggered:', { scramble: scramble?.substring(0, 20), eventId, hasContainer: !!containerRef.current });
+        
         if (!containerRef.current || !scramble || !eventId) {
             setLoading(false);
             return;
@@ -98,17 +118,24 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
 
         const initializePlayer = async () => {
             try {
+                console.log('[TwistyPlayer] Initializing player...');
                 setLoading(true);
                 setError(null);
 
                 const { TwistyPlayer } = await import('cubing/twisty');
 
-                if (!isMounted || !containerRef.current) return;
+                if (!isMounted || !containerRef.current) {
+                    console.log('[TwistyPlayer] Component unmounted, aborting');
+                    return;
+                }
 
                 containerRef.current.innerHTML = '';
 
+                const puzzleType = PUZZLE_MAP[eventId] || '3x3x3';
+                console.log('[TwistyPlayer] Creating player with puzzle:', puzzleType);
+
                 const player = new TwistyPlayer({
-                    puzzle: PUZZLE_MAP[eventId] || '3x3x3',
+                    puzzle: puzzleType,
                     alg: scramble,
                     visualization: '3D',
                     background: 'none',
@@ -118,10 +145,11 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
                 if (isMounted && containerRef.current) {
                     containerRef.current.appendChild(player);
                     playerRef.current = player;
+                    console.log('[TwistyPlayer] Player initialized successfully');
                     setLoading(false);
                 }
             } catch (err) {
-                console.error('Failed to initialize Twisty player:', err);
+                console.error('[TwistyPlayer] Initialization error:', err);
                 if (isMounted) {
                     setError('Failed to load 3D visualization');
                     setLoading(false);
@@ -132,6 +160,7 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
         initializePlayer();
 
         return () => {
+            console.log('[TwistyPlayer] Cleaning up player');
             isMounted = false;
             if (playerRef.current) {
                 playerRef.current = null;
