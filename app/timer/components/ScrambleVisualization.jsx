@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTwistyPlayer } from '@/hooks/useCubingScramble';
 
 const PUZZLE_MAP = {
     '333': '3x3x3',
@@ -24,64 +25,7 @@ const PUZZLE_MAP = {
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
     const containerRef = useRef(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        if (!containerRef.current || !scramble || !eventId) {
-            setLoading(false);
-            return;
-        }
-
-        let isMounted = true;
-
-        const initializePlayer = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-
-                // Import twisty to register the web component globally
-                await import('cubing/twisty');
-
-                if (!isMounted || !containerRef.current) return;
-
-                // Clear previous player
-                containerRef.current.innerHTML = '';
-
-                // Create the twisty-player element
-                const player = document.createElement('twisty-player');
-                player.setAttribute('alg', scramble);
-                player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
-                player.setAttribute('visualization', '3D');
-                player.setAttribute('background', 'none');
-                player.setAttribute('control-panel', 'none');
-                
-                // Style the player
-                player.style.width = '100%';
-                player.style.height = '100%';
-                player.style.display = 'flex';
-                player.style.alignItems = 'center';
-                player.style.justifyContent = 'center';
-
-                if (isMounted && containerRef.current) {
-                    containerRef.current.appendChild(player);
-                    setLoading(false);
-                }
-            } catch (err) {
-                console.error('Failed to initialize Twisty player:', err);
-                if (isMounted) {
-                    setError('Failed to load 3D visualization');
-                    setLoading(false);
-                }
-            }
-        };
-
-        initializePlayer();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [scramble, eventId]);
+    const { loading, error } = useTwistyPlayer(scramble, eventId, containerRef);
 
     if (error) {
         return (
