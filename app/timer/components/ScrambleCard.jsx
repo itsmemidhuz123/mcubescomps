@@ -58,11 +58,11 @@ export default function ScrambleCard({
             </div>
 
             {scramble && (
-                <div className="mb-3">
+                <div className="mb-3" key={eventId}>
                     <ScrambleVisualization
                         scramble={scramble}
                         eventId={eventId}
-                        height="140px"
+                        height="200px"
                     />
                 </div>
             )}
