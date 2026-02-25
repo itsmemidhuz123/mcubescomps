@@ -54,6 +54,13 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         if (onGenerateScramble) onGenerateScramble();
     }, [pendingSolve, addSolve, onTimerStop, onGenerateScramble, resetTimer]);
 
+    // Auto-confirm DNF solves from inspection
+    useEffect(() => {
+        if (pendingSolve && pendingSolve.penalty === 'DNF' && showPenaltyButtons) {
+            handleConfirmSolve('DNF');
+        }
+    }, [pendingSolve, showPenaltyButtons, handleConfirmSolve]);
+
     const doInspectionStart = useCallback(() => {
         if (settings.inspectionEnabled) {
             startInspection();
@@ -190,7 +197,9 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
                 <div className={`text-7xl md:text-8xl font-mono font-bold transition-colors ${getTimerColor()} ${getGlowClass()}`}>
                     {timerState === TIMER_STATES.INSPECTION
                         ? formatInspectionTime(inspectionRemaining)
-                        : formatTime(displayTime)
+                        : timerState === TIMER_STATES.STOPPED && inspectionPenalty === 'DNF'
+                            ? 'DNF'
+                            : formatTime(displayTime)
                     }
                 </div>
             </div>

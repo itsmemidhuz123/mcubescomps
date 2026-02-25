@@ -39,12 +39,28 @@ export const useTimerEngine = (options = {}) => {
     };
 
     const formatInspectionTime = (seconds) => {
-        // Show negative values during inspection (e.g., -1 for 16 seconds elapsed)
-        if (seconds < 0) {
-            return String(seconds);
+        // Show +2 for -1 and -2 seconds (penalty zone)
+        if (seconds === -1 || seconds === -2) {
+            return '+2';
         }
+        // Show DNF for below -2
+        if (seconds < -2) {
+            return 'DNF';
+        }
+        // Show normal countdown
         return String(seconds);
     };
+
+    // Auto-save DNF solve when inspection exceeds -2
+    const saveDnfSolve = useCallback(() => {
+        const dnfSolve = {
+            time: 0,
+            penalty: 'DNF',
+            createdAt: Date.now()
+        };
+        setPendingSolve(dnfSolve);
+        onTimerStop(dnfSolve);
+    }, [onTimerStop]);
 
     const updateDisplay = useCallback(() => {
         if (startTimeRef.current !== null) {
@@ -143,7 +159,9 @@ export const useTimerEngine = (options = {}) => {
             // Auto-DNF if past -2 seconds
             if (remaining < -2) {
                 setTimerState(TIMER_STATES.STOPPED);
+                setInspectionPenalty('DNF');
                 inspectionStartRef.current = null;
+                saveDnfSolve();
                 return;
             }
 
