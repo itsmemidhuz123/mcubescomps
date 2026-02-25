@@ -44,7 +44,7 @@ const PUZZLE_MAP = {
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const mountedRef = useRef(true);
 
     const generateScramble = useCallback(async () => {
@@ -53,7 +53,8 @@ export function useCubingScramble(eventId) {
         setLoading(true);
         try {
             const { randomScrambleForEvent } = await import('cubing/scramble');
-            const alg = await randomScrambleForEvent(EVENT_MAP[eventId] || '333');
+            const mappedEvent = EVENT_MAP[eventId] || '333';
+            const alg = await randomScrambleForEvent(mappedEvent);
             
             if (mountedRef.current) {
                 setScramble(alg ? alg.toString() : '');
@@ -80,75 +81,4 @@ export function useCubingScramble(eventId) {
     }, [generateScramble]);
 
     return { scramble, isLoading: loading, generateScramble };
-}
-
-export function useTwistyPlayer(scramble, eventId, containerRef) {
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const playerRef = useRef(null);
-
-    useEffect(() => {
-        const container = containerRef?.current;
-        if (!container || !scramble || !eventId) {
-            setLoading(false);
-            return;
-        }
-
-        let isMounted = true;
-
-        const initPlayer = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-
-                // Import and register the twisty-player web component
-                const { TwistyPlayer } = await import('cubing/twisty');
-
-                if (!isMounted || !container) return;
-
-                // Clear previous content
-                container.innerHTML = '';
-
-                // Create player element using the imported class
-                const player = new TwistyPlayer({
-                    alg: scramble,
-                    puzzle: PUZZLE_MAP[eventId] || '3x3x3',
-                    visualization: '3D',
-                    background: 'none',
-                    controlPanel: 'none'
-                });
-
-                if (isMounted && container) {
-                    container.appendChild(player);
-                    playerRef.current = player;
-                }
-            } catch (err) {
-                console.error('Twisty player init error:', err);
-                if (isMounted) {
-                    setError('Failed to load 3D preview');
-                }
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        initPlayer();
-
-        return () => {
-            isMounted = false;
-            if (container && playerRef.current) {
-                try {
-                    if (container.contains(playerRef.current)) {
-                        container.removeChild(playerRef.current);
-                    }
-                } catch (e) {
-                    console.error('Error removing player:', e);
-                }
-            }
-        };
-    }, [scramble, eventId, containerRef]);
-
-    return { loading, error };
 }
