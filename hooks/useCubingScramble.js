@@ -54,15 +54,15 @@ export function useCubingScramble(eventId) {
         try {
             const { randomScrambleForEvent } = await import('cubing/scramble');
             const mappedEvent = EVENT_MAP[eventId] || '333';
-            const alg = await randomScrambleForEvent(mappedEvent);
+            const scrambleAlg = await randomScrambleForEvent(mappedEvent);
             
             if (mountedRef.current) {
-                setScramble(alg ? alg.toString() : '');
+                setScramble(scrambleAlg ? scrambleAlg.toString() : '');
             }
         } catch (err) {
             console.error('Scramble generation error:', err);
             if (mountedRef.current) {
-                setScramble('');
+                setScramble('Error generating scramble');
             }
         } finally {
             if (mountedRef.current) {
@@ -86,6 +86,7 @@ export function useCubingScramble(eventId) {
 export function useTwistyPlayer(scramble, eventId, containerRef) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const playerRef = useRef(null);
 
     useEffect(() => {
         if (!containerRef.current || !scramble || !eventId) {
@@ -100,27 +101,23 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
                 setLoading(true);
                 setError(null);
 
-                await import('cubing/twisty');
+                const { TwistyPlayer } = await import('cubing/twisty');
 
                 if (!isMounted || !containerRef.current) return;
 
                 containerRef.current.innerHTML = '';
 
-                const player = document.createElement('twisty-player');
-                player.setAttribute('alg', scramble);
-                player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
-                player.setAttribute('visualization', '3D');
-                player.setAttribute('background', 'none');
-                player.setAttribute('control-panel', 'none');
-                
-                player.style.width = '100%';
-                player.style.height = '100%';
-                player.style.display = 'flex';
-                player.style.alignItems = 'center';
-                player.style.justifyContent = 'center';
+                const player = new TwistyPlayer({
+                    puzzle: PUZZLE_MAP[eventId] || '3x3x3',
+                    alg: scramble,
+                    visualization: '3D',
+                    background: 'none',
+                    controlPanel: 'none',
+                });
 
                 if (isMounted && containerRef.current) {
                     containerRef.current.appendChild(player);
+                    playerRef.current = player;
                     setLoading(false);
                 }
             } catch (err) {
@@ -136,6 +133,9 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
 
         return () => {
             isMounted = false;
+            if (playerRef.current) {
+                playerRef.current = null;
+            }
         };
     }, [scramble, eventId, containerRef]);
 
