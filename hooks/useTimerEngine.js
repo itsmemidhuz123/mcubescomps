@@ -174,6 +174,7 @@ export const useTimerEngine = (options = {}) => {
         displayTime,
         inspectionRemaining: inspectionTimeLeft,
         pendingSolve,
+        inspectionPenalty,
         formatTime,
         startTimer,
         stopTimer,

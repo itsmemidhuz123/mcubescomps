@@ -28,6 +28,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         timerState,
         displayTime,
         inspectionRemaining,
+        inspectionPenalty,
         formatTime,
         startTimer,
         stopTimer,
@@ -87,7 +88,11 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             clearTimeout(holdTimerRef.current);
             holdTimerRef.current = null;
         }
-    }, []);
+
+        if (timerState === TIMER_STATES.INSPECTION) {
+            startTimer();
+        }
+    }, [timerState, startTimer]);
 
     const handleKeyDown = useCallback((e) => {
         if (e.code !== 'Space') return;
@@ -142,8 +147,13 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
     };
 
     const getStatusText = () => {
-        if (timerState === TIMER_STATES.RUNNING) return 'Tap to stop';
-        if (timerState === TIMER_STATES.INSPECTION) return 'Release to start';
+        if (timerState === TIMER_STATES.RUNNING) {
+            if (inspectionPenalty && inspectionPenalty !== 'none') {
+                return `Tap to stop (+${inspectionPenalty === '+2' ? '2' : 'DNF'})`;
+            }
+            return 'Tap to stop';
+        }
+        if (timerState === TIMER_STATES.INSPECTION) return 'Release to start timer';
         if (timerState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
         if (timerState === TIMER_STATES.STOPPED) return 'Tap for next solve';
         return 'Hold to start inspection';

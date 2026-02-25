@@ -61,7 +61,7 @@ function TimerPageContent() {
 
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (e.code === 'Space' && e.target === document.body) {
+            if (e.code === 'Space') {
                 e.preventDefault();
             }
         };

@@ -65,8 +65,11 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
                     puzzle={PUZZLE_MAP[eventId] || '3x3x3'}
                     background="none"
                     show-controls="false"
+                    show-toolbar="false"
+                    show-options="false"
+                    hint="none"
                     animation="duration:0"
-                    style={{ width: '100%', height: '100%' }}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
                 />
             ) : (
                 <span className="text-zinc-500">Loading 3D...</span>
