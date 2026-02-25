@@ -5,25 +5,31 @@ import { useState, useEffect, useCallback } from 'react';
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     const generate = useCallback(async () => {
         setLoading(true);
+        setError(null);
+
         try {
             const response = await fetch('/api/scramble', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ event: eventId || '333' })
             });
+
             const data = await response.json();
 
             if (data.error) {
                 console.error('Scramble API error:', data.error);
+                setError(data.error);
                 setScramble('');
             } else {
                 setScramble(data.scramble || '');
             }
         } catch (err) {
             console.error('Scramble fetch error:', err);
+            setError(err.message);
             setScramble('');
         } finally {
             setLoading(false);
@@ -35,7 +41,7 @@ export function useCubingScramble(eventId) {
         generate();
     }, [eventId]);
 
-    return { scramble, isLoading: loading, generateScramble: generate };
+    return { scramble, isLoading: loading, generateScramble: generate, error };
 }
 
 export default useCubingScramble;

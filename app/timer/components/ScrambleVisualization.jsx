@@ -2,27 +2,46 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-const SCRAMBLE_DISPLAY_URL = 'https://cdn.cubing.net/v0/js/scramble-display';
+const TWISTY_URL = 'https://cdn.cubing.net/v0/js/cubing/twisty';
 
 const EVENT_MAP = {
-  '333': '333',
-  '222': '222',
-  '444': '444',
-  '555': '555',
-  '666': '666',
-  '777': '777',
-  'pyram': 'pyram',
+  '333': '3x3x3',
+  '222': '2x2x2',
+  '444': '4x4x4',
+  '555': '5x5x5',
+  '666': '6x6x6',
+  '777': '7x7x7',
+  'pyram': 'pyraminx',
   'skewb': 'skewb',
-  'sq1': 'sq1',
+  'sq1': 'square1',
   'clock': 'clock',
-  'minx': 'minx'
+  'minx': 'megaminx'
 };
 
-let scrambleDisplayLoaded = false;
+let twistyLoaded = false;
+let twistyLoadPromise = null;
+
+function loadTwisty() {
+  if (twistyLoaded) return Promise.resolve();
+  if (twistyLoadPromise) return twistyLoadPromise;
+
+  twistyLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = TWISTY_URL;
+    script.type = 'module';
+    script.onload = () => {
+      twistyLoaded = true;
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load twisty-player'));
+    document.head.appendChild(script);
+  });
+
+  return twistyLoadPromise;
+}
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
   const containerRef = useRef(null);
-  const displayRef = useRef(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -31,41 +50,36 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
     let mounted = true;
 
-    const initScrambleDisplay = async () => {
+    const initTwisty = async () => {
       try {
         setLoading(true);
+        await loadTwisty();
         
-        if (!scrambleDisplayLoaded) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = SCRAMBLE_DISPLAY_URL;
-            script.type = 'module';
-            script.onload = () => {
-              scrambleDisplayLoaded = true;
-              resolve();
-            };
-            script.onerror = () => reject(new Error('Failed to load scramble-display'));
-            document.head.appendChild(script);
-          });
-        }
-
         if (!mounted) return;
-
-        containerRef.current.innerHTML = '';
-
-        const display = document.createElement('scramble-display');
-        display.setAttribute('scramble', scramble);
-        display.setAttribute('event', EVENT_MAP[eventId] || '333');
-        display.style.width = '100%';
-        display.style.height = '100%';
-        display.style.display = 'block';
         
-        containerRef.current.appendChild(display);
-        displayRef.current = display;
+        const container = containerRef.current;
+        container.innerHTML = '';
+
+        const player = document.createElement('twisty-player');
+        player.setAttribute('alg', scramble);
+        player.setAttribute('puzzle', EVENT_MAP[eventId] || '3x3x3');
+        player.setAttribute('background', 'none');
+        player.setAttribute('show-controls', 'false');
+        player.setAttribute('show-toolbar', 'false');
+        player.setAttribute('show-options', 'false');
+        player.setAttribute('hint', 'none');
+        player.setAttribute('camera-control', 'none');
+        player.setAttribute('keyboard-shortcuts', 'none');
+        player.setAttribute('animation', 'duration:0');
+        player.style.width = '100%';
+        player.style.height = '100%';
+        player.style.border = 'none';
+        
+        container.appendChild(player);
         setError(null);
       } catch (err) {
         if (mounted) {
-          console.error('ScrambleDisplay error:', err);
+          console.error('Twisty player error:', err);
           setError(err.message);
         }
       } finally {
@@ -75,7 +89,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
       }
     };
 
-    initScrambleDisplay();
+    initTwisty();
 
     return () => {
       mounted = false;
@@ -93,7 +107,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
   if (!scramble) {
     return (
       <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-        <span className="text-zinc-500 text-sm">No scramble</span>
+        <span className="text-zinc-500 text-sm">Loading scramble...</span>
       </div>
     );
   }
