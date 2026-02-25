@@ -89,7 +89,8 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             holdTimerRef.current = null;
         }
 
-        if (timerState === TIMER_STATES.INSPECTION) {
+        // Only start timer if we were already in inspection (not a short tap from idle)
+        if (timerState === TIMER_STATES.INSPECTION && holdDuration >= HOLD_THRESHOLD) {
             startTimer();
         }
     }, [timerState, startTimer]);
@@ -98,17 +99,23 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         if (e.code !== 'Space') return;
         e.preventDefault();
         e.stopPropagation();
-        if (!e.repeat) {
+
+        if (timerState === TIMER_STATES.RUNNING) {
+            stopTimer();
+        } else if (!e.repeat) {
             handleHoldStart();
         }
-    }, [handleHoldStart]);
+    }, [timerState, stopTimer, handleHoldStart]);
 
     const handleKeyUp = useCallback((e) => {
         if (e.code !== 'Space') return;
         e.preventDefault();
         e.stopPropagation();
-        handleHoldEnd();
-    }, [handleHoldEnd]);
+
+        if (timerState === TIMER_STATES.INSPECTION) {
+            handleHoldEnd();
+        }
+    }, [timerState, handleHoldEnd]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown, { passive: false });
@@ -121,12 +128,18 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
     const handleTouchStart = (e) => {
         e.preventDefault();
-        handleHoldStart();
+        if (timerState === TIMER_STATES.RUNNING) {
+            stopTimer();
+        } else {
+            handleHoldStart();
+        }
     };
 
     const handleTouchEnd = (e) => {
         e.preventDefault();
-        handleHoldEnd();
+        if (timerState === TIMER_STATES.INSPECTION) {
+            handleHoldEnd();
+        }
     };
 
     const getTimerColor = () => {
@@ -209,3 +222,4 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         </div>
     );
 }
+
