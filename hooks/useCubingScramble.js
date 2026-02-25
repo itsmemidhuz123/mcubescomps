@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+const EVENT_ID_MAP = {
+    '333': '333',
+    '222': '222',
+    '444': '444',
+    '555': '555',
+    '666': '666',
+    '777': '777',
+    'pyram': 'pyram',
+    'skewb': 'skewb',
+    'sq1': 'sq1',
+    'clock': 'clock',
+    'minx': 'minx'
+};
+
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -12,7 +26,7 @@ export function useCubingScramble(eventId) {
             const response = await fetch('/api/scramble', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ event: eventId })
+                body: JSON.stringify({ event: EVENT_ID_MAP[eventId] || '333' })
             });
             const data = await response.json();
             setScramble(data.scramble || '');
