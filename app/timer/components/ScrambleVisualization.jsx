@@ -1,54 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function ScrambleVisualization({ scramble, eventId, height = '150px' }) {
-    const [scrambleText, setScrambleText] = useState('');
-    const containerId = `scramble-${Math.random().toString(36).substr(2, 9)}`;
+    const [scrambleUrl, setScrambleUrl] = useState('');
 
     useEffect(() => {
-        if (!scramble) return;
-        setScrambleText(scramble);
+        if (scramble) {
+            setScrambleUrl(`https://alpha.twizzle.net/view/?alg=${encodeURIComponent(scramble)}&puzzle=3x3x3`);
+        }
     }, [scramble]);
-
-    useEffect(() => {
-        if (!scrambleText) return;
-
-        const loadScript = () => {
-            if (document.getElementById('twisty-player-script')) {
-                updatePlayer();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.id = 'twisty-player-script';
-            script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-            script.type = 'module';
-            script.onload = () => updatePlayer();
-            document.head.appendChild(script);
-        };
-
-        const updatePlayer = () => {
-            const container = document.getElementById(containerId);
-            if (!container || !window.customElements.get('twisty-player')) return;
-
-            container.innerHTML = '';
-
-            const player = document.createElement('twisty-player');
-            player.setAttribute('alg', scrambleText);
-            player.setAttribute('puzzle', '3x3x3');
-            player.setAttribute('background', 'none');
-            player.setAttribute('show-controls', 'false');
-            player.setAttribute('animation', 'duration:0');
-            player.setAttribute('hint', 'none');
-            player.style.width = '100%';
-            player.style.height = '100%';
-
-            container.appendChild(player);
-        };
-
-        loadScript();
-    }, [scrambleText, containerId]);
 
     if (!scramble) {
         return (
@@ -64,14 +25,17 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
     }
 
     return (
-        <div className="w-full">
-            <div
-                id={containerId}
-                className="w-full flex items-center justify-center bg-zinc-900 rounded-lg overflow-hidden"
-                style={{ minHeight: height }}
-            >
-                <span className="text-zinc-500">Loading 3D...</span>
-            </div>
-        </div>
+        <iframe
+            src={scrambleUrl}
+            title="Scramble"
+            style={{
+                width: '100%',
+                height: height,
+                border: 'none',
+                background: '#161a23',
+                borderRadius: '8px'
+            }}
+            sandbox="allow-scripts allow-same-origin"
+        />
     );
 }
