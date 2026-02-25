@@ -16,22 +16,49 @@ const PUZZLE_MAP = {
     'minx': 'megaminx'
 };
 
+let twistyLoaded = false;
+let twistyLoadPromise = null;
+
+function loadTwistyPlayer() {
+    if (twistyLoaded) return Promise.resolve();
+    if (twistyLoadPromise) return twistyLoadPromise;
+
+    twistyLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+        script.type = 'module';
+        script.onload = () => {
+            twistyLoaded = true;
+            resolve();
+        };
+        script.onerror = () => reject(new Error('Failed to load twisty-player'));
+        document.head.appendChild(script);
+    });
+
+    return twistyLoadPromise;
+}
+
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
     const containerRef = useRef(null);
     const playerRef = useRef(null);
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!scramble || !containerRef.current) return;
 
+        let mounted = true;
+
         const createPlayer = async () => {
             try {
-                if (!customElements.get('twisty-player')) {
-                    await import('https://cdn.cubing.net/v0/js/cubing/twisty');
-                }
+                setLoading(true);
+                await loadTwistyPlayer();
+
+                if (!mounted) return;
 
                 if (playerRef.current) {
                     playerRef.current.remove();
+                    playerRef.current = null;
                 }
 
                 const player = document.createElement('twisty-player');
@@ -55,18 +82,28 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
                 playerRef.current = player;
                 setError(null);
             } catch (err) {
-                console.error('Twisty player error:', err);
-                setError(err.message);
+                if (mounted) {
+                    console.error('Twisty player error:', err);
+                    setError(err.message);
+                }
+            } finally {
+                if (mounted) {
+                    setLoading(false);
+                }
             }
         };
 
         createPlayer();
+
+        return () => {
+            mounted = false;
+        };
     }, [scramble, eventId]);
 
     if (error) {
         return (
             <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-                <span className="text-red-400 text-sm">Error loading visualization</span>
+                <span className="text-red-400 text-sm">Error: {error}</span>
             </div>
         );
     }
@@ -81,7 +118,11 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
     return (
         <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-            <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: height }} />
+            {loading ? (
+                <span className="text-zinc-500 text-sm">Loading 3D...</span>
+            ) : (
+                <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: height }} />
+            )}
         </div>
     );
 }
