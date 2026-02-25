@@ -24,13 +24,11 @@ const PUZZLE_MAP = {
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
     const containerRef = useRef(null);
-    const playerRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const container = containerRef.current;
-        if (!container || !scramble || !eventId) {
+        if (!containerRef.current || !scramble || !eventId) {
             setLoading(false);
             return;
         }
@@ -42,13 +40,15 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
                 setLoading(true);
                 setError(null);
 
+                // Import twisty to register the web component globally
                 await import('cubing/twisty');
 
                 if (!isMounted || !containerRef.current) return;
 
-                const container = containerRef.current;
-                container.innerHTML = '';
+                // Clear previous player
+                containerRef.current.innerHTML = '';
 
+                // Create the twisty-player element
                 const player = document.createElement('twisty-player');
                 player.setAttribute('alg', scramble);
                 player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
@@ -56,6 +56,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
                 player.setAttribute('background', 'none');
                 player.setAttribute('control-panel', 'none');
                 
+                // Style the player
                 player.style.width = '100%';
                 player.style.height = '100%';
                 player.style.display = 'flex';
@@ -64,7 +65,6 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
                 if (isMounted && containerRef.current) {
                     containerRef.current.appendChild(player);
-                    playerRef.current = player;
                     setLoading(false);
                 }
             } catch (err) {
