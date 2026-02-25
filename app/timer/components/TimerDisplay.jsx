@@ -30,6 +30,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         inspectionRemaining,
         inspectionPenalty,
         formatTime,
+        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,
@@ -166,7 +167,11 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             }
             return 'Tap to stop';
         }
-        if (timerState === TIMER_STATES.INSPECTION) return 'Release to start timer';
+        if (timerState === TIMER_STATES.INSPECTION) {
+            if (inspectionPenalty === 'DNF') return 'DNF - Inspection exceeded';
+            if (inspectionPenalty === '+2') return 'Release to start (+2)';
+            return 'Release to start timer';
+        }
         if (timerState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
         if (timerState === TIMER_STATES.STOPPED) return 'Tap for next solve';
         return 'Hold to start inspection';
@@ -184,7 +189,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
             >
                 <div className={`text-7xl md:text-8xl font-mono font-bold transition-colors ${getTimerColor()} ${getGlowClass()}`}>
                     {timerState === TIMER_STATES.INSPECTION
-                        ? inspectionRemaining
+                        ? formatInspectionTime(inspectionRemaining)
                         : formatTime(displayTime)
                     }
                 </div>
@@ -222,4 +227,3 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         </div>
     );
 }
-

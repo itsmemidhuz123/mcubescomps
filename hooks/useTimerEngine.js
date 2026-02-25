@@ -38,6 +38,14 @@ export const useTimerEngine = (options = {}) => {
         return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     };
 
+    const formatInspectionTime = (seconds) => {
+        // Show negative values during inspection (e.g., -1 for 16 seconds elapsed)
+        if (seconds < 0) {
+            return String(seconds);
+        }
+        return String(seconds);
+    };
+
     const updateDisplay = useCallback(() => {
         if (startTimeRef.current !== null) {
             const elapsed = performance.now() - startTimeRef.current;
@@ -118,12 +126,28 @@ export const useTimerEngine = (options = {}) => {
             if (inspectionStartRef.current === null) return;
 
             const elapsed = performance.now() - inspectionStartRef.current;
-            const remaining = Math.max(0, inspectionTime - Math.floor(elapsed / 1000));
-            setInspectionTimeLeft(remaining);
+            const elapsedSeconds = elapsed / 1000;
+            const remaining = inspectionTime - elapsedSeconds;
 
-            if (remaining > 0) {
-                inspectionRafIdRef.current = setTimeout(tick, 100);
+            // Calculate penalty in real-time
+            let currentPenalty = 'none';
+            if (remaining >= -2 && remaining < 0) {
+                currentPenalty = '+2';
+            } else if (remaining < -2) {
+                currentPenalty = 'DNF';
             }
+
+            setInspectionPenalty(currentPenalty);
+            setInspectionTimeLeft(Math.floor(remaining));
+
+            // Auto-DNF if past -2 seconds
+            if (remaining < -2) {
+                setTimerState(TIMER_STATES.STOPPED);
+                inspectionStartRef.current = null;
+                return;
+            }
+
+            inspectionRafIdRef.current = setTimeout(tick, 100);
         };
 
         tick();
@@ -176,6 +200,7 @@ export const useTimerEngine = (options = {}) => {
         pendingSolve,
         inspectionPenalty,
         formatTime,
+        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,
