@@ -1,128 +1,130 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 
-const EVENT_TO_PUZZLE = {
+const PUZZLE_MAP = {
     '333': '3x3x3',
     '222': '2x2x2',
     '444': '4x4x4',
     '555': '5x5x5',
     '666': '6x6x6',
     '777': '7x7x7',
-    'pyram': 'pyraminx',
-    'skewb': 'skewb',
-    'sq1': 'sq1',
-    'clock': 'clock',
-    'minx': 'megaminx'
+    'pyram': 'Pyraminx',
+    'skewb': 'Skewb',
+    'sq1': 'Square-1',
+    'clock': 'Clock',
+    'minx': 'Megaminx'
 };
 
-function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
-    const containerRef = useRef(null);
-    const [vizLoaded, setVizLoaded] = useState(false);
-    const elementRef = useRef(null);
+const FACE_COLORS = {
+    '333': {
+        R: '#B90000',
+        L: '#FF5900',
+        U: '#FFFFFF',
+        D: '#009E60',
+        F: '#0045AD',
+        B: '#C41E3A'
+    }
+};
 
-    const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
+export default function ScrambleVisualization({ scramble, eventId, height = '150px' }) {
+    const puzzleName = useMemo(() => PUZZLE_MAP[eventId] || '3x3x3', [eventId]);
+    const canvasRef = useRef(null);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        if (!scramble || !containerRef.current) return;
+        setMounted(true);
+    }, []);
 
-        const container = containerRef.current;
+    useEffect(() => {
+        if (!scramble || !canvasRef.current || !mounted) return;
 
-        const cleanup = () => {
-            if (elementRef.current) {
-                try {
-                    container.removeChild(elementRef.current);
-                } catch (e) { }
-                elementRef.current = null;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const size = Math.min(300, parseInt(height) || 150);
+
+        canvas.width = size * 3;
+        canvas.height = size * 3;
+
+        const cellSize = size / 3;
+        const colors = FACE_COLORS[eventId] || FACE_COLORS['333'];
+
+        // Draw unfolded cube
+        const faceWidth = cellSize * 3;
+        const faceHeight = cellSize * 3;
+        const gap = 2;
+
+        const drawFace = (face, x, y, rotate = 0) => {
+            ctx.save();
+            ctx.translate(x + faceWidth / 2, y + faceHeight / 2);
+
+            if (rotate) {
+                ctx.rotate(rotate);
             }
-        };
 
-        cleanup();
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                    const color = colors[face] || '#ffffff';
+                    ctx.fillStyle = color;
+                    ctx.fillRect(
+                        col * cellSize,
+                        row * cellSize,
+                        cellSize - gap,
+                        cellSize - gap
+                    );
 
-        const tryLoadVisualization = async () => {
-            try {
-                const scriptId = 'cubing-twisty-script';
-                let script = document.getElementById(scriptId);
-
-                if (!script) {
-                    script = document.createElement('script');
-                    script.id = scriptId;
-                    script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                    script.type = 'module';
-                    script.crossOrigin = 'anonymous';
-
-                    await new Promise((resolve, reject) => {
-                        const timeout = setTimeout(() => reject(new Error('timeout')), 10000);
-                        script.onload = () => {
-                            clearTimeout(timeout);
-                            resolve();
-                        };
-                        script.onerror = () => {
-                            clearTimeout(timeout);
-                            reject(new Error('load error'));
-                        };
-                    });
+                    // Draw border
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(
+                        col * cellSize,
+                        row * cellSize,
+                        cellSize - gap,
+                        cellSize - gap
+                    );
                 }
-
-                await new Promise(r => setTimeout(r, 300));
-
-                if (!containerRef.current) return;
-
-                const element = document.createElement('twisty-player');
-                element.setAttribute('puzzle', puzzle);
-                element.setAttribute('alg', scramble);
-                element.setAttribute('visualization', visualization === '3d' ? '3D' : '2D');
-                element.setAttribute('background', 'none');
-                element.setAttribute('hint-facelets', 'none');
-                element.style.width = '100%';
-                element.style.height = height;
-
-                containerRef.current.appendChild(element);
-                elementRef.current = element;
-
-                setVizLoaded(true);
-            } catch (err) {
-                console.log('Visualization not available:', err.message);
             }
+
+            ctx.restore();
         };
 
-        tryLoadVisualization();
+        // Unfolded 3x3x3 cube layout
+        const padding = 5;
+        const startX = (canvas.width - (faceWidth * 4 + gap * 3)) / 2;
+        const startY = (canvas.height - faceHeight) / 2;
 
-        return cleanup;
-    }, [scramble, puzzle, visualization, height]);
+        // Front face (white)
+        drawFace('U', startX, startY);
+
+        // Back face (yellow) - rotated
+        drawFace('D', startX + faceWidth + gap * 2, startY, Math.PI);
+
+        // Right face (red)
+        drawFace('R', startX, startY + faceHeight + gap);
+
+        // Left face (orange)
+        drawFace('L', startX + faceWidth + gap * 2, startY + faceHeight + gap, Math.PI);
+
+        // Up face (green)
+        drawFace('F', startX + faceWidth + gap, startY);
+
+        // Down face (blue) - rotated
+        drawFace('B', startX + faceWidth + gap * 2, startY + faceHeight + gap, Math.PI);
+    }, [scramble, eventId, height, mounted]);
 
     return (
-        <div className="space-y-2">
-            <div
-                ref={containerRef}
-                className="w-full flex items-center justify-center bg-zinc-900/50 rounded-lg overflow-hidden"
-                style={{ minHeight: height }}
-            >
-                {!vizLoaded && (
-                    <div className="text-zinc-500 text-sm py-4">Loading visualization...</div>
+        <div className="w-full">
+            <div className="w-full flex items-center justify-center bg-zinc-900 rounded-lg overflow-hidden" style={{ minHeight: height }}>
+                {mounted && scramble ? (
+                    <canvas
+                        ref={canvasRef}
+                        className="max-w-full max-h-full"
+                        style={{ maxWidth: '100%', maxHeight: '100%' }}
+                    />
+                ) : (
+                    <span className="text-zinc-500">Loading...</span>
                 )}
-            </div>
-            <div className="text-center">
-                <span className="text-zinc-400 text-xs uppercase tracking-wider mr-2">{EVENT_TO_PUZZLE[eventId] || eventId}</span>
-                <span className="text-zinc-300 text-sm font-mono">{scramble}</span>
             </div>
         </div>
     );
-}
-
-export default function ScrambleVisualization({ scramble, eventId, height = '150px', visualization = '2d' }) {
-    const key = useMemo(() => `${scramble}_${visualization}_${eventId}`, [scramble, visualization, eventId]);
-
-    if (!scramble) {
-        return (
-            <div
-                className="w-full flex items-center justify-center bg-transparent rounded-lg"
-                style={{ minHeight: height }}
-            >
-                <div className="text-zinc-500 text-sm">Loading...</div>
-            </div>
-        );
-    }
-
-    return <ScrambleDisplayInner key={key} scramble={scramble} eventId={eventId} visualization={visualization} height={height} />;
 }

@@ -59,6 +59,16 @@ function TimerPageContent() {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, []);
 
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.code === 'Space' && e.target === document.body) {
+                e.preventDefault();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown, { passive: false });
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const handleCloseTimer = () => {
         router.push('/');
     };

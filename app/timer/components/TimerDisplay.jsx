@@ -4,28 +4,22 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTimerEngine, TIMER_STATES } from '@/hooks/useTimerEngine';
 import { useTimer } from '@/contexts/TimerContext';
-import { formatTime as formatTimeUtil } from '@/lib/timerStats';
-import { Plus, Minus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+
+const HOLD_THRESHOLD = 200;
 
 export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
-    const {
-        solves,
-        addSolve,
-        updateSolvePenalty,
-        settings,
-        currentSession
-    } = useTimer();
+    const { addSolve, settings } = useTimer();
 
     const [pendingSolve, setPendingSolve] = useState(null);
     const [showPenaltyButtons, setShowPenaltyButtons] = useState(false);
-    const [inspectionPenalty, setInspectionPenalty] = useState('none');
-    const touchTimerRef = useRef(null);
-    const isTouchingRef = useRef(false);
+
+    const holdTimerRef = useRef(null);
+    const isHoldingRef = useRef(false);
+    const holdStartTimeRef = useRef(null);
 
     const handleTimerStop = useCallback((solve, isPenaltyUpdate = false) => {
-        if (isPenaltyUpdate) {
-            return;
-        }
+        if (isPenaltyUpdate) return;
         setPendingSolve(solve);
         setShowPenaltyButtons(true);
     }, []);
@@ -35,11 +29,9 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
         displayTime,
         inspectionRemaining,
         formatTime,
-        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,
-        armTimer,
         resetTimer
     } = useTimerEngine({
         inspectionEnabled: settings.inspectionEnabled,
@@ -47,60 +39,75 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
     });
 
     const handleConfirmSolve = useCallback(async (penalty = 'none') => {
-        if (!pendingSolve) return null;
+        if (!pendingSolve) return;
 
         const finalSolve = { ...pendingSolve, penalty };
-        const result = await addSolve(finalSolve);
+        await addSolve(finalSolve);
 
         setPendingSolve(null);
         setShowPenaltyButtons(false);
-        setInspectionPenalty('none');
+        resetTimer();
 
-        if (onTimerStop) {
-            onTimerStop(finalSolve);
+        if (onTimerStop) onTimerStop(finalSolve);
+        if (onGenerateScramble) onGenerateScramble();
+    }, [pendingSolve, addSolve, onTimerStop, onGenerateScramble, resetTimer]);
+
+    const doInspectionStart = useCallback(() => {
+        if (settings.inspectionEnabled) {
+            startInspection();
+        } else {
+            startTimer();
         }
+    }, [settings.inspectionEnabled, startInspection, startTimer]);
 
-        if (onGenerateScramble) {
-            onGenerateScramble();
+    const handleTap = useCallback(() => {
+        if (timerState === TIMER_STATES.RUNNING) {
+            stopTimer();
+        } else if (timerState === TIMER_STATES.STOPPED) {
+            handleConfirmSolve('none');
         }
+    }, [timerState, stopTimer, handleConfirmSolve]);
 
-        return result;
-    }, [pendingSolve, addSolve, onTimerStop, onGenerateScramble]);
+    const handleHoldStart = useCallback(() => {
+        isHoldingRef.current = true;
+        holdStartTimeRef.current = Date.now();
 
-    const handlePenalty = async (penalty) => {
-        await handleConfirmSolve(penalty);
-    };
+        holdTimerRef.current = setTimeout(() => {
+            if (isHoldingRef.current && timerState === TIMER_STATES.IDLE) {
+                doInspectionStart();
+            }
+        }, HOLD_THRESHOLD);
+    }, [timerState, doInspectionStart]);
+
+    const handleHoldEnd = useCallback(() => {
+        const holdDuration = Date.now() - (holdStartTimeRef.current || 0);
+        isHoldingRef.current = false;
+
+        if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+        }
+    }, []);
 
     const handleKeyDown = useCallback((e) => {
-        if (e.code === 'Space' && !e.repeat) {
-            e.preventDefault();
-
-            if (timerState === TIMER_STATES.RUNNING) {
-                stopTimer();
-            } else if (timerState === TIMER_STATES.IDLE) {
-                armTimer();
-            }
+        if (e.code !== 'Space') return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) {
+            handleHoldStart();
         }
-    }, [timerState, stopTimer, armTimer]);
+    }, [handleHoldStart]);
 
     const handleKeyUp = useCallback((e) => {
-        if (e.code === 'Space') {
-            e.preventDefault();
-
-            if (timerState === TIMER_STATES.ARMED) {
-                if (settings.inspectionEnabled) {
-                    startInspection();
-                } else {
-                    startTimer();
-                }
-            }
-        }
-    }, [timerState, settings.inspectionEnabled, startInspection, startTimer]);
+        if (e.code !== 'Space') return;
+        e.preventDefault();
+        e.stopPropagation();
+        handleHoldEnd();
+    }, [handleHoldEnd]);
 
     useEffect(() => {
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
+        window.addEventListener('keydown', handleKeyDown, { passive: false });
+        window.addEventListener('keyup', handleKeyUp, { passive: false });
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
@@ -109,170 +116,84 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
     const handleTouchStart = (e) => {
         e.preventDefault();
-        isTouchingRef.current = true;
-
-        if (timerState === TIMER_STATES.RUNNING) {
-            stopTimer();
-        } else if (timerState === TIMER_STATES.IDLE) {
-            armTimer();
-        }
-
-        touchTimerRef.current = setTimeout(() => {
-            if (isTouchingRef.current && timerState === TIMER_STATES.ARMED) {
-                if (settings.inspectionEnabled) {
-                    startInspection();
-                } else {
-                    startTimer();
-                }
-            }
-        }, 300);
+        handleHoldStart();
     };
 
     const handleTouchEnd = (e) => {
         e.preventDefault();
-        isTouchingRef.current = false;
-
-        if (touchTimerRef.current) {
-            clearTimeout(touchTimerRef.current);
-            touchTimerRef.current = null;
-        }
-
-        if (timerState === TIMER_STATES.ARMED) {
-            if (settings.inspectionEnabled) {
-                startInspection();
-            } else {
-                startTimer();
-            }
-        }
-    };
-
-    const handleTouchCancel = () => {
-        isTouchingRef.current = false;
-        if (touchTimerRef.current) {
-            clearTimeout(touchTimerRef.current);
-            touchTimerRef.current = null;
-        }
+        handleHoldEnd();
     };
 
     const getTimerColor = () => {
-        if (settings.highContrast) {
-            if (timerState === TIMER_STATES.RUNNING) return 'text-yellow-300';
-            if (timerState === TIMER_STATES.INSPECTION) {
-                if (inspectionRemaining <= 3) return 'text-red-500';
-                if (inspectionRemaining <= 8) return 'text-orange-500';
-                return 'text-green-400';
-            }
-            return 'text-white';
-        }
-        if (timerState === TIMER_STATES.ARMED) return settings.disableGlow ? 'text-green-500' : 'text-green-400';
-        if (timerState === TIMER_STATES.RUNNING) return 'text-white';
         if (timerState === TIMER_STATES.INSPECTION) {
             if (inspectionRemaining <= 3) return 'text-red-500';
             if (inspectionRemaining <= 8) return 'text-yellow-500';
             return 'text-yellow-400';
         }
+        if (timerState === TIMER_STATES.RUNNING) return 'text-white';
         return 'text-white';
-    };
-
-    const getInspectionDisplay = () => {
-        const time = inspectionRemaining;
-        if (time < 0) {
-            return { text: time.toString(), color: 'text-red-500' };
-        }
-        return { text: time.toString(), color: getTimerColor() };
-    };
-
-    const getFontSizeClass = () => {
-        const sizes = {
-            small: 'text-5xl md:text-6xl',
-            medium: 'text-7xl md:text-8xl',
-            large: 'text-8xl md:text-9xl',
-            xlarge: 'text-9xl md:text-[10rem]'
-        };
-        return sizes[settings.timerFontSize] || sizes.medium;
-    };
-
-    const getFontStyleClass = () => {
-        const styles = {
-            monospace: 'font-mono',
-            sansSerif: 'font-sans',
-            statement: 'font-serif'
-        };
-        return styles[settings.timerFontStyle] || styles.monospace;
     };
 
     const getGlowClass = () => {
         if (settings.disableGlow) return '';
-        if (timerState === TIMER_STATES.ARMED) return 'drop-shadow-[0_0_15px_rgba(34,197,94,0.6)]';
+        if (timerState === TIMER_STATES.INSPECTION) return 'drop-shadow-[0_0_15px_rgba(34,197,94,0.6)]';
         if (timerState === TIMER_STATES.RUNNING) return 'drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]';
         return '';
     };
 
     const getStatusText = () => {
         if (timerState === TIMER_STATES.RUNNING) return 'Tap to stop';
-        if (timerState === TIMER_STATES.INSPECTION) {
-            if (inspectionPenalty === '+2') return '+2 added';
-            if (inspectionPenalty === 'DNF') return 'DNF';
-            return 'Inspection...';
-        }
-        if (timerState === TIMER_STATES.ARMED) return 'Release to start';
+        if (timerState === TIMER_STATES.INSPECTION) return 'Release to start';
         if (timerState === TIMER_STATES.STOPPED && showPenaltyButtons) return 'Apply penalty or confirm';
-        return 'Hold to start';
+        if (timerState === TIMER_STATES.STOPPED) return 'Tap for next solve';
+        return 'Hold to start inspection';
     };
-
-    const inspectionDisplay = getInspectionDisplay();
 
     return (
         <div className="flex flex-col items-center">
             <div
-                className={`relative cursor-pointer select-none ${settings.reduceMotion ? '' : 'transition-all'}`}
+                className={`relative cursor-pointer select-none`}
+                onMouseDown={handleTouchStart}
+                onMouseUp={handleTouchEnd}
+                onMouseLeave={handleTouchEnd}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                onTouchCancel={handleTouchCancel}
             >
-                <div className={`${getFontSizeClass()} ${getFontStyleClass()} font-bold transition-colors ${inspectionDisplay.color} ${getGlowClass()}`}>
+                <div className={`text-7xl md:text-8xl font-mono font-bold transition-colors ${getTimerColor()} ${getGlowClass()}`}>
                     {timerState === TIMER_STATES.INSPECTION
-                        ? inspectionDisplay.text
+                        ? inspectionRemaining
                         : formatTime(displayTime)
                     }
                 </div>
             </div>
 
-            <p className={`text-zinc-400 mt-4 mb-6 text-center ${settings.reduceMotion ? '' : 'transition-colors'}`}>
+            <p className="text-zinc-400 mt-4 mb-6 text-center">
                 {getStatusText()}
             </p>
 
             {showPenaltyButtons && pendingSolve && (
-                <div className="flex gap-3 mb-4 animate-in fade-in slide-in-from-top-2">
+                <div className="flex gap-3 mb-4">
                     <Button
                         variant="outline"
-                        onClick={() => handlePenalty('+2')}
+                        onClick={() => handleConfirmSolve('+2')}
                         className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20"
                     >
-                        <Plus className="w-4 h-4 mr-1" />
-                        +2
+                        <Plus className="w-4 h-4 mr-1" />+2
                     </Button>
                     <Button
                         variant="outline"
-                        onClick={() => handlePenalty('DNF')}
+                        onClick={() => handleConfirmSolve('DNF')}
                         className="border-red-500/50 text-red-400 hover:bg-red-500/20"
                     >
-                        <X className="w-4 h-4 mr-1" />
-                        DNF
+                        <X className="w-4 h-4 mr-1" />DNF
                     </Button>
                     <Button
                         variant="default"
-                        onClick={() => handlePenalty('none')}
-                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => handleConfirmSolve('none')}
+                        className="bg-green-600 hover:bg-green-700"
                     >
                         Confirm
                     </Button>
-                </div>
-            )}
-
-            {!showPenaltyButtons && (timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.STOPPED) && (
-                <div className="text-xs text-zinc-500">
-                    {timerState === TIMER_STATES.STOPPED ? 'Tap or SPACE for next solve' : ''}
                 </div>
             )}
         </div>

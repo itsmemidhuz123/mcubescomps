@@ -13,7 +13,6 @@ export default function ScrambleDisplay({
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
-    const cleanupRef = useRef(null);
 
     const eventMap = {
         '333': '3x3x3',
@@ -35,13 +34,6 @@ export default function ScrambleDisplay({
         '333mbf': '3x3x3',
     };
 
-    const isVisualizationSupported = (eventId, viz) => {
-        if (viz === '2D') {
-            return ['333', '333bf', '333oh', '333fm', '333mbf'].includes(eventId);
-        }
-        return true;
-    };
-
     useEffect(() => {
         if (!containerRef.current || !scramble) {
             setIsLoading(false);
@@ -51,76 +43,50 @@ export default function ScrambleDisplay({
         let mounted = true;
         const container = containerRef.current;
 
-        // Cleanup previous
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
-        }
+        const loadScript = async () => {
+            const scriptId = 'scramble-display-lib';
 
-        const loadScrambleDisplay = async () => {
-            setIsLoading(true);
-            setHasError(false);
-
-            try {
-                await import(/* webpackIgnore: true */ 'https://cdn.cubing.net/v0/js/cubing/scramble-display');
-
-                if (!mounted || !containerRef.current) return;
-
-                // Safe cleanup
-                try {
-                    containerRef.current.innerHTML = '';
-                } catch (e) {
-                    // Ignore
-                }
-
-                const effectiveVisualization = isVisualizationSupported(eventId, visualization)
-                    ? visualization
-                    : '3D';
-
-                const display = document.createElement('scramble-display');
-                display.setAttribute('event', eventMap[eventId] || '3x3x3');
-                display.setAttribute('scramble', scramble);
-                display.setAttribute('visualization', effectiveVisualization);
-                display.setAttribute('checkered', checkered ? 'true' : 'false');
-                display.style.width = `${width}px`;
-                display.style.height = `${height}px`;
-                display.style.display = 'block';
-
-                display.addEventListener('load', () => {
-                    if (mounted) setIsLoading(false);
+            if (!document.getElementById(scriptId)) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.id = scriptId;
+                    script.src = 'https://cdn.cubing.net/v0/js/scramble-display';
+                    script.type = 'module';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
                 });
-
-                container.appendChild(display);
-
-                setTimeout(() => {
-                    if (mounted) setIsLoading(false);
-                }, 2000);
-
-            } catch (error) {
-                console.error('Error loading scramble display:', error);
-                if (mounted) {
-                    setHasError(true);
-                    setIsLoading(false);
-                }
             }
+
+            if (!mounted || !container) return;
+
+            container.innerHTML = '';
+
+            const display = document.createElement('scramble-display');
+            display.setAttribute('event', eventMap[eventId] || '3x3x3');
+            display.setAttribute('alg', scramble);
+            display.setAttribute('visualization', visualization);
+            display.setAttribute('checkered', checkered ? 'true' : 'false');
+            display.style.width = `${width}px`;
+            display.style.height = `${height}px`;
+            display.style.display = 'block';
+
+            container.appendChild(display);
+
+            setTimeout(() => {
+                if (mounted) setIsLoading(false);
+            }, 1500);
         };
 
-        loadScrambleDisplay();
-
-        // Cleanup function
-        cleanupRef.current = () => {
-            mounted = false;
-        };
+        loadScript().catch(() => {
+            if (mounted) {
+                setHasError(true);
+                setIsLoading(false);
+            }
+        });
 
         return () => {
             mounted = false;
-            try {
-                if (containerRef.current) {
-                    containerRef.current.innerHTML = '';
-                }
-            } catch (e) {
-                // Ignore
-            }
         };
     }, [eventId, scramble, visualization, width, height, checkered]);
 
@@ -145,10 +111,7 @@ export default function ScrambleDisplay({
                     className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center z-10"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    <div className="flex flex-col items-center gap-2">
-                        <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                        <span className="text-xs text-gray-500">Loading...</span>
-                    </div>
+                    <span className="text-xs text-gray-500">Loading...</span>
                 </div>
             )}
 
@@ -157,21 +120,16 @@ export default function ScrambleDisplay({
                     className="bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs p-2 text-center"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    Unable to load visualization
+                    Unable to load
                 </div>
             )}
 
             <div
                 ref={containerRef}
-                className="scramble-display-container"
                 style={{
                     width: `${width}px`,
                     height: `${height}px`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     opacity: isLoading ? 0 : 1,
-                    transition: 'opacity 0.3s ease'
                 }}
             />
         </div>
