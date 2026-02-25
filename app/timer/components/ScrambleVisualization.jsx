@@ -18,29 +18,28 @@ const EVENT_TO_PUZZLE = {
 
 function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
     const containerRef = useRef(null);
-    const [isLoaded, setIsLoaded] = useState(false);
-    const [error, setError] = useState(false);
-    const [loadingTimeout, setLoadingTimeout] = useState(false);
+    const [vizLoaded, setVizLoaded] = useState(false);
     const elementRef = useRef(null);
 
     const puzzle = useMemo(() => EVENT_TO_PUZZLE[eventId] || '3x3x3', [eventId]);
 
     useEffect(() => {
-        if (!scramble) return;
+        if (!scramble || !containerRef.current) return;
 
-        let cancelled = false;
+        const container = containerRef.current;
 
-        const timeoutId = setTimeout(() => {
-            if (!cancelled && !isLoaded) {
-                setLoadingTimeout(true);
+        const cleanup = () => {
+            if (elementRef.current) {
+                try {
+                    container.removeChild(elementRef.current);
+                } catch (e) { }
+                elementRef.current = null;
             }
-        }, 8000);
+        };
 
-        const init = async () => {
-            setError(false);
-            setLoadingTimeout(false);
-            setIsLoaded(false);
+        cleanup();
 
+        const tryLoadVisualization = async () => {
             try {
                 const scriptId = 'cubing-twisty-script';
                 let script = document.getElementById(scriptId);
@@ -50,33 +49,24 @@ function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
                     script.id = scriptId;
                     script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
                     script.type = 'module';
-                    document.head.appendChild(script);
+                    script.crossOrigin = 'anonymous';
 
                     await new Promise((resolve, reject) => {
-                        const timeout = setTimeout(() => reject(new Error('Script load timeout')), 15000);
+                        const timeout = setTimeout(() => reject(new Error('timeout')), 10000);
                         script.onload = () => {
                             clearTimeout(timeout);
                             resolve();
                         };
                         script.onerror = () => {
                             clearTimeout(timeout);
-                            reject(new Error('Script load failed'));
+                            reject(new Error('load error'));
                         };
                     });
                 }
 
-                if (cancelled) return;
-
                 await new Promise(r => setTimeout(r, 300));
 
-                if (cancelled || !containerRef.current) return;
-
-                const container = containerRef.current;
-
-                if (elementRef.current) {
-                    container.removeChild(elementRef.current);
-                    elementRef.current = null;
-                }
+                if (!containerRef.current) return;
 
                 const element = document.createElement('twisty-player');
                 element.setAttribute('puzzle', puzzle);
@@ -84,57 +74,38 @@ function ScrambleDisplayInner({ scramble, eventId, visualization, height }) {
                 element.setAttribute('visualization', visualization === '3d' ? '3D' : '2D');
                 element.setAttribute('background', 'none');
                 element.setAttribute('hint-facelets', 'none');
-                if (visualization === '2d') {
-                    element.setAttribute('control-panel', 'none');
-                }
                 element.style.width = '100%';
                 element.style.height = height;
-                element.style.display = 'block';
 
-                container.appendChild(element);
+                containerRef.current.appendChild(element);
                 elementRef.current = element;
 
-                setTimeout(() => {
-                    if (!cancelled) setIsLoaded(true);
-                }, 500);
+                setVizLoaded(true);
             } catch (err) {
-                console.error('Scramble display error:', err);
-                if (!cancelled) {
-                    setError(true);
-                    setLoadingTimeout(true);
-                }
+                console.log('Visualization not available:', err.message);
             }
         };
 
-        init();
+        tryLoadVisualization();
 
-        return () => {
-            cancelled = true;
-            clearTimeout(timeoutId);
-        };
-    }, [scramble, puzzle, visualization, height, isLoaded]);
-
-    if (error || loadingTimeout) {
-        return (
-            <div
-                className="w-full flex flex-col items-center justify-center bg-[#161a23] rounded-lg overflow-hidden border border-[#2a2f3a] p-3"
-                style={{ minHeight: height }}
-            >
-                <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">{EVENT_TO_PUZZLE[eventId] || eventId}</div>
-                <div className="text-zinc-300 text-sm font-mono text-center break-all px-2">{scramble}</div>
-            </div>
-        );
-    }
+        return cleanup;
+    }, [scramble, puzzle, visualization, height]);
 
     return (
-        <div
-            ref={containerRef}
-            className="w-full flex items-center justify-center bg-transparent rounded-lg overflow-hidden"
-            style={{ minHeight: height }}
-        >
-            {!isLoaded && (
-                <div className="text-zinc-500 text-sm">Loading...</div>
-            )}
+        <div className="space-y-2">
+            <div
+                ref={containerRef}
+                className="w-full flex items-center justify-center bg-zinc-900/50 rounded-lg overflow-hidden"
+                style={{ minHeight: height }}
+            >
+                {!vizLoaded && (
+                    <div className="text-zinc-500 text-sm py-4">Loading visualization...</div>
+                )}
+            </div>
+            <div className="text-center">
+                <span className="text-zinc-400 text-xs uppercase tracking-wider mr-2">{EVENT_TO_PUZZLE[eventId] || eventId}</span>
+                <span className="text-zinc-300 text-sm font-mono">{scramble}</span>
+            </div>
         </div>
     );
 }
@@ -145,7 +116,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '150
     if (!scramble) {
         return (
             <div
-                className="w-full flex items-center justify-center bg-transparent rounded-lg overflow-hidden"
+                className="w-full flex items-center justify-center bg-transparent rounded-lg"
                 style={{ minHeight: height }}
             >
                 <div className="text-zinc-500 text-sm">Loading...</div>

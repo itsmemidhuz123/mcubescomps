@@ -26,6 +26,8 @@ export const useTimerEngine = (options = {}) => {
     const rafIdRef = useRef(null);
     const inspectionRafIdRef = useRef(null);
     const holdTimerRef = useRef(null);
+    const inspectionPenaltyRef = useRef('none');
+    const inspectionEndedRef = useRef(false);
 
     const formatTime = (ms) => {
         if (ms < 0) return '0.00';
@@ -40,13 +42,6 @@ export const useTimerEngine = (options = {}) => {
         return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     };
 
-    const formatInspectionTime = (seconds) => {
-        if (seconds >= 0) {
-            return seconds.toString();
-        }
-        return seconds.toString();
-    };
-
     const updateDisplay = useCallback(() => {
         if (startTimeRef.current !== null) {
             const elapsed = performance.now() - startTimeRef.current;
@@ -55,8 +50,17 @@ export const useTimerEngine = (options = {}) => {
         }
     }, []);
 
+    const stopInspection = useCallback(() => {
+        if (inspectionRafIdRef.current) {
+            cancelAnimationFrame(inspectionRafIdRef.current);
+            inspectionRafIdRef.current = null;
+        }
+        inspectionEndedRef.current = true;
+        setTimerState(TIMER_STATES.IDLE);
+    }, []);
+
     const updateInspectionDisplay = useCallback(() => {
-        if (inspectionStartRef.current !== null) {
+        if (inspectionStartRef.current !== null && !inspectionEndedRef.current) {
             const elapsed = performance.now() - inspectionStartRef.current;
             const remaining = (inspectionTime * 1000) - elapsed;
             const remainingSeconds = Math.ceil(remaining / 1000);
@@ -64,16 +68,36 @@ export const useTimerEngine = (options = {}) => {
 
             if (remainingSeconds < -2) {
                 setInspectionPenalty('DNF');
-                stopTimer(true);
+                inspectionPenaltyRef.current = 'DNF';
+                stopInspection();
             } else if (remainingSeconds < 0) {
                 setInspectionPenalty('+2');
+                inspectionPenaltyRef.current = '+2';
             } else if (remaining <= 0) {
-                startTimer();
+                stopInspection();
             } else {
                 inspectionRafIdRef.current = requestAnimationFrame(updateInspectionDisplay);
             }
         }
-    }, [inspectionTime]);
+    }, [inspectionTime, stopInspection]);
+
+    const startTimerWithPenalty = useCallback(() => {
+        if (inspectionRafIdRef.current) {
+            cancelAnimationFrame(inspectionRafIdRef.current);
+            inspectionRafIdRef.current = null;
+        }
+
+        const penalty = inspectionPenaltyRef.current;
+        setTimerState(TIMER_STATES.RUNNING);
+        setInspectionRemaining(inspectionTime);
+        setInspectionPenalty('none');
+        inspectionPenaltyRef.current = 'none';
+        inspectionEndedRef.current = false;
+        startTimeRef.current = performance.now();
+        rafIdRef.current = requestAnimationFrame(updateDisplay);
+
+        return penalty;
+    }, [inspectionTime, updateDisplay]);
 
     const startTimer = useCallback(() => {
         if (inspectionRafIdRef.current) {
@@ -83,13 +107,11 @@ export const useTimerEngine = (options = {}) => {
 
         setTimerState(TIMER_STATES.RUNNING);
         setInspectionRemaining(inspectionTime);
-        const penalty = inspectionPenalty;
         setInspectionPenalty('none');
+        inspectionPenaltyRef.current = 'none';
         startTimeRef.current = performance.now();
         rafIdRef.current = requestAnimationFrame(updateDisplay);
-
-        return penalty;
-    }, [inspectionTime, updateDisplay, inspectionPenalty]);
+    }, [inspectionTime, updateDisplay]);
 
     const stopTimer = useCallback((forceStop = false) => {
         if (rafIdRef.current) {
@@ -97,9 +119,18 @@ export const useTimerEngine = (options = {}) => {
             rafIdRef.current = null;
         }
 
-        const finalTime = startTimeRef.current !== null
+        let finalTime = startTimeRef.current !== null
             ? performance.now() - startTimeRef.current
             : 0;
+
+        let penalty = forceStop ? 'DNF' : 'none';
+
+        if (timerState === TIMER_STATES.RUNNING && inspectionPenaltyRef.current !== 'none' && !forceStop) {
+            penalty = inspectionPenaltyRef.current;
+            if (penalty === '+2') {
+                finalTime = finalTime + 2000;
+            }
+        }
 
         startTimeRef.current = null;
         setTimerState(TIMER_STATES.STOPPED);
@@ -107,7 +138,7 @@ export const useTimerEngine = (options = {}) => {
 
         const solve = {
             time: finalTime,
-            penalty: forceStop ? 'DNF' : 'none',
+            penalty: penalty,
             createdAt: Date.now()
         };
 
@@ -115,7 +146,7 @@ export const useTimerEngine = (options = {}) => {
         onTimerStop(solve);
 
         return solve;
-    }, [onTimerStop]);
+    }, [onTimerStop, timerState]);
 
     const startInspection = useCallback(() => {
         if (!inspectionEnabled) {
@@ -123,6 +154,8 @@ export const useTimerEngine = (options = {}) => {
             return;
         }
 
+        inspectionEndedRef.current = false;
+        inspectionPenaltyRef.current = 'none';
         setTimerState(TIMER_STATES.INSPECTION);
         setInspectionRemaining(inspectionTime);
         setInspectionPenalty('none');
@@ -167,12 +200,16 @@ export const useTimerEngine = (options = {}) => {
     const handlePressEnd = useCallback(() => {
         if (timerState === TIMER_STATES.ARMED) {
             if (inspectionEnabled) {
-                startInspection();
+                if (inspectionEndedRef.current) {
+                    startTimerWithPenalty();
+                } else {
+                    startInspection();
+                }
             } else {
                 startTimer();
             }
         }
-    }, [timerState, inspectionEnabled, startInspection, startTimer]);
+    }, [timerState, inspectionEnabled, startInspection, startTimerWithPenalty, startTimer]);
 
     const resetTimer = useCallback(() => {
         if (rafIdRef.current) {
@@ -190,6 +227,8 @@ export const useTimerEngine = (options = {}) => {
 
         startTimeRef.current = null;
         inspectionStartRef.current = null;
+        inspectionPenaltyRef.current = 'none';
+        inspectionEndedRef.current = false;
         setTimerState(TIMER_STATES.IDLE);
         setDisplayTime(0);
         setInspectionRemaining(inspectionTime);
@@ -226,7 +265,6 @@ export const useTimerEngine = (options = {}) => {
         inspectionPenalty,
         pendingSolve,
         formatTime,
-        formatInspectionTime,
         startTimer,
         stopTimer,
         startInspection,
