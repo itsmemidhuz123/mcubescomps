@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const SCRAMBLE_CDN = 'https://cdn.cubing.net/v0/js/cubing/scramble';
 const TWISTY_CDN = 'https://cdn.cubing.net/v0/js/cubing/twisty';
@@ -16,7 +16,13 @@ const EVENT_MAP = {
     'skewb': 'skewb',
     'sq1': 'sq1',
     'clock': 'clock',
-    'minx': 'minx'
+    'minx': 'minx',
+    '333bf': '333',
+    '333oh': '333',
+    '333fm': '333',
+    '444bf': '444',
+    '555bf': '555',
+    '333mbf': '333'
 };
 
 const PUZZLE_MAP = {
@@ -30,11 +36,17 @@ const PUZZLE_MAP = {
     'skewb': 'skewb',
     'sq1': 'square1',
     'clock': 'clock',
-    'minx': 'megaminx'
+    'minx': 'megaminx',
+    '333bf': '3x3x3',
+    '333oh': '3x3x3',
+    '333fm': '3x3x3',
+    '444bf': '4x4x4',
+    '555bf': '5x5x5',
+    '333mbf': '3x3x3'
 };
 
 let scrambleLibPromise = null;
-let twistyLibPromise = null;
+let twistyLibLoaded = false;
 
 function loadScrambleLib() {
     if (!scrambleLibPromise) {
@@ -57,18 +69,22 @@ function loadScrambleLib() {
     return scrambleLibPromise;
 }
 
-function loadTwistyLib() {
-    if (!twistyLibPromise) {
-        twistyLibPromise = new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = TWISTY_CDN;
-            script.type = 'module';
-            script.onload = () => resolve(true);
-            script.onerror = () => reject(new Error('Failed to load twisty lib'));
-            document.head.appendChild(script);
-        });
+async function loadTwistyLib() {
+    if (twistyLibLoaded && customElements.get('twisty-player')) {
+        return true;
     }
-    return twistyLibPromise;
+
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = TWISTY_CDN;
+        script.type = 'module';
+        script.onload = () => {
+            twistyLibLoaded = true;
+            setTimeout(() => resolve(true), 100);
+        };
+        script.onerror = () => reject(new Error('Failed to load twisty lib'));
+        document.head.appendChild(script);
+    });
 }
 
 export function useCubingScramble(eventId) {
@@ -79,6 +95,7 @@ export function useCubingScramble(eventId) {
     useEffect(() => {
         mountedRef.current = true;
         setLoading(true);
+        setScramble(null);
 
         const generateScramble = async () => {
             try {
@@ -125,12 +142,14 @@ export function useCubingScramble(eventId) {
     return { scramble, isLoading: loading, generateScramble };
 }
 
-export function useTwistyPlayer(scramble, eventId, containerRef) {
+function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
+    const containerRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        if (!scramble || !containerRef?.current) return;
+        const container = containerRef.current;
+        if (!scramble || !container) return;
 
         let mounted = true;
 
@@ -139,9 +158,12 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
                 setLoading(true);
                 await loadTwistyLib();
 
-                if (!mounted || !containerRef.current) return;
+                if (!mounted || !container) return;
 
-                const container = containerRef.current;
+                if (!customElements.get('twisty-player')) {
+                    throw new Error('twisty-player not registered');
+                }
+
                 container.innerHTML = '';
 
                 const player = document.createElement('twisty-player');
@@ -158,10 +180,12 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
                 player.style.width = '100%';
                 player.style.height = '100%';
                 player.style.border = 'none';
+                player.style.display = 'block';
 
                 container.appendChild(player);
                 setError(null);
             } catch (err) {
+                console.error('Twisty error:', err);
                 if (mounted) {
                     setError(err.message);
                 }
@@ -177,9 +201,34 @@ export function useTwistyPlayer(scramble, eventId, containerRef) {
         return () => {
             mounted = false;
         };
-    }, [scramble, eventId, containerRef]);
+    }, [scramble, eventId]);
 
-    return { loading, error };
+    if (error) {
+        return (
+            <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
+                <span className="text-red-400 text-sm">Error: {error}</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
+            <div
+                ref={containerRef}
+                style={{
+                    width: '100%',
+                    height: height,
+                    minHeight: height,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+            >
+                {!scramble && <span className="text-zinc-500 text-sm">Loading scramble...</span>}
+                {scramble && loading && <span className="text-zinc-500 text-sm">Loading 3D...</span>}
+            </div>
+        </div>
+    );
 }
 
-export default useCubingScramble;
+export default ScrambleVisualization;
