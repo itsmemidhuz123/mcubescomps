@@ -9,7 +9,7 @@
                 },
                 {
                     "key": "Content-Security-Policy",
-                    "value": "frame-ancestors 'self' https://alpha.twizzle.net https://twizzle.net https://cubing.net https://cdn.cubing.net;"
+                    "value": "frame-ancestors 'self' https://cubing.net https://cdn.cubing.net;"
                 }
             ]
         }
