@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState(null);
     const [loading, setLoading] = useState(true);
-    const prevEventRef = useRef(eventId);
 
     const generate = useCallback(async () => {
         setLoading(true);
@@ -26,15 +25,9 @@ export function useCubingScramble(eventId) {
     }, [eventId]);
 
     useEffect(() => {
-        if (prevEventRef.current !== eventId) {
-            prevEventRef.current = eventId;
-            generate();
-        }
-    }, [eventId, generate]);
-
-    useEffect(() => {
+        setScramble(null);
         generate();
-    }, []);
+    }, [eventId]);
 
     return { scramble, isLoading: loading, generateScramble: generate };
 }

@@ -18,7 +18,7 @@ const PUZZLE_MAP = {
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
     const [twistyLoaded, setTwistyLoaded] = useState(false);
-    const playerRef = useRef(null);
+    const containerRef = useRef(null);
     const scriptLoadedRef = useRef(false);
 
     useEffect(() => {
@@ -33,14 +33,27 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
     }, []);
 
     useEffect(() => {
-        if (!twistyLoaded || !scramble || !playerRef.current) return;
+        if (!twistyLoaded || !scramble || !containerRef.current) return;
 
-        try {
-            playerRef.current.alg = scramble;
-            playerRef.current.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
-        } catch (e) {
-            console.log('Twisty not ready');
-        }
+        // Clear and recreate the player
+        containerRef.current.innerHTML = '';
+
+        const player = document.createElement('twisty-player');
+        player.setAttribute('alg', scramble);
+        player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
+        player.setAttribute('background', 'none');
+        player.setAttribute('show-controls', 'false');
+        player.setAttribute('show-toolbar', 'false');
+        player.setAttribute('show-options', 'false');
+        player.setAttribute('hint', 'none');
+        player.setAttribute('camera-control', 'none');
+        player.setAttribute('keyboard-shortcuts', 'none');
+        player.setAttribute('animation', 'duration:0');
+        player.style.width = '100%';
+        player.style.height = '100%';
+        player.style.border = 'none';
+
+        containerRef.current.appendChild(player);
     }, [scramble, eventId, twistyLoaded]);
 
     if (!scramble) {
@@ -59,18 +72,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
     return (
         <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height, height }}>
             {twistyLoaded ? (
-                <twisty-player
-                    ref={playerRef}
-                    alg={scramble}
-                    puzzle={PUZZLE_MAP[eventId] || '3x3x3'}
-                    background="none"
-                    show-controls="false"
-                    show-toolbar="false"
-                    show-options="false"
-                    hint="none"
-                    animation="duration:0"
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                />
+                <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
             ) : (
                 <span className="text-zinc-500">Loading 3D...</span>
             )}
