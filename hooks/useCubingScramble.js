@@ -82,3 +82,62 @@ export function useCubingScramble(eventId) {
 
     return { scramble, isLoading: loading, generateScramble };
 }
+
+export function useTwistyPlayer(scramble, eventId, containerRef) {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (!containerRef.current || !scramble || !eventId) {
+            setLoading(false);
+            return;
+        }
+
+        let isMounted = true;
+
+        const initializePlayer = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                await import('cubing/twisty');
+
+                if (!isMounted || !containerRef.current) return;
+
+                containerRef.current.innerHTML = '';
+
+                const player = document.createElement('twisty-player');
+                player.setAttribute('alg', scramble);
+                player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
+                player.setAttribute('visualization', '3D');
+                player.setAttribute('background', 'none');
+                player.setAttribute('control-panel', 'none');
+                
+                player.style.width = '100%';
+                player.style.height = '100%';
+                player.style.display = 'flex';
+                player.style.alignItems = 'center';
+                player.style.justifyContent = 'center';
+
+                if (isMounted && containerRef.current) {
+                    containerRef.current.appendChild(player);
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Failed to initialize Twisty player:', err);
+                if (isMounted) {
+                    setError('Failed to load 3D visualization');
+                    setLoading(false);
+                }
+            }
+        };
+
+        initializePlayer();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [scramble, eventId, containerRef]);
+
+    return { loading, error };
+}
