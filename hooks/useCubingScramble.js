@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-// We'll use dynamic imports for the heavy cubing library to avoid SSR issues and reduce initial bundle size
 
 const EVENT_MAP = {
     '333': '333',
@@ -53,7 +52,6 @@ export function useCubingScramble(eventId) {
         
         setLoading(true);
         try {
-            // Dynamic import to avoid SSR issues
             const { randomScrambleForEvent } = await import('cubing/scramble');
             const alg = await randomScrambleForEvent(EVENT_MAP[eventId] || '333');
             
@@ -85,62 +83,69 @@ export function useCubingScramble(eventId) {
 }
 
 export function useTwistyPlayer(scramble, eventId, containerRef) {
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const playerRef = useRef(null);
 
     useEffect(() => {
-        const container = containerRef.current;
-        if (!scramble || !container) return;
+        const container = containerRef?.current;
+        if (!container || !scramble || !eventId) {
+            setLoading(false);
+            return;
+        }
 
-        let mounted = true;
+        let isMounted = true;
 
         const initPlayer = async () => {
             try {
                 setLoading(true);
-                
-                // Import twisty player specifically
-                // This registers the <twisty-player> custom element
-                await import('cubing/twisty');
+                setError(null);
 
-                if (!mounted || !container) return;
+                // Import and register the twisty-player web component
+                const { TwistyPlayer } = await import('cubing/twisty');
+
+                if (!isMounted || !container) return;
 
                 // Clear previous content
                 container.innerHTML = '';
 
-                // Create and configure the player element
-                const player = document.createElement('twisty-player');
-                player.setAttribute('alg', scramble);
-                player.setAttribute('puzzle', PUZZLE_MAP[eventId] || '3x3x3');
-                player.setAttribute('visualization', '3D');
-                player.setAttribute('background', 'none');
-                player.setAttribute('control-panel', 'none');
-                
-                // Ensure proper sizing
-                player.style.width = '100%';
-                player.style.height = '100%';
-                
-                container.appendChild(player);
-                setError(null);
+                // Create player element using the imported class
+                const player = new TwistyPlayer({
+                    alg: scramble,
+                    puzzle: PUZZLE_MAP[eventId] || '3x3x3',
+                    visualization: '3D',
+                    background: 'none',
+                    controlPanel: 'none'
+                });
+
+                if (isMounted && container) {
+                    container.appendChild(player);
+                    playerRef.current = player;
+                }
             } catch (err) {
                 console.error('Twisty player init error:', err);
-                if (mounted) {
+                if (isMounted) {
                     setError('Failed to load 3D preview');
                 }
             } finally {
-                if (mounted) {
+                if (isMounted) {
                     setLoading(false);
                 }
             }
         };
 
-        // Small delay to ensure DOM is ready and avoid race conditions
-        const timeoutId = setTimeout(initPlayer, 50);
+        initPlayer();
 
         return () => {
-            mounted = false;
-            clearTimeout(timeoutId);
-            if (container) {
-                container.innerHTML = '';
+            isMounted = false;
+            if (container && playerRef.current) {
+                try {
+                    if (container.contains(playerRef.current)) {
+                        container.removeChild(playerRef.current);
+                    }
+                } catch (e) {
+                    console.error('Error removing player:', e);
+                }
             }
         };
     }, [scramble, eventId, containerRef]);
