@@ -97,22 +97,22 @@ function generateSq1Scramble(length = 40) {
         const move = Math.floor(Math.random() * 11) - 5;
         const slash = Math.random() > 0.7 ? '/' : '';
 
-        if (slash === '/' && paren_depth > 0) {
+        if (slash === '/' && parenDepth > 0) {
             scramble.push(')');
-            paren_depth--;
+            parenDepth--;
         }
 
         scramble.push(move + slash);
 
-        if (slash === '/' && Math.random() > 0.5 && paren_depth < 2) {
+        if (slash === '/' && Math.random() > 0.5 && parenDepth < 2) {
             scramble.push('(');
-            paren_depth++;
+            parenDepth++;
         }
     }
 
-    while (paren_depth > 0) {
+    while (parenDepth > 0) {
         scramble.push(')');
-        paren_depth--;
+        parenDepth--;
     }
 
     return scramble.join(' ');
@@ -140,17 +140,19 @@ function generateBigCubeScramble(length) {
 }
 
 function generateMinxScramble(length = 70) {
-    const moves = ['R', 'L', 'U', 'D', 'F'];
+    const moves = ['U', 'U\'', 'U2', 'R', 'R\'', 'R2', 'F', 'F\'', 'F2'];
     const scramble = [];
     let lastMove = '';
 
     for (let i = 0; i < length; i++) {
-        const validMoves = moves.filter(m => m !== lastMove);
-        const move = validMoves[Math.floor(Math.random() * validMoves.length)];
-        const modifier = MODIFIERS[Math.floor(Math.random() * MODIFIERS.length)];
-        const prime = Math.random() > 0.5 ? '+' : '-';
+        const validMoves = moves.filter(m => {
+            const moveFace = m.charAt(0);
+            const lastMoveFace = lastMove.charAt(0);
+            return moveFace !== lastMoveFace;
+        });
 
-        scramble.push(move + prime + modifier);
+        const move = validMoves[Math.floor(Math.random() * validMoves.length)];
+        scramble.push(move);
         lastMove = move;
     }
 
@@ -197,6 +199,7 @@ export async function POST(request) {
                 scramble = generateMinxScramble(length);
                 break;
             default:
+                console.warn(`Unsupported event type: ${event}, defaulting to 3x3 scramble`);
                 scramble = generate333Scramble(length);
         }
 
