@@ -1,15 +1,19 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
+    "headers": [
         {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "X-Content-Type-Options",
+                    "value": "nosniff"
+                },
+                {
+                    "key": "Content-Security-Policy",
+                    "value": "frame-ancestors 'self' https://alpha.twizzle.net https://twizzle.net https://cubing.net https://cdn.cubing.net;"
+                }
+            ]
         }
-      ]
-    }
-  ],
-  "cleanUrls": true,
-  "trailingSlash": false
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false
 }
