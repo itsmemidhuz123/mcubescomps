@@ -3,7 +3,10 @@ const nextConfig = {
     images: {
         unoptimized: true,
     },
-    serverExternalPackages: ['mongodb'],
+    serverExternalPackages: ['mongodb', 'cubing'],
+    experimental: {
+        webpackBuildWorker: false,
+    },
     webpack(config, { dev, isServer }) {
         if (dev) {
             config.watchOptions = {
