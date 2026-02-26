@@ -20,20 +20,20 @@ export function useCubingScramble(eventId) {
         script.id = scriptId;
         script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble';
         script.type = 'module';
-        
+
         script.onload = () => {
             const checkReady = setInterval(() => {
                 if (window.cubing && window.cubing.scramble && window.cubing.scramble.randomScrambleForEvent) {
                     clearInterval(checkReady);
                     scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
-                    
+
                     if (eventId) {
                         generateScrambleInternal(eventId);
                     }
                 }
             }, 100);
         };
-        
+
         document.head.appendChild(script);
     }, []);
 
