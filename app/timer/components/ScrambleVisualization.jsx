@@ -31,26 +31,16 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const scriptId = 'cubing-twisty-module';
-        if (document.getElementById(scriptId)) {
-            setIsLoaded(true);
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-        script.type = 'module';
-
-        script.onload = () => {
-            setIsLoaded(true);
+        const loadTwisty = async () => {
+            try {
+                await import('https://cdn.cubing.net/v0/js/cubing/twisty');
+                setIsLoaded(true);
+            } catch (err) {
+                console.error('[Twisty] Load error:', err);
+            }
         };
 
-        script.onerror = () => {
-            console.error('[Twisty] Failed to load');
-        };
-
-        document.head.appendChild(script);
+        loadTwisty();
     }, []);
 
     useEffect(() => {
