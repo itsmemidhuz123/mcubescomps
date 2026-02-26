@@ -10,6 +10,6 @@ export async function POST() {
 export async function GET() {
     return NextResponse.json({
         message: 'Scrambles are generated client-side using cubing.js CDN',
-        cdn: 'https://cdn.cubing.net/v0/js/cubing/scramble'
+        // cdn: removed; scrambles generated client-side
     });
 }
