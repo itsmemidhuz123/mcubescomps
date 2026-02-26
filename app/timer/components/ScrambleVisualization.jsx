@@ -32,12 +32,37 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
         if (typeof window === 'undefined') return;
         if (!scramble) return;
 
-        let mounted = true;
+        const scriptId = 'cubing-twisty-script';
 
-        const init = async () => {
-            try {
-                const cubing = await import('cubing');
-                if (!mounted || !containerRef.current) return;
+        const loadScript = () => {
+            return new Promise((resolve, reject) => {
+                if (window.cubing?.TwistyPlayer) {
+                    resolve(window.cubing);
+                    return;
+                }
+
+                const existing = document.getElementById(scriptId);
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(window.cubing));
+                    existing.addEventListener('error', () => reject(new Error('Failed to load')));
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.id = scriptId;
+                script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+                script.type = 'module';
+                script.onload = () => {
+                    setTimeout(() => resolve(window.cubing), 100);
+                };
+                script.onerror = () => reject(new Error('Failed to load'));
+                document.head.appendChild(script);
+            });
+        };
+
+        loadScript()
+            .then((cubing) => {
+                if (!containerRef.current) return;
 
                 const TwistyPlayer = cubing.TwistyPlayer;
                 const player = new TwistyPlayer({
@@ -52,16 +77,10 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
                 containerRef.current.innerHTML = '';
                 containerRef.current.appendChild(player);
                 setIsLoaded(true);
-            } catch (err) {
+            })
+            .catch((err) => {
                 console.error('[Twisty] Failed to load:', err);
-            }
-        };
-
-        init();
-
-        return () => {
-            mounted = false;
-        };
+            });
     }, [scramble, puzzle, heightNum]);
 
     return (

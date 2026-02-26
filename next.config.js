@@ -3,7 +3,7 @@ const nextConfig = {
     images: {
         unoptimized: true,
     },
-    serverExternalPackages: ['mongodb'],
+    serverExternalPackages: ['mongodb', 'cubing'],
     experimental: {
         webpackBuildWorker: false,
     },
@@ -20,7 +20,13 @@ const nextConfig = {
             ...config.resolve.fallback,
             fs: false,
             path: false,
+            worker: false,
         };
+
+        // Mark cubing as external so it's not bundled
+        if (!isServer) {
+            config.externals = [...(config.externals || []), 'cubing'];
+        }
 
         return config;
     },

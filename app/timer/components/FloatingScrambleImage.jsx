@@ -31,6 +31,32 @@ const EVENT_TO_DISPLAY = {
     'minx': 'megaminx'
 };
 
+function loadCubingScript() {
+    return new Promise((resolve, reject) => {
+        if (window.cubing) {
+            resolve(window.cubing);
+            return;
+        }
+
+        const scriptId = 'cubing-main-script';
+        const existing = document.getElementById(scriptId);
+
+        if (existing) {
+            existing.addEventListener('load', () => resolve(window.cubing));
+            existing.addEventListener('error', () => reject(new Error('Failed to load')));
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+        script.type = 'module';
+        script.onload = () => setTimeout(() => resolve(window.cubing), 100);
+        script.onerror = () => reject(new Error('Failed to load'));
+        document.head.appendChild(script);
+    });
+}
+
 function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -42,9 +68,8 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
 
         let cancelled = false;
 
-        const init = async () => {
-            try {
-                const cubing = await import('cubing');
+        loadCubingScript()
+            .then((cubing) => {
                 if (cancelled || !containerRef.current) return;
 
                 if (visualization === '3d') {
@@ -55,7 +80,6 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
                         hint: 'none',
                         controlPanel: 'none',
                         background: 'none',
-                        animation: 'none',
                     });
                     player.style.width = '100%';
                     player.style.height = '100%';
@@ -75,26 +99,18 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
                     containerRef.current.appendChild(display);
                 }
                 setIsLoaded(true);
-            } catch (err) {
+            })
+            .catch((err) => {
                 console.error('Scramble display error:', err);
                 setError(true);
-            }
-        };
+            });
 
-        init();
-
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [scramble, eventId, visualization]);
 
     if (error) {
         return (
-            <button
-                onClick={onClick}
-                className="relative group cursor-pointer"
-                title="View scramble"
-            >
+            <button onClick={onClick} className="relative group cursor-pointer" title="View scramble">
                 <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden">
                     <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs px-1 text-center">
                         {eventId}
@@ -108,19 +124,10 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     }
 
     return (
-        <button
-            onClick={onClick}
-            className="relative group cursor-pointer"
-            title={visualization === '3d' ? 'View 3D scramble' : 'View 2D scramble'}
-        >
+        <button onClick={onClick} className="relative group cursor-pointer" title={visualization === '3d' ? 'View 3D scramble' : 'View 2D scramble'}>
             <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden hover:border-blue-500/50 transition-colors">
-                <div
-                    ref={containerRef}
-                    className="w-full h-full flex items-center justify-center"
-                >
-                    {!isLoaded && (
-                        <Box className="w-6 h-6 text-zinc-600" />
-                    )}
+                <div ref={containerRef} className="w-full h-full flex items-center justify-center">
+                    {!isLoaded && <Box className="w-6 h-6 text-zinc-600" />}
                 </div>
             </div>
             <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
@@ -130,21 +137,12 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     );
 }
 
-export default function FloatingScrambleImage({
-    scramble,
-    eventId,
-    onClick,
-    visualization = '2d',
-    className = ''
-}) {
+export default function FloatingScrambleImage({ scramble, eventId, onClick, visualization = '2d', className = '' }) {
     const key = useMemo(() => `${scramble}_${visualization}_${eventId}`, [scramble, visualization, eventId]);
 
     if (!scramble) {
         return (
-            <button
-                onClick={onClick}
-                className={`relative group cursor-pointer ${className}`}
-            >
+            <button onClick={onClick} className={`relative group cursor-pointer ${className}`}>
                 <div className="w-16 h-16 rounded-xl bg-[#161a23] border border-[#2a2f3a] overflow-hidden">
                     <Box className="w-6 h-6 text-zinc-600 m-auto mt-4" />
                 </div>
