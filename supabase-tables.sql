@@ -48,4 +48,3 @@ CREATE POLICY "Allow all for users" ON users FOR ALL USING (true) WITH CHECK (tr
 
 DROP POLICY IF EXISTS "Allow all for identity_index" ON identity_index;
 CREATE POLICY "Allow all for identity_index" ON identity_index FOR ALL USING (true) WITH CHECK (true);
-
