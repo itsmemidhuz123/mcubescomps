@@ -1,18 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState('');
     const [loading, setLoading] = useState(true);
-    const lastEventRef = useRef(null);
     const scrambleFnRef = useRef(null);
 
+    // Load the scramble script from CDN at runtime (client‑only)
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
         const scriptId = 'cubing-scramble-module';
         if (document.getElementById(scriptId)) {
+            // Script already present – just hook up the function if needed
+            if (window.cubing?.scramble?.randomScrambleForEvent) {
+                scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
+                if (eventId) generateScrambleInternal(eventId);
+            }
             return;
         }
 
@@ -20,51 +25,44 @@ export function useCubingScramble(eventId) {
         script.id = scriptId;
         script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble';
         script.type = 'module';
-
         script.onload = () => {
-            const checkReady = setInterval(() => {
-                if (window.cubing && window.cubing.scramble && window.cubing.scramble.randomScrambleForEvent) {
-                    clearInterval(checkReady);
-                    scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
-
-                    if (eventId) {
-                        generateScrambleInternal(eventId);
-                    }
-                }
-            }, 100);
+            if (window.cubing?.scramble?.randomScrambleForEvent) {
+                scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
+                if (eventId) generateScrambleInternal(eventId);
+            }
         };
-
+        script.onerror = () => console.error('[Cubing Scramble] Failed to load');
         document.head.appendChild(script);
-    }, []);
 
-    const generateScrambleInternal = useCallback(async (evt) => {
-        if (!evt || !scrambleFnRef.current) return;
+        return () => {
+            const el = document.getElementById(scriptId);
+            if (el) el.remove();
+        };
+    }, [eventId]);
 
+    const generateScrambleInternal = async (evt) => {
+        if (!scrambleFnRef.current) return;
         setLoading(true);
         try {
-            const scrambleAlg = await scrambleFnRef.current(evt);
-            const scrambleString = scrambleAlg.toString();
-            setScramble(scrambleString);
-            lastEventRef.current = evt;
-        } catch (err) {
-            console.error('[Scramble] Error:', err);
+            const alg = await scrambleFnRef.current(evt);
+            setScramble(alg.toString());
+        } catch (e) {
+            console.error('[Cubing Scramble] generate error', e);
             setScramble('');
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const generateScramble = useCallback(() => {
-        if (eventId) {
-            generateScrambleInternal(eventId);
-        }
-    }, [eventId, generateScrambleInternal]);
+    // Public helper – can be called manually (e.g., on refresh button)
+    const generateScramble = () => {
+        if (eventId) generateScrambleInternal(eventId);
+    };
 
+    // Regenerate when eventId changes
     useEffect(() => {
-        if (eventId && eventId !== lastEventRef.current && scrambleFnRef.current) {
-            generateScrambleInternal(eventId);
-        }
-    }, [eventId, generateScrambleInternal]);
+        if (eventId) generateScrambleInternal(eventId);
+    }, [eventId]);
 
     return { scramble, isLoading: loading, generateScramble };
 }
