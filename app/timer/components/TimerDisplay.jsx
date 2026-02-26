@@ -145,9 +145,7 @@ export default function TimerDisplay({ onTimerStop, onGenerateScramble }) {
 
     const handleTouchEnd = (e) => {
         e.preventDefault();
-        if (timerState === TIMER_STATES.INSPECTION) {
-            handleHoldEnd();
-        }
+        handleHoldEnd();
     };
 
     const getTimerColor = () => {
