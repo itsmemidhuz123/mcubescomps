@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { generateScramble as fallbackGenerateScramble } from './useScrambleEngine';
+import { generateScramble as generateScrambleFallback } from './useScrambleEngine';
 
 const EVENT_MAP = {
     '333': '333',
@@ -23,52 +23,74 @@ const EVENT_MAP = {
     '333mbf': '333'
 };
 
-const PUZZLE_MAP = {
-    '333': '3x3x3',
-    '222': '2x2x2',
-    '444': '4x4x4',
-    '555': '5x5x5',
-    '666': '6x6x6',
-    '777': '7x7x7',
-    'pyram': 'pyraminx',
-    'skewb': 'skewb',
-    'sq1': 'square1',
-    'clock': 'clock',
-    'minx': 'megaminx',
-    '333bf': '3x3x3',
-    '333oh': '3x3x3',
-    '333fm': '3x3x3',
-    '444bf': '4x4x4',
-    '555bf': '5x5x5',
-    '333mbf': '3x3x3'
-};
-
 let scrambleModulePromise = null;
-let twistyModulePromise = null;
+let scrambleModuleLoaded = false;
 
-function getScrambleModule() {
-    if (!scrambleModulePromise) {
-        scrambleModulePromise = import('cubing/scramble').catch(err => {
-            console.error('[Cubing] Failed to load scramble module:', err);
-            return null;
-        });
+async function loadScrambleModule() {
+    if (scrambleModuleLoaded && typeof window !== 'undefined') {
+        const cubing = window.cubing;
+        if (cubing && cubing.scramble) {
+            return cubing.scramble;
+        }
     }
+
+    if (scrambleModulePromise) {
+        return scrambleModulePromise;
+    }
+
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    scrambleModulePromise = new Promise((resolve, reject) => {
+        const scriptId = 'cubing-scramble-cdn';
+        const existingScript = document.getElementById(scriptId);
+
+        if (existingScript) {
+            const checkLoaded = () => {
+                if (window.cubing && window.cubing.scramble) {
+                    scrambleModuleLoaded = true;
+                    resolve(window.cubing.scramble);
+                } else {
+                    setTimeout(checkLoaded, 100);
+                }
+            };
+            checkLoaded();
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble';
+        script.type = 'module';
+
+        script.onload = () => {
+            const checkLoaded = () => {
+                if (window.cubing && window.cubing.scramble) {
+                    scrambleModuleLoaded = true;
+                    resolve(window.cubing.scramble);
+                } else {
+                    setTimeout(checkLoaded, 50);
+                }
+            };
+            checkLoaded();
+        };
+
+        script.onerror = () => {
+            scrambleModulePromise = null;
+            reject(new Error('Failed to load cubing CDN'));
+        };
+
+        document.head.appendChild(script);
+    });
+
     return scrambleModulePromise;
-}
-
-function getTwistyModule() {
-    if (!twistyModulePromise) {
-        twistyModulePromise = import('cubing/twisty').catch(err => {
-            console.error('[Cubing] Failed to load twisty module:', err);
-            return null;
-        });
-    }
-    return twistyModulePromise;
 }
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState('');
     const [loading, setLoading] = useState(true);
+    const [usingFallback, setUsingFallback] = useState(false);
     const mountedRef = useRef(true);
     const lastEventRef = useRef(null);
 
@@ -80,7 +102,7 @@ export function useCubingScramble(eventId) {
         setLoading(true);
 
         try {
-            const module = await getScrambleModule();
+            const module = await loadScrambleModule();
 
             if (module && module.randomScrambleForEvent) {
                 const mappedEvent = EVENT_MAP[eventId] || '333';
@@ -89,20 +111,18 @@ export function useCubingScramble(eventId) {
 
                 if (mountedRef.current) {
                     setScramble(scrambleString);
+                    setUsingFallback(false);
                     lastEventRef.current = eventId;
                 }
             } else {
-                const fallbackScramble = fallbackGenerateScramble(eventId);
-                if (mountedRef.current) {
-                    setScramble(fallbackScramble);
-                    lastEventRef.current = eventId;
-                }
+                throw new Error('Module not available');
             }
         } catch (err) {
-            console.error('[Scramble] Generation error, using fallback:', err);
+            console.warn('[Scramble] CDN failed, using fallback:', err.message);
             if (mountedRef.current) {
-                const fallbackScramble = fallbackGenerateScramble(eventId);
+                const fallbackScramble = generateScrambleFallback(eventId);
                 setScramble(fallbackScramble);
+                setUsingFallback(true);
                 lastEventRef.current = eventId;
             }
         } finally {
@@ -124,72 +144,12 @@ export function useCubingScramble(eventId) {
         };
     }, [eventId, generateScramble]);
 
-    return { scramble, isLoading: loading, generateScramble };
+    return { scramble, isLoading: loading, generateScramble, usingFallback };
 }
 
 export function useTwistyPlayer(scramble, eventId, containerRef) {
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const playerRef = useRef(null);
-
-    useEffect(() => {
-        if (!containerRef?.current || !scramble || !eventId) {
-            setLoading(false);
-            return;
-        }
-
-        let isMounted = true;
-
-        const initializePlayer = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-
-                const module = await getTwistyModule();
-
-                if (!isMounted || !containerRef?.current || !module || !module.TwistyPlayer) {
-                    if (isMounted) {
-                        setError('3D visualization unavailable');
-                        setLoading(false);
-                    }
-                    return;
-                }
-
-                containerRef.current.innerHTML = '';
-
-                const puzzleType = PUZZLE_MAP[eventId] || '3x3x3';
-
-                const player = new module.TwistyPlayer({
-                    puzzle: puzzleType,
-                    alg: scramble,
-                    visualization: '3D',
-                    background: 'none',
-                    controlPanel: 'none',
-                });
-
-                if (isMounted && containerRef?.current) {
-                    containerRef.current.appendChild(player);
-                    playerRef.current = player;
-                    setLoading(false);
-                }
-            } catch (err) {
-                console.error('[TwistyPlayer] Initialization error:', err);
-                if (isMounted) {
-                    setError('Failed to load 3D visualization');
-                    setLoading(false);
-                }
-            }
-        };
-
-        initializePlayer();
-
-        return () => {
-            isMounted = false;
-            if (playerRef.current) {
-                playerRef.current = null;
-            }
-        };
-    }, [scramble, eventId, containerRef]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('3D preview: use ScrambleDisplay component instead');
 
     return { loading, error };
 }

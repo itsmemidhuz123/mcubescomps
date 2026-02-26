@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useTwistyPlayer } from '@/hooks/useCubingScramble';
+import ScrambleDisplay from '@/components/ScrambleDisplay';
 
-const PUZZLE_MAP = {
+const EVENT_MAP = {
     '333': '3x3x3',
     '222': '2x2x2',
     '444': '4x4x4',
@@ -24,29 +23,30 @@ const PUZZLE_MAP = {
 };
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
-    const containerRef = useRef(null);
-    const { loading, error } = useTwistyPlayer(scramble, eventId, containerRef);
+    const puzzle = EVENT_MAP[eventId] || '3x3x3';
+    const heightNum = parseInt(height) || 200;
 
-    if (error) {
+    if (!scramble) {
         return (
-            <div 
-                className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" 
+            <div
+                className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center"
                 style={{ minHeight: height }}
             >
-                <span className="text-red-400 text-sm">3D preview unavailable</span>
+                <span className="text-zinc-500 text-sm">No scramble</span>
             </div>
         );
     }
 
     return (
-        <div 
-            ref={containerRef} 
-            className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" 
-            style={{ minHeight: height }}
-        >
-            {loading && (
-                <span className="text-zinc-500 text-sm">Loading 3D...</span>
-            )}
+        <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
+            <ScrambleDisplay
+                eventId={eventId}
+                scramble={scramble}
+                visualization="3D"
+                width={heightNum}
+                height={heightNum}
+                checkered={true}
+            />
         </div>
     );
 }

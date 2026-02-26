@@ -8,7 +8,8 @@ export default function ScrambleDisplay({
     visualization = "3D",
     width = 200,
     height = 200,
-    checkered = true
+    checkered = true,
+    className = ''
 }) {
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +76,7 @@ export default function ScrambleDisplay({
 
             setTimeout(() => {
                 if (mounted) setIsLoading(false);
-            }, 1500);
+            }, 500);
         };
 
         loadScript().catch(() => {
@@ -93,7 +94,7 @@ export default function ScrambleDisplay({
     if (!scramble) {
         return (
             <div
-                className="bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm"
+                className={`bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-sm ${className}`}
                 style={{ width: `${width}px`, height: `${height}px` }}
             >
                 No scramble
@@ -103,24 +104,24 @@ export default function ScrambleDisplay({
 
     return (
         <div
-            className="relative"
+            className={`relative ${className}`}
             style={{ width: `${width}px`, height: `${height}px` }}
         >
             {isLoading && (
                 <div
-                    className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center z-10"
+                    className="absolute inset-0 bg-zinc-900 rounded-lg flex items-center justify-center z-10"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    <span className="text-xs text-gray-500">Loading...</span>
+                    <span className="text-xs text-zinc-500">Loading 3D...</span>
                 </div>
             )}
 
             {hasError && (
                 <div
-                    className="bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs p-2 text-center"
+                    className="bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-xs p-2 text-center"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    Unable to load
+                    3D preview unavailable
                 </div>
             )}
 
