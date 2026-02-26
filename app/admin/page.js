@@ -1938,11 +1938,11 @@ export default function AdminPanel() {
                                             <TableCell className="font-mono">
                                                 {p.couponCode ? (
                                                     <div className="text-xs">
-                                                        <div className="line-through text-gray-400">₹{p.originalAmount}</div>
-                                                        <div className="text-green-600 font-bold">₹{p.finalAmount}</div>
+                                                        <div className="line-through text-gray-400">₹{p.originalAmount || p.amount}</div>
+                                                        <div className="text-green-600 font-bold">₹{p.finalAmount || p.amount}</div>
                                                     </div>
                                                 ) : (
-                                                    <span>{p.currency} {p.amount}</span>
+                                                    <span>{p.currency} {p.amount || p.finalAmount || 0}</span>
                                                 )}
                                             </TableCell>
                                             <TableCell>
@@ -2198,9 +2198,9 @@ export default function AdminPanel() {
                                                 <TableCell className="font-mono font-bold">{usage.couponCode}</TableCell>
                                                 <TableCell>{usage.userId}</TableCell>
                                                 <TableCell>{getCompetitionName(usage.competitionId)}</TableCell>
-                                                <TableCell>₹{usage.originalAmount}</TableCell>
-                                                <TableCell className="text-green-600">-₹{usage.discountAmount}</TableCell>
-                                                <TableCell className="font-bold">₹{usage.finalAmount}</TableCell>
+                                                <TableCell>₹{usage.originalAmount || 0}</TableCell>
+                                                <TableCell className="text-green-600">-₹{usage.discountAmount || 0}</TableCell>
+                                                <TableCell className="font-bold">₹{usage.finalAmount || 0}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
