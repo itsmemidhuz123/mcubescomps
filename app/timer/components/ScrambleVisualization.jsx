@@ -1,8 +1,8 @@
 'use client';
 
-import ScrambleDisplay from '@/components/ScrambleDisplay';
+import { useEffect, useRef } from 'react';
 
-const EVENT_MAP = {
+const PUZZLE_MAP = {
     '333': '3x3x3',
     '222': '2x2x2',
     '444': '4x4x4',
@@ -23,8 +23,23 @@ const EVENT_MAP = {
 };
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
-    const puzzle = EVENT_MAP[eventId] || '3x3x3';
+    const containerRef = useRef(null);
+    const puzzle = PUZZLE_MAP[eventId] || '3x3x3';
     const heightNum = parseInt(height) || 200;
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const scriptId = 'cubing-twisty-cdn';
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
+            script.type = 'module';
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    }, []);
 
     if (!scramble) {
         return (
@@ -39,13 +54,13 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
     return (
         <div className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: height }}>
-            <ScrambleDisplay
-                eventId={eventId}
-                scramble={scramble}
-                visualization="3D"
-                width={heightNum}
-                height={heightNum}
-                checkered={true}
+            <twisty-player
+                ref={containerRef}
+                puzzle={puzzle}
+                alg={scramble}
+                visualization="2D"
+                background="none"
+                style={{ width: '100%', height: `${heightNum}px` }}
             />
         </div>
     );
