@@ -18,8 +18,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 function TimerPageContent() {
-    const { currentEvent, currentSession, sessions, solves, settings, createSession, stats, deleteSolve, updateSolvePenalty } = useTimer();
-    const eventId = currentEvent?.id ?? '333';
+    const { event: currentEventObj, currentSession, sessions, solves, settings, createSession, stats, deleteSolve, updateSolvePenalty } = useTimer();
+    const eventId = currentEventObj?.id ?? '333';
     const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(eventId);
 
     const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
@@ -86,8 +86,8 @@ function TimerPageContent() {
         return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
     };
 
-    const eventIcon = currentEvent?.icon || '🎲';
-    const eventName = currentEvent?.name || '3x3x3';
+    const eventIcon = currentEventObj?.icon || '🎲';
+    const eventName = currentEventObj?.name || '3x3x3';
 
     const sortedSolves = solves ? [...solves].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) : [];
 
