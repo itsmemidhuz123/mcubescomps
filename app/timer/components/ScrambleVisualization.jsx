@@ -36,9 +36,10 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
         const init = async () => {
             try {
-                const { TwistyPlayer } = await import('cubing/twisty');
+                const cubing = await import('cubing');
                 if (!mounted || !containerRef.current) return;
 
+                const TwistyPlayer = cubing.TwistyPlayer;
                 const player = new TwistyPlayer({
                     puzzle: puzzle,
                     alg: scramble,

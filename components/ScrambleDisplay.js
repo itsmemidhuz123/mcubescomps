@@ -47,10 +47,11 @@ export default function ScrambleDisplayComponent({
 
         const loadDisplay = async () => {
             try {
-                if (visualization === '2D') {
-                    const { ScrambleDisplay } = await import('scramble-display');
-                    if (!mounted || !container) return;
+                const cubing = await import('cubing');
+                if (!mounted || !container) return;
 
+                if (visualization === '2D') {
+                    const ScrambleDisplay = cubing.ScrambleDisplay;
                     const display = new ScrambleDisplay({
                         event: eventMap[eventId] || '3x3x3',
                         visualization: '2D',
@@ -63,9 +64,7 @@ export default function ScrambleDisplayComponent({
                     container.innerHTML = '';
                     container.appendChild(display);
                 } else {
-                    const { TwistyPlayer } = await import('cubing/twisty');
-                    if (!mounted || !container) return;
-
+                    const TwistyPlayer = cubing.TwistyPlayer;
                     const player = new TwistyPlayer({
                         puzzle: eventMap[eventId] || '3x3x3',
                         alg: scramble,

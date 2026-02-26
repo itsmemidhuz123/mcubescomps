@@ -44,10 +44,11 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
 
         const init = async () => {
             try {
-                if (visualization === '3d') {
-                    const { TwistyPlayer } = await import('cubing/twisty');
-                    if (cancelled || !containerRef.current) return;
+                const cubing = await import('cubing');
+                if (cancelled || !containerRef.current) return;
 
+                if (visualization === '3d') {
+                    const TwistyPlayer = cubing.TwistyPlayer;
                     const player = new TwistyPlayer({
                         puzzle: EVENT_TO_PUZZLE[eventId] || '3x3x3',
                         alg: scramble,
@@ -61,9 +62,7 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
                     containerRef.current.innerHTML = '';
                     containerRef.current.appendChild(player);
                 } else {
-                    const { ScrambleDisplay } = await import('scramble-display');
-                    if (cancelled || !containerRef.current) return;
-
+                    const ScrambleDisplay = cubing.ScrambleDisplay;
                     const display = new ScrambleDisplay({
                         event: EVENT_TO_DISPLAY[eventId] || '3x3x3',
                         visualization: '2D',
