@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Maximize2, Box } from 'lucide-react';
+import { TwistyPlayer } from 'cubing/twisty';
+import { ScrambleDisplay } from 'cubing/scramble-display';
 
 const EVENT_TO_PUZZLE = {
     '333': '3x3x3',
@@ -44,52 +46,31 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
 
         const init = async () => {
             try {
-                const scriptId = visualization === '3d' ? 'twisty-script-float' : 'scramble-display-script-float';
-                let script = document.getElementById(scriptId);
-
-                if (!script) {
-                    script = document.createElement('script');
-                    script.id = scriptId;
-                    script.src = visualization === '3d'
-                        ? 'https://cdn.cubing.net/v0/js/cubing/twisty'
-                        : 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
-                    script.type = 'module';
-                    document.head.appendChild(script);
-
-                    await new Promise((resolve, reject) => {
-                        script.onload = resolve;
-                        script.onerror = reject;
+                if (visualization === '3d') {
+                    element = new TwistyPlayer({
+                        puzzle: EVENT_TO_PUZZLE[eventId] || '3x3x3',
+                        alg: scramble,
+                        hint: 'none',
+                        controlPanel: 'none',
+                        background: 'none',
+                        animation: 'none',
+                    });
+                } else {
+                    element = new ScrambleDisplay({
+                        event: EVENT_TO_DISPLAY[eventId] || '3x3x3',
+                        visualization: '2D',
+                        checkered: true,
+                        alg: scramble,
                     });
                 }
 
                 if (cancelled) return;
 
-                await new Promise(r => setTimeout(r, 100));
-
-                if (cancelled || !containerRef.current) return;
-
-                const container = containerRef.current;
-
-                if (visualization === '3d') {
-                    element = document.createElement('twisty-player');
-                    element.setAttribute('puzzle', EVENT_TO_PUZZLE[eventId] || '3x3x3');
-                    element.setAttribute('hint', 'none');
-                    element.setAttribute('control-panel', 'none');
-                    element.setAttribute('background', 'none');
-                    element.setAttribute('animation', 'none');
-                } else {
-                    element = document.createElement('scramble-display');
-                    element.setAttribute('event', EVENT_TO_DISPLAY[eventId] || '3x3x3');
-                    element.setAttribute('visualization', '2D');
-                    element.setAttribute('checkered', 'true');
+                if (containerRef.current) {
+                    containerRef.current.innerHTML = '';
+                    containerRef.current.appendChild(element);
+                    setIsLoaded(true);
                 }
-
-                element.setAttribute('alg', scramble);
-                element.style.width = '100%';
-                element.style.height = '100%';
-
-                container.appendChild(element);
-                setIsLoaded(true);
             } catch (err) {
                 console.error('Scramble display error:', err);
                 setError(true);

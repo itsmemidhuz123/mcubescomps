@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ScrambleDisplay } from 'cubing/scramble-display';
+import { TwistyPlayer } from 'cubing/twisty';
 
-export default function ScrambleDisplay({
+export default function ScrambleDisplayComponent({
     eventId,
     scramble,
     visualization = "3D",
@@ -44,47 +46,45 @@ export default function ScrambleDisplay({
         let mounted = true;
         const container = containerRef.current;
 
-        const loadScript = async () => {
-            const scriptId = 'scramble-display-lib';
+        const initDisplay = async () => {
+            try {
+                container.innerHTML = '';
 
-            if (!document.getElementById(scriptId)) {
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.id = scriptId;
-                    script.src = 'https://cdn.cubing.net/v0/js/scramble-display';
-                    script.type = 'module';
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                });
+                if (visualization === '2D') {
+                    const display = new ScrambleDisplay({
+                        event: eventMap[eventId] || '3x3x3',
+                        alg: scramble,
+                        visualization: '2D',
+                        checkered: checkered,
+                    });
+                    display.style.width = `${width}px`;
+                    display.style.height = `${height}px`;
+                    display.style.display = 'block';
+                    container.appendChild(display);
+                } else {
+                    const player = new TwistyPlayer({
+                        puzzle: eventMap[eventId] || '3x3x3',
+                        alg: scramble,
+                        background: 'none',
+                    });
+                    player.style.width = `${width}px`;
+                    player.style.height = `${height}px`;
+                    container.appendChild(player);
+                }
+
+                if (mounted) {
+                    setIsLoading(false);
+                }
+            } catch (err) {
+                console.error('ScrambleDisplay error:', err);
+                if (mounted) {
+                    setHasError(true);
+                    setIsLoading(false);
+                }
             }
-
-            if (!mounted || !container) return;
-
-            container.innerHTML = '';
-
-            const display = document.createElement('scramble-display');
-            display.setAttribute('event', eventMap[eventId] || '3x3x3');
-            display.setAttribute('alg', scramble);
-            display.setAttribute('visualization', visualization);
-            display.setAttribute('checkered', checkered ? 'true' : 'false');
-            display.style.width = `${width}px`;
-            display.style.height = `${height}px`;
-            display.style.display = 'block';
-
-            container.appendChild(display);
-
-            setTimeout(() => {
-                if (mounted) setIsLoading(false);
-            }, 500);
         };
 
-        loadScript().catch(() => {
-            if (mounted) {
-                setHasError(true);
-                setIsLoading(false);
-            }
-        });
+        initDisplay();
 
         return () => {
             mounted = false;
@@ -112,7 +112,7 @@ export default function ScrambleDisplay({
                     className="absolute inset-0 bg-zinc-900 rounded-lg flex items-center justify-center z-10"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    <span className="text-xs text-zinc-500">Loading 3D...</span>
+                    <span className="text-xs text-zinc-500">Loading...</span>
                 </div>
             )}
 
@@ -121,7 +121,7 @@ export default function ScrambleDisplay({
                     className="bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-xs p-2 text-center"
                     style={{ width: `${width}px`, height: `${height}px` }}
                 >
-                    3D preview unavailable
+                    Preview unavailable
                 </div>
             )}
 

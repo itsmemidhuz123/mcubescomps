@@ -8,6 +8,8 @@ import {
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog';
+import { TwistyPlayer } from 'cubing/twisty';
+import { ScrambleDisplay } from 'cubing/scramble-display';
 
 const EVENT_TO_PUZZLE = {
     '333': '3x3x3',
@@ -60,63 +62,30 @@ function ScrambleModalInner({ scramble, eventId }) {
 
             try {
                 if (use2D) {
-                    let script = document.getElementById('scramble-display-modal');
-
-                    if (!script) {
-                        script = document.createElement('script');
-                        script.id = 'scramble-display-modal';
-                        script.src = 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
-                        script.type = 'module';
-                        document.head.appendChild(script);
-
-                        await new Promise((resolve, reject) => {
-                            script.onload = resolve;
-                            script.onerror = () => reject(new Error('Failed to load'));
-                        });
-                    }
-
-                    if (cancelled) return;
-                    await new Promise(r => setTimeout(r, 100));
-
-                    if (cancelled || !containerRef.current) return;
-
-                    element = document.createElement('scramble-display');
-                    element.setAttribute('event', displayEvent);
-                    element.setAttribute('visualization', '2D');
-                    element.setAttribute('checkered', 'true');
+                    element = new ScrambleDisplay({
+                        event: displayEvent,
+                        visualization: '2D',
+                        checkered: true,
+                        alg: scramble,
+                    });
                 } else {
-                    let script = document.getElementById('twisty-script-modal');
-
-                    if (!script) {
-                        script = document.createElement('script');
-                        script.id = 'twisty-script-modal';
-                        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-                        script.type = 'module';
-                        document.head.appendChild(script);
-
-                        await new Promise((resolve, reject) => {
-                            script.onload = resolve;
-                            script.onerror = () => reject(new Error('Failed to load'));
-                        });
-                    }
-
-                    if (cancelled) return;
-                    await new Promise(r => setTimeout(r, 100));
-
-                    if (cancelled || !containerRef.current) return;
-
-                    element = document.createElement('twisty-player');
-                    element.setAttribute('puzzle', puzzle);
-                    element.setAttribute('hint', 'none');
-                    element.setAttribute('control-panel', 'none');
-                    element.setAttribute('background', 'none');
+                    element = new TwistyPlayer({
+                        puzzle: puzzle,
+                        alg: scramble,
+                        hint: 'none',
+                        controlPanel: 'none',
+                        background: 'none',
+                    });
                 }
 
-                element.setAttribute('alg', scramble);
-                element.style.width = '100%';
-                element.style.height = '350px';
+                if (cancelled) return;
 
-                containerRef.current.appendChild(element);
+                if (containerRef.current) {
+                    element.style.width = '100%';
+                    element.style.height = '350px';
+                    containerRef.current.innerHTML = '';
+                    containerRef.current.appendChild(element);
+                }
             } catch (err) {
                 if (!cancelled) setLoadError(err.message);
             } finally {
