@@ -19,7 +19,7 @@ const PUZZLE_MAP = {
     '333fm': '3x3x3',
     '444bf': '4x4x4',
     '555bf': '5x5x5',
-    '333mbf': '3x3x3'
+    '333mbf': '3x3x3',
 };
 
 export default function ScrambleVisualization({ scramble, eventId, height = '200px' }) {
@@ -30,45 +30,38 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
+        if (!scramble) return;
 
-        const loadTwisty = async () => {
+        let mounted = true;
+
+        const init = async () => {
             try {
-                await import('https://cdn.cubing.net/v0/js/cubing/twisty');
+                const { TwistyPlayer } = await import('cubing/twisty');
+                if (!mounted || !containerRef.current) return;
+
+                const player = new TwistyPlayer({
+                    puzzle: puzzle,
+                    alg: scramble,
+                    visualization: '2D',
+                    background: 'none',
+                });
+                player.style.width = '100%';
+                player.style.height = `${heightNum}px`;
+
+                containerRef.current.innerHTML = '';
+                containerRef.current.appendChild(player);
                 setIsLoaded(true);
             } catch (err) {
-                console.error('[Twisty] Load error:', err);
+                console.error('[Twisty] Failed to load:', err);
             }
         };
 
-        loadTwisty();
-    }, []);
+        init();
 
-    useEffect(() => {
-        if (!isLoaded || !scramble || !containerRef.current) return;
-
-        containerRef.current.innerHTML = '';
-
-        const player = document.createElement('twisty-player');
-        player.setAttribute('puzzle', puzzle);
-        player.setAttribute('alg', scramble);
-        player.setAttribute('visualization', '2D');
-        player.setAttribute('background', 'none');
-        player.style.width = '100%';
-        player.style.height = `${heightNum}px`;
-
-        containerRef.current.appendChild(player);
-    }, [scramble, puzzle, isLoaded, heightNum]);
-
-    if (!scramble) {
-        return (
-            <div
-                className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center"
-                style={{ minHeight: height }}
-            >
-                <span className="text-zinc-500 text-sm">No scramble</span>
-            </div>
-        );
-    }
+        return () => {
+            mounted = false;
+        };
+    }, [scramble, puzzle, heightNum]);
 
     return (
         <div
@@ -76,9 +69,7 @@ export default function ScrambleVisualization({ scramble, eventId, height = '200
             className="w-full bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center"
             style={{ minHeight: height }}
         >
-            {!isLoaded && (
-                <span className="text-zinc-500 text-sm">Loading 3D...</span>
-            )}
+            {!isLoaded && <span className="text-zinc-500 text-sm">Loading...</span>}
         </div>
     );
 }

@@ -2,9 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-// eslint-disable-next-line no-unused-vars
-const SCRAMBLE_DISPLAY_CDN = 'https://cdn.cubing.net/v0/js/scramble-display';
-
 export default function ScrambleDisplayComponent({
     eventId,
     scramble,
@@ -43,52 +40,53 @@ export default function ScrambleDisplayComponent({
             setIsLoading(false);
             return;
         }
+        if (typeof window === 'undefined') return;
 
         let mounted = true;
         const container = containerRef.current;
 
-        const loadScript = async () => {
-            const scriptId = 'scramble-display-lib';
+        const loadDisplay = async () => {
+            try {
+                if (visualization === '2D') {
+                    const { ScrambleDisplay } = await import('scramble-display');
+                    if (!mounted || !container) return;
 
-            if (!document.getElementById(scriptId)) {
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.id = scriptId;
-                    // eslint-disable-next-line no-undef
-                    script.src = SCRAMBLE_DISPLAY_CDN;
-                    script.type = 'module';
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                });
+                    const display = new ScrambleDisplay({
+                        event: eventMap[eventId] || '3x3x3',
+                        visualization: '2D',
+                        checkered: checkered,
+                        alg: scramble,
+                    });
+                    display.style.width = `${width}px`;
+                    display.style.height = `${height}px`;
+                    display.style.display = 'block';
+                    container.innerHTML = '';
+                    container.appendChild(display);
+                } else {
+                    const { TwistyPlayer } = await import('cubing/twisty');
+                    if (!mounted || !container) return;
+
+                    const player = new TwistyPlayer({
+                        puzzle: eventMap[eventId] || '3x3x3',
+                        alg: scramble,
+                        background: 'none',
+                    });
+                    player.style.width = `${width}px`;
+                    player.style.height = `${height}px`;
+                    container.innerHTML = '';
+                    container.appendChild(player);
+                }
+                setIsLoading(false);
+            } catch (err) {
+                console.error('ScrambleDisplay error:', err);
+                if (mounted) {
+                    setHasError(true);
+                    setIsLoading(false);
+                }
             }
-
-            if (!mounted || !container) return;
-
-            container.innerHTML = '';
-
-            const display = document.createElement('scramble-display');
-            display.setAttribute('event', eventMap[eventId] || '3x3x3');
-            display.setAttribute('alg', scramble);
-            display.setAttribute('visualization', visualization);
-            display.setAttribute('checkered', checkered ? 'true' : 'false');
-            display.style.width = `${width}px`;
-            display.style.height = `${height}px`;
-            display.style.display = 'block';
-
-            container.appendChild(display);
-
-            setTimeout(() => {
-                if (mounted) setIsLoading(false);
-            }, 500);
         };
 
-        loadScript().catch(() => {
-            if (mounted) {
-                setHasError(true);
-                setIsLoading(false);
-            }
-        });
+        loadDisplay();
 
         return () => {
             mounted = false;

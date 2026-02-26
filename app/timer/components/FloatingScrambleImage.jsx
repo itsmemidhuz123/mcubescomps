@@ -8,8 +8,8 @@ const EVENT_TO_PUZZLE = {
     '222': '2x2x2',
     '444': '4x4x4',
     '555': '5x5x5',
-    '666': '6x6x6': '7x',
-    '7777x7',
+    '666': '6x6x6',
+    '777': '7x7x7',
     'pyram': 'pyraminx',
     'skewb': 'skewb',
     'sq1': 'sq1',
@@ -31,11 +31,6 @@ const EVENT_TO_DISPLAY = {
     'minx': 'megaminx'
 };
 
-// eslint-disable-next-line no-unused-vars
-const TWISTY_CDN = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-// eslint-disable-next-line no-unused-vars
-const SCRAMBLE_DISPLAY_CDN = 'https://cdn.cubing.net/v0/js/cubing/scramble-display';
-
 function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
     const containerRef = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -43,56 +38,43 @@ function FloatingScrambleInner({ scramble, eventId, visualization, onClick }) {
 
     useEffect(() => {
         if (!scramble) return;
+        if (typeof window === 'undefined') return;
 
         let cancelled = false;
-        let element = null;
 
         const init = async () => {
             try {
-                const cdnUrl = visualization === '3d' ? TWISTY_CDN : SCRAMBLE_DISPLAY_CDN;
-                const scriptId = visualization === '3d' ? 'twisty-script-float' : 'scramble-display-script-float';
-                let script = document.getElementById(scriptId);
-
-                if (!script) {
-                    script = document.createElement('script');
-                    script.id = scriptId;
-                    script.src = cdnUrl;
-                    script.type = 'module';
-                    document.head.appendChild(script);
-
-                    await new Promise((resolve, reject) => {
-                        script.onload = resolve;
-                        script.onerror = reject;
-                    });
-                }
-
-                if (cancelled) return;
-
-                await new Promise(r => setTimeout(r, 100));
-
-                if (cancelled || !containerRef.current) return;
-
-                const container = containerRef.current;
-
                 if (visualization === '3d') {
-                    element = document.createElement('twisty-player');
-                    element.setAttribute('puzzle', EVENT_TO_PUZZLE[eventId] || '3x3x3');
-                    element.setAttribute('hint', 'none');
-                    element.setAttribute('control-panel', 'none');
-                    element.setAttribute('background', 'none');
-                    element.setAttribute('animation', 'none');
+                    const { TwistyPlayer } = await import('cubing/twisty');
+                    if (cancelled || !containerRef.current) return;
+
+                    const player = new TwistyPlayer({
+                        puzzle: EVENT_TO_PUZZLE[eventId] || '3x3x3',
+                        alg: scramble,
+                        hint: 'none',
+                        controlPanel: 'none',
+                        background: 'none',
+                        animation: 'none',
+                    });
+                    player.style.width = '100%';
+                    player.style.height = '100%';
+                    containerRef.current.innerHTML = '';
+                    containerRef.current.appendChild(player);
                 } else {
-                    element = document.createElement('scramble-display');
-                    element.setAttribute('event', EVENT_TO_DISPLAY[eventId] || '3x3x3');
-                    element.setAttribute('visualization', '2D');
-                    element.setAttribute('checkered', 'true');
+                    const { ScrambleDisplay } = await import('scramble-display');
+                    if (cancelled || !containerRef.current) return;
+
+                    const display = new ScrambleDisplay({
+                        event: EVENT_TO_DISPLAY[eventId] || '3x3x3',
+                        visualization: '2D',
+                        checkered: true,
+                        alg: scramble,
+                    });
+                    display.style.width = '100%';
+                    display.style.height = '100%';
+                    containerRef.current.innerHTML = '';
+                    containerRef.current.appendChild(display);
                 }
-
-                element.setAttribute('alg', scramble);
-                element.style.width = '100%';
-                element.style.height = '100%';
-
-                container.appendChild(element);
                 setIsLoaded(true);
             } catch (err) {
                 console.error('Scramble display error:', err);

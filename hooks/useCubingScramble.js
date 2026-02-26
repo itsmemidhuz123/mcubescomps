@@ -1,44 +1,36 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-
-// eslint-disable-next-line no-unused-vars
-const SCRAMBLE_CDN = 'https://cdn.cubing.net/v0/js/cubing/scramble';
+import { useEffect, useState } from 'react';
 
 export function useCubingScramble(eventId) {
     const [scramble, setScramble] = useState('');
     const [loading, setLoading] = useState(true);
-    const scrambleFnRef = useRef(null);
+    const scrambleFnRef = { current: null };
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const scriptId = 'cubing-scramble-module';
-        if (document.getElementById(scriptId)) {
-            if (window.cubing?.scramble?.randomScrambleForEvent) {
-                scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
-                if (eventId) generateScrambleInternal(eventId);
-            }
-            return;
-        }
+        let mounted = true;
 
-        const script = document.createElement('script');
-        script.id = scriptId;
-        // eslint-disable-next-line no-undef
-        script.src = SCRAMBLE_CDN;
-        script.type = 'module';
-        script.onload = () => {
-            if (window.cubing?.scramble?.randomScrambleForEvent) {
-                scrambleFnRef.current = window.cubing.scramble.randomScrambleForEvent;
-                if (eventId) generateScrambleInternal(eventId);
+        const init = async () => {
+            try {
+                const { randomScrambleForEvent } = await import('cubing/scramble');
+                if (!mounted) return;
+
+                scrambleFnRef.current = randomScrambleForEvent;
+                if (eventId) {
+                    generateScrambleInternal(eventId);
+                }
+            } catch (err) {
+                console.error('[Cubing Scramble] Failed to load:', err);
+                setLoading(false);
             }
         };
-        script.onerror = () => console.error('[Cubing Scramble] Failed to load');
-        document.head.appendChild(script);
+
+        init();
 
         return () => {
-            const el = document.getElementById(scriptId);
-            if (el) el.remove();
+            mounted = false;
         };
     }, [eventId]);
 
@@ -61,7 +53,9 @@ export function useCubingScramble(eventId) {
     };
 
     useEffect(() => {
-        if (eventId) generateScrambleInternal(eventId);
+        if (eventId && scrambleFnRef.current) {
+            generateScrambleInternal(eventId);
+        }
     }, [eventId]);
 
     return { scramble, isLoading: loading, generateScramble };

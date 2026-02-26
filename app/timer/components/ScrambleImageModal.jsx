@@ -8,8 +8,6 @@ import {
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog';
-import { TwistyPlayer } from 'cubing/twisty';
-import { ScrambleDisplay } from 'scramble-display';
 
 const EVENT_TO_PUZZLE = {
     '333': '3x3x3',
@@ -52,9 +50,9 @@ function ScrambleModalInner({ scramble, eventId }) {
 
     useEffect(() => {
         if (!scramble) return;
+        if (typeof window === 'undefined') return;
 
         let cancelled = false;
-        let element = null;
 
         const init = async () => {
             setIsLoading(true);
@@ -62,29 +60,34 @@ function ScrambleModalInner({ scramble, eventId }) {
 
             try {
                 if (use2D) {
-                    element = new ScrambleDisplay({
+                    const { ScrambleDisplay } = await import('scramble-display');
+                    if (cancelled || !containerRef.current) return;
+
+                    const display = new ScrambleDisplay({
                         event: displayEvent,
                         visualization: '2D',
                         checkered: true,
                         alg: scramble,
                     });
+                    display.style.width = '100%';
+                    display.style.height = '350px';
+                    containerRef.current.innerHTML = '';
+                    containerRef.current.appendChild(display);
                 } else {
-                    element = new TwistyPlayer({
+                    const { TwistyPlayer } = await import('cubing/twisty');
+                    if (cancelled || !containerRef.current) return;
+
+                    const player = new TwistyPlayer({
                         puzzle: puzzle,
                         alg: scramble,
                         hint: 'none',
                         controlPanel: 'none',
                         background: 'none',
                     });
-                }
-
-                if (cancelled) return;
-
-                if (containerRef.current) {
-                    element.style.width = '100%';
-                    element.style.height = '350px';
+                    player.style.width = '100%';
+                    player.style.height = '350px';
                     containerRef.current.innerHTML = '';
-                    containerRef.current.appendChild(element);
+                    containerRef.current.appendChild(player);
                 }
             } catch (err) {
                 if (!cancelled) setLoadError(err.message);
