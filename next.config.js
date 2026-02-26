@@ -22,6 +22,12 @@ const nextConfig = {
             path: false,
         };
 
+        // Prevent webpack from trying to resolve external CDN URLs
+        config.externals = config.externals || [];
+        config.externals.push({
+            'https://cdn.cubing.net': 'empty',
+        });
+
         return config;
     },
     onDemandEntries: {
