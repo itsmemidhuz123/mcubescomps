@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ScrambleDisplay } from 'cubing/scramble-display';
+import { ScrambleDisplay } from 'scramble-display';
 import { TwistyPlayer } from 'cubing/twisty';
 
 export default function ScrambleDisplayComponent({

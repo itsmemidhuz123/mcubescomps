@@ -9,7 +9,7 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog';
 import { TwistyPlayer } from 'cubing/twisty';
-import { ScrambleDisplay } from 'cubing/scramble-display';
+import { ScrambleDisplay } from 'scramble-display';
 
 const EVENT_TO_PUZZLE = {
     '333': '3x3x3',
