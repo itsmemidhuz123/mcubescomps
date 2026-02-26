@@ -59,10 +59,11 @@ function ScrambleModalInner({ scramble, eventId }) {
             setLoadError(null);
 
             try {
-                if (use2D) {
-                    const { ScrambleDisplay } = await import('scramble-display');
-                    if (cancelled || !containerRef.current) return;
+                const cubing = await import('cubing');
+                if (cancelled || !containerRef.current) return;
 
+                if (use2D) {
+                    const ScrambleDisplay = cubing.ScrambleDisplay;
                     const display = new ScrambleDisplay({
                         event: displayEvent,
                         visualization: '2D',
@@ -74,9 +75,7 @@ function ScrambleModalInner({ scramble, eventId }) {
                     containerRef.current.innerHTML = '';
                     containerRef.current.appendChild(display);
                 } else {
-                    const { TwistyPlayer } = await import('cubing/twisty');
-                    if (cancelled || !containerRef.current) return;
-
+                    const TwistyPlayer = cubing.TwistyPlayer;
                     const player = new TwistyPlayer({
                         puzzle: puzzle,
                         alg: scramble,
