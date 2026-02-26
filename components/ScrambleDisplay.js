@@ -1,106 +1,119 @@
-'use client';
+"use client";
 
 import { useEffect, useRef, useState } from 'react';
 
-function loadCubingScript() {
-    return new Promise((resolve, reject) => {
-        if (window.cubing) { resolve(window.cubing); return; }
-        const scriptId = 'cubing-display-script';
-        const existing = document.getElementById(scriptId);
-        if (existing) {
-            existing.addEventListener('load', () => resolve(window.cubing));
-            existing.addEventListener('error', () => reject(new Error('Failed to load')));
-            return;
-        }
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://cdn.cubing.net/v0/js/cubing/twisty';
-        script.type = 'module';
-        script.onload = () => setTimeout(() => resolve(window.cubing), 100);
-        script.onerror = () => reject(new Error('Failed to load'));
-        document.head.appendChild(script);
-    });
-}
-
 export default function ScrambleDisplayComponent({
-    eventId, scramble, visualization = "3D",
-    width = 200, height = 200, checkered = true, className = ''
+  eventId,
+  scramble,
+  visualization = "3D",
+  width = 200,
+  height = 200,
+  checkered = true,
+  className = ''
 }) {
-    const containerRef = useRef(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [hasError, setHasError] = useState(false);
+  const containerRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
-    const eventMap = {
-        '333': '3x3x3', '444': '4x4x4', '555': '5x5x5', '666': '6x6x6', '777': '7x7x7',
-        '222': '2x2x2', '333bf': '3x3x3', '333oh': '3x3x3', '333fm': '3x3x3',
-        'clock': 'clock', 'minx': 'megaminx', 'pyram': 'pyraminx', 'skewb': 'skewb',
-        'sq1': 'square1', '444bf': '4x4x4', '555bf': '5x5x5', '333mbf': '3x3x3',
+  const eventMap = {
+    '333': '3x3x3', '444': '4x4x4', '555': '5x5x5', '666': '6x6x6', '777': '7x7x7',
+    '222': '2x2x2', '333bf': '3x3x3', '333oh': '3x3x3', '333fm': '3x3x3',
+    'clock': 'clock', 'minx': 'megaminx', 'pyram': 'pyraminx', 'skewb': 'skewb',
+    'sq1': 'square1', '444bf': '4x4x4', '555bf': '5x5x5', '333mbf': '3x3x3',
+  };
+
+  useEffect(() => {
+    if (!containerRef.current || !scramble) {
+      setIsLoading(false);
+      return;
+    }
+    if (typeof window === 'undefined') return;
+
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const cubing = await import('cubing');
+        if (!mounted || !containerRef.current) return;
+
+        if (visualization === '2D') {
+          const ScrambleDisplay = cubing.ScrambleDisplay;
+          const display = new ScrambleDisplay({
+            event: eventMap[eventId] || '3x3x3',
+            visualization: '2D',
+            checkered: checkered,
+            alg: scramble
+          });
+          display.style.width = `${width}px`;
+          display.style.height = `${height}px`;
+          display.style.display = 'block';
+          containerRef.current.innerHTML = '';
+          containerRef.current.appendChild(display);
+        } else {
+          const TwistyPlayer = cubing.TwistyPlayer;
+          const player = new TwistyPlayer({
+            puzzle: eventMap[eventId] || '3x3x3',
+            alg: scramble,
+            background: 'none'
+          });
+          player.style.width = `${width}px`;
+          player.style.height = `${height}px`;
+          containerRef.current.innerHTML = '';
+          containerRef.current.appendChild(player);
+        }
+        setIsLoading(false);
+      } catch (err) {
+        console.error('ScrambleDisplay error:', err);
+        if (mounted) {
+          setHasError(true);
+          setIsLoading(false);
+        }
+      }
     };
 
-    useEffect(() => {
-        if (!containerRef.current || !scramble) { setIsLoading(false); return; }
-        if (typeof window === 'undefined') return;
+    init();
 
-        let mounted = true;
+    return () => {
+      mounted = false;
+    };
+  }, [eventId, scramble, visualization, width, height, checkered]);
 
-        loadCubingScript()
-            .then((cubing) => {
-                if (!mounted || !containerRef.current) return;
-
-                if (visualization === '2D') {
-                    const ScrambleDisplay = cubing.ScrambleDisplay;
-                    const display = new ScrambleDisplay({
-                        event: eventMap[eventId] || '3x3x3', visualization: '2D', checkered: checkered, alg: scramble
-                    });
-                    display.style.width = `${width}px`;
-                    display.style.height = `${height}px`;
-                    display.style.display = 'block';
-                    containerRef.current.innerHTML = '';
-                    containerRef.current.appendChild(display);
-                } else {
-                    const TwistyPlayer = cubing.TwistyPlayer;
-                    const player = new TwistyPlayer({
-                        puzzle: eventMap[eventId] || '3x3x3', alg: scramble, background: 'none'
-                    });
-                    player.style.width = `${width}px`;
-                    player.style.height = `${height}px`;
-                    containerRef.current.innerHTML = '';
-                    containerRef.current.appendChild(player);
-                }
-                setIsLoading(false);
-            })
-            .catch((err) => {
-                console.error('ScrambleDisplay error:', err);
-                if (mounted) { setHasError(true); setIsLoading(false); }
-            });
-
-        return () => { mounted = false; };
-    }, [eventId, scramble, visualization, width, height, checkered]);
-
-    if (!scramble) {
-        return (
-            <div className={`bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-sm ${className}`}
-                style={{ width: `${width}px`, height: `${height}px` }}>
-                No scramble
-            </div>
-        );
-    }
-
+  if (!scramble) {
     return (
-        <div className={`relative ${className}`} style={{ width: `${width}px`, height: `${height}px` }}>
-            {isLoading && (
-                <div className="absolute inset-0 bg-zinc-900 rounded-lg flex items-center justify-center z-10"
-                    style={{ width: `${width}px`, height: `${height}px` }}>
-                    <span className="text-xs text-zinc-500">Loading...</span>
-                </div>
-            )}
-            {hasError && (
-                <div className="bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-xs p-2 text-center"
-                    style={{ width: `${width}px`, height: `${height}px` }}>
-                    Preview unavailable
-                </div>
-            )}
-            <div ref={containerRef} style={{ width: `${width}px`, height: `${height}px`, opacity: isLoading ? 0 : 1 }} />
-        </div>
+      <div
+        className={`bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-sm ${className}`}
+        style={{ width: `${width}px`, height: `${height}px` }}
+      >
+        No scramble
+      </div>
     );
+  }
+
+  return (
+    <div
+      className={`relative ${className}`}
+      style={{ width: `${width}px`, height: `${height}px` }}
+    >
+      {isLoading && (
+        <div
+          className="absolute inset-0 bg-zinc-900 rounded-lg flex items-center justify-center z-10"
+          style={{ width: `${width}px`, height: `${height}px` }}
+        >
+          <span className="text-xs text-zinc-500">Loading...</span>
+        </div>
+      )}
+      {hasError && (
+        <div
+          className="bg-zinc-900 rounded-lg flex items-center justify-center text-zinc-500 text-xs p-2 text-center"
+          style={{ width: `${width}px`, height: `${height}px` }}
+        >
+          Preview unavailable
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        style={{ width: `${width}px`, height: `${height}px`, opacity: isLoading ? 0 : 1 }}
+      />
+    </div>
+  );
 }
