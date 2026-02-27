@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 export default function ScrambleDisplayComponent({
   eventId,
   scramble,
-  visualization = "3D",
+  visualization = "2D",
   width = 200,
   height = 200,
   checkered = true,
@@ -33,34 +33,21 @@ export default function ScrambleDisplayComponent({
 
     const init = async () => {
       try {
-        const cubing = await import('cubing');
+        const { TwistyPlayer } = await import('cubing/twisty');
         if (!mounted || !containerRef.current) return;
 
-        if (visualization === '2D') {
-          const ScrambleDisplay = cubing.ScrambleDisplay;
-          const display = new ScrambleDisplay({
-            event: eventMap[eventId] || '3x3x3',
-            visualization: '2D',
-            checkered: checkered,
-            alg: scramble
-          });
-          display.style.width = `${width}px`;
-          display.style.height = `${height}px`;
-          display.style.display = 'block';
-          containerRef.current.innerHTML = '';
-          containerRef.current.appendChild(display);
-        } else {
-          const TwistyPlayer = cubing.TwistyPlayer;
-          const player = new TwistyPlayer({
-            puzzle: eventMap[eventId] || '3x3x3',
-            alg: scramble,
-            background: 'none'
-          });
-          player.style.width = `${width}px`;
-          player.style.height = `${height}px`;
-          containerRef.current.innerHTML = '';
-          containerRef.current.appendChild(player);
-        }
+        const player = new TwistyPlayer({
+          puzzle: eventMap[eventId] || '3x3x3',
+          alg: scramble,
+          visualization: visualization === '3D' ? '3D' : '2D',
+          background: checkered ? 'checkered' : 'none',
+          hint: 'none',
+          controlPanel: 'none',
+        });
+        player.style.width = `${width}px`;
+        player.style.height = `${height}px`;
+        containerRef.current.innerHTML = '';
+        containerRef.current.appendChild(player);
         setIsLoading(false);
       } catch (err) {
         console.error('ScrambleDisplay error:', err);
