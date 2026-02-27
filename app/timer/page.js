@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useCubingScramble } from '@/hooks/useCubingScramble';
 import { useTimerEngine, TIMER_STATES } from '@/hooks/useTimerEngine';
 import { useTimerStorage } from '@/hooks/useTimerStorage';
+import ScrambleVisualization from './components/ScrambleVisualization';
 
 const WCA_EVENTS = [
   { id: '333', name: '3x3', icon: '⬜' },
@@ -257,6 +258,11 @@ export default function TimerPage() {
             </svg>
           </button>
         </div>
+        {scramble && (
+          <div className="mb-3">
+            <ScrambleVisualization scramble={scramble} eventId={currentEvent} height="180px" />
+          </div>
+        )}
         <p className="font-mono text-sm text-zinc-300 break-all">
           {scrambleLoading ? 'Loading...' : scramble || 'Press refresh to generate'}
         </p>
