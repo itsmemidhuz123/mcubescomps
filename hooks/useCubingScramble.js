@@ -5,17 +5,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 const DEFAULT_EVENT = '333';
 
 const SCRAMBLE_LENGTHS = {
-  '222': 11,
-  '333': 25,
-  '444': 40,
-  '555': 60,
-  '666': 80,
-  '777': 100,
-  'pyram': 11,
-  'skewb': 11,
-  'clock': 17,
-  'sq1': 40,
-  'minx': 70,
+  '222': 11, '333': 25, '444': 40, '555': 60, '666': 80, '777': 100,
+  'pyram': 11, 'skewb': 11, 'clock': 17, 'sq1': 40, 'minx': 70,
 };
 
 const PUZZLE_MOVES = {
@@ -34,14 +25,9 @@ const PUZZLE_MOVES = {
 
 const MODIFIERS = ['', "'", '2'];
 
-function getRandomInt(max) {
-  return Math.floor(Math.random() * max);
-}
-
-function generateScramble(eventId) {
+function generateFallbackScramble(eventId) {
   const moves = PUZZLE_MOVES[eventId] || PUZZLE_MOVES['333'];
   const length = SCRAMBLE_LENGTHS[eventId] || 25;
-  const modifierCount = eventId === 'sq1' ? 1 : MODIFIERS.length;
   
   const scramble = [];
   let lastMove = '';
@@ -52,22 +38,13 @@ function generateScramble(eventId) {
     let attempts = 0;
     
     do {
-      move = moves[getRandomInt(moves.length)];
+      move = moves[Math.floor(Math.random() * moves.length)];
       attempts++;
-    } while (
-      attempts < 20 && (
-        move === lastMove ||
-        (move.length > 1 && move[0] === lastGroup) ||
-        (move.length > 1 && move.includes('w') && lastMove.includes('w'))
-      )
-    );
+    } while (attempts < 20 && (move === lastMove || (move.length > 1 && move[0] === lastGroup)));
     
-    let modifier = '';
-    if (eventId === 'clock') {
-      modifier = getRandomInt(2) === 0 ? '+' : '-';
-    } else if (eventId !== 'sq1') {
-      modifier = MODIFIERS[getRandomInt(modifierCount)];
-    }
+    let modifier = eventId === 'clock' 
+      ? (Math.random() < 0.5 ? '+' : '-')
+      : MODIFIERS[Math.floor(Math.random() * MODIFIERS.length)];
     
     scramble.push(move + modifier);
     lastMove = move;
@@ -81,17 +58,48 @@ export function useCubingScramble(eventId = DEFAULT_EVENT) {
   const [scramble, setScramble] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const cubingRef = useRef(null);
+  const useFallbackRef = useRef(false);
 
-  const generateScrambleFn = useCallback((targetEventId = eventId) => {
+  const generateScramble = useCallback(async (targetEventId = eventId) => {
     setLoading(true);
     setError(null);
-    
+
+    // If already using fallback, skip cubing attempt
+    if (useFallbackRef.current) {
+      try {
+        const scramble = generateFallbackScramble(targetEventId);
+        setScramble(scramble);
+        setUsingFallback(true);
+      } catch (e) {
+        setError('Failed to generate scramble');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
-      const newScramble = generateScramble(targetEventId);
-      setScramble(newScramble);
+      if (!cubingRef.current) {
+        const mod = await import('cubing/scramble');
+        cubingRef.current = mod;
+      }
+
+      const mod = cubingRef.current;
+      if (mod?.randomScrambleForEvent) {
+        const alg = await mod.randomScrambleForEvent(targetEventId, { worker: false });
+        setScramble(alg.toString());
+        setUsingFallback(false);
+      }
     } catch (e) {
-      console.error('Scramble error:', e);
-      setError('Failed to generate scramble');
+      console.warn('[Cubing] Worker failed, using fallback:', e.message);
+      useFallbackRef.current = true;
+      
+      const scramble = generateFallbackScramble(targetEventId);
+      setScramble(scramble);
+      setUsingFallback(true);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -99,9 +107,9 @@ export function useCubingScramble(eventId = DEFAULT_EVENT) {
 
   useEffect(() => {
     if (eventId) {
-      generateScrambleFn(eventId);
+      generateScramble(eventId);
     }
-  }, [eventId, generateScrambleFn]);
+  }, [eventId, generateScramble]);
 
-  return { scramble, isLoading: loading, error, generateScramble: generateScrambleFn };
+  return { scramble, isLoading: loading, error, generateScramble, usingFallback };
 }
