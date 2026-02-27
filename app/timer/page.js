@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useCubingScramble } from '@/hooks/useCubingScramble';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTimerEngine, TIMER_STATES } from '@/hooks/useTimerEngine';
 import { useTimerStorage } from '@/hooks/useTimerStorage';
-import ScrambleVisualization from './components/ScrambleVisualization';
 
 const WCA_EVENTS = [
   { id: '333', name: '3x3', icon: '⬜' },
@@ -24,9 +22,32 @@ export default function TimerPage() {
   const [currentEvent, setCurrentEvent] = useState('333');
   const [showEventMenu, setShowEventMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [scramble, setScramble] = useState('');
+  const [scrambleLoading, setScrambleLoading] = useState(true);
+  const cubingRef = useRef(null);
 
-  const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(currentEvent);
-  
+  const generateScramble = useCallback(async (eventId = currentEvent) => {
+    setScrambleLoading(true);
+    try {
+      if (!cubingRef.current) {
+        const cubing = await import('cubing');
+        cubingRef.current = cubing;
+      }
+      const { randomScrambleForEvent } = cubingRef.current;
+      const result = await randomScrambleForEvent(eventId, { worker: false });
+      setScramble(result.toString());
+    } catch (e) {
+      console.error('Scramble error:', e);
+      setScramble('');
+    } finally {
+      setScrambleLoading(false);
+    }
+  }, [currentEvent]);
+
+  useEffect(() => {
+    generateScramble(currentEvent);
+  }, [currentEvent, generateScramble]);
+
   const { 
     timerState, 
     time, 
@@ -39,7 +60,7 @@ export default function TimerPage() {
     isInspectionEnabled 
   } = useTimerEngine({ inspectionEnabled: true });
 
-  const { getSession, addSolve, deleteSolve, updateSolvePenalty, resetSession } = useTimerStorage();
+  const { getSession, addSolve, deleteSolve, resetSession } = useTimerStorage();
   
   const currentSession = getSession(currentEvent);
   const solves = currentSession.solves || [];
@@ -92,9 +113,7 @@ export default function TimerPage() {
   const handleKeyDown = useCallback((e) => {
     if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
-      if (timerState === TIMER_STATES.IDLE) {
-        arm();
-      } else if (timerState === TIMER_STATES.ARMED) {
+      if (timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED) {
         handleAction();
       } else if (timerState === TIMER_STATES.RUNNING) {
         handleAction();
@@ -122,12 +141,6 @@ export default function TimerPage() {
     };
   }, [handleKeyDown, handleKeyUp]);
 
-  const arm = () => {
-    if (timerState === TIMER_STATES.IDLE) {
-      const event = { target: { id: 'arm' } };
-    }
-  };
-
   const handleStop = () => {
     if (timerState === TIMER_STATES.RUNNING) {
       handleAction();
@@ -145,10 +158,6 @@ export default function TimerPage() {
       reset();
       generateScramble();
     }
-  };
-
-  const handlePenalty = (p) => {
-    setPenalty(p);
   };
 
   const toggleFullscreen = () => {
@@ -258,11 +267,6 @@ export default function TimerPage() {
             </svg>
           </button>
         </div>
-        {scramble && (
-          <div className="mb-3">
-            <ScrambleVisualization scramble={scramble} eventId={currentEvent} height="180px" />
-          </div>
-        )}
         <p className="font-mono text-sm text-zinc-300 break-all">
           {scrambleLoading ? 'Loading...' : scramble || 'Press refresh to generate'}
         </p>
@@ -273,11 +277,11 @@ export default function TimerPage() {
         <div 
           onPointerDown={() => {
             if (timerState === TIMER_STATES.IDLE) {
-              const fakeEvent = { target: { id: 'arm' } };
+              handleAction();
             }
           }}
           onPointerUp={() => {
-            if (timerState === TIMER_STATES.ARMED || timerState === TIMER_STATES.IDLE) {
+            if (timerState === TIMER_STATES.ARMED) {
               handleAction();
             }
           }}
@@ -306,13 +310,13 @@ export default function TimerPage() {
         {timerState === TIMER_STATES.STOPPED && (
           <div className="mt-8 flex gap-3">
             <button
-              onClick={() => handlePenalty(penalty === '+2' ? 'none' : '+2')}
+              onClick={() => setPenalty(penalty === '+2' ? 'none' : '+2')}
               className={`px-4 py-2 rounded-lg ${penalty === '+2' ? 'bg-yellow-600' : 'bg-zinc-700'} hover:bg-zinc-600`}
             >
               +2
             </button>
             <button
-              onClick={() => handlePenalty(penalty === 'DNF' ? 'none' : 'DNF')}
+              onClick={() => setPenalty(penalty === 'DNF' ? 'none' : 'DNF')}
               className={`px-4 py-2 rounded-lg ${penalty === 'DNF' ? 'bg-red-600' : 'bg-zinc-700'} hover:bg-zinc-600`}
             >
               DNF
