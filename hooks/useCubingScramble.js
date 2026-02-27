@@ -1,49 +1,53 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
-export function useCubingScramble(eventId) {
+const DEFAULT_EVENT = '333';
+
+export function useCubingScramble(eventId = DEFAULT_EVENT) {
   const [scramble, setScramble] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const cubingRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
-  useEffect(() => {
-    if (!eventId) {
-      setLoading(false);
-      return;
-    }
-
-    const loadCubing = async () => {
-      try {
-        const mod = await import('cubing');
-        cubingRef.current = mod;
-        if (mod?.randomScrambleForEvent) {
-          const alg = await mod.randomScrambleForEvent(eventId, { worker: false });
-          setScramble(alg.toString());
-        }
-      } catch (e) {
-        console.error('[Cubing Scramble] load error', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCubing();
-  }, [eventId]);
-
-  const generateScramble = async () => {
-    if (!eventId || !cubingRef.current?.randomScrambleForEvent) return;
+  const generateScramble = useCallback(async (targetEventId = eventId) => {
     setLoading(true);
+    setError(null);
+
     try {
-      const alg = await cubingRef.current.randomScrambleForEvent(eventId, { worker: false });
-      setScramble(alg.toString());
+      if (!cubingRef.current) {
+        const mod = await import('cubing/scramble');
+        cubingRef.current = mod;
+      }
+
+      const mod = cubingRef.current;
+      if (mod?.randomScrambleForEvent) {
+        const alg = await mod.randomScrambleForEvent(targetEventId, { worker: false });
+        setScramble(alg.toString());
+        retryCountRef.current = 0;
+      }
     } catch (e) {
-      console.error('[Cubing Scramble] generate error', e);
-      setScramble('');
+      console.error('[Cubing Scramble] Error:', e);
+      retryCountRef.current++;
+
+      if (retryCountRef.current < maxRetries) {
+        setTimeout(() => generateScramble(targetEventId), 100);
+      } else {
+        setError('Failed to generate scramble');
+        retryCountRef.current = 0;
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [eventId]);
 
-  return { scramble, isLoading: loading, generateScramble };
+  useEffect(() => {
+    if (eventId) {
+      generateScramble(eventId);
+    }
+  }, [eventId, generateScramble]);
+
+  return { scramble, isLoading: loading, error, generateScramble };
 }
