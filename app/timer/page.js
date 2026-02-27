@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useCubingScramble } from './hooks/useCubingScramble';
-import { useTimerEngine, TIMER_STATES } from './hooks/useTimerEngine';
-import { useTimerStorage } from './hooks/useTimerStorage';
+import { useCubingScramble } from '@/hooks/useCubingScramble';
+import { useTimerEngine, TIMER_STATES } from '@/hooks/useTimerEngine';
+import { useTimerStorage } from '@/hooks/useTimerStorage';
 
 const WCA_EVENTS = [
   { id: '333', name: '3x3', icon: '⬜' },
