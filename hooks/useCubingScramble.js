@@ -4,61 +4,74 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 const DEFAULT_EVENT = '333';
 
-const MOVES = {
-  '333': {
-    faces: ['U', 'D', 'L', 'R', 'F', 'B'],
-    modifiers: ['', "'", '2']
-  },
-  '222': {
-    faces: ['U', 'D', 'L', 'R', 'F', 'B'],
-    modifiers: ['', "'", '2']
-  },
-  '444': {
-    faces: ['U', 'D', 'L', 'R', 'F', 'B', 'Uw', 'Dw', 'Lw', 'Rw', 'Fw', 'Bw'],
-    modifiers: ['', "'", '2']
-  },
-  '555': {
-    faces: ['U', 'D', 'L', 'R', 'F', 'B', 'Uw', 'Dw', 'Lw', 'Rw', 'Fw', 'Bw'],
-    modifiers: ['', "'", '2']
-  },
-  'pyram': {
-    faces: ['U', 'L', 'R', 'B'],
-    modifiers: ['', "'", '2']
-  },
-  'skewb': {
-    faces: ['U', 'L', 'R', 'B'],
-    modifiers: ['', "'", '2']
-  },
-  'sq1': {
-    faces: ['U', 'D'],
-    modifiers: ['', "'"]
-  },
-  'clock': {
-    faces: ['UR', 'DR', 'DL', 'UL', 'U', 'R', 'D', 'L', 'ALL'],
-    modifiers: ['+', '-']
-  },
-  'minx': {
-    faces: ['U', 'L', 'R', 'F', 'B', 'DL', 'DR'],
-    modifiers: ['', "'", '2']
-  }
+const SCRAMBLE_LENGTHS = {
+  '222': 11,
+  '333': 25,
+  '444': 40,
+  '555': 60,
+  '666': 80,
+  '777': 100,
+  'pyram': 11,
+  'skewb': 11,
+  'clock': 17,
+  'sq1': 40,
+  'minx': 70,
 };
 
-function generateRandomScramble(eventId, length = 20) {
-  const eventConfig = MOVES[eventId] || MOVES['333'];
-  const { faces, modifiers } = eventConfig;
+const PUZZLE_MOVES = {
+  '333': ['R', 'L', 'U', 'D', 'F', 'B'],
+  '222': ['R', 'L', 'U', 'D', 'F', 'B'],
+  '444': ['R', 'L', 'U', 'D', 'F', 'B', 'Rw', 'Lw', 'Uw', 'Dw', 'Fw', 'Bw'],
+  '555': ['R', 'L', 'U', 'D', 'F', 'B', 'Rw', 'Lw', 'Uw', 'Dw', 'Fw', 'Bw'],
+  '666': ['R', 'L', 'U', 'D', 'F', 'B', 'Rw', 'Lw', 'Uw', 'Dw', 'Fw', 'Bw', '3Rw', '3Lw'],
+  '777': ['R', 'L', 'U', 'D', 'F', 'B', 'Rw', 'Lw', 'Uw', 'Dw', 'Fw', 'Bw', '3Rw', '3Lw'],
+  'pyram': ['R', 'L', 'U', 'B'],
+  'skewb': ['R', 'L', 'U', 'B'],
+  'clock': ['UR', 'DR', 'DL', 'UL', 'U', 'R', 'D', 'L', 'ALL'],
+  'sq1': ['/', '(', ')', 'U', 'D', 'R', 'L', 'B', 'F'],
+  'minx': ['R', 'L', 'U', 'D', 'F', 'B', 'LD', 'RD', 'DF', 'DR', 'UF', 'UB'],
+};
+
+const MODIFIERS = ['', "'", '2'];
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function generateScramble(eventId) {
+  const moves = PUZZLE_MOVES[eventId] || PUZZLE_MOVES['333'];
+  const length = SCRAMBLE_LENGTHS[eventId] || 25;
+  const modifierCount = eventId === 'sq1' ? 1 : MODIFIERS.length;
   
   const scramble = [];
-  let lastFace = '';
+  let lastMove = '';
+  let lastGroup = '';
   
   for (let i = 0; i < length; i++) {
-    let face;
-    do {
-      face = faces[Math.floor(Math.random() * faces.length)];
-    } while (face === lastFace || (face.length > 1 && lastFace === face[0]));
+    let move;
+    let attempts = 0;
     
-    const modifier = modifiers[Math.floor(Math.random() * modifiers.length)];
-    scramble.push(face + modifier);
-    lastFace = face;
+    do {
+      move = moves[getRandomInt(moves.length)];
+      attempts++;
+    } while (
+      attempts < 20 && (
+        move === lastMove ||
+        (move.length > 1 && move[0] === lastGroup) ||
+        (move.length > 1 && move.includes('w') && lastMove.includes('w'))
+      )
+    );
+    
+    let modifier = '';
+    if (eventId === 'clock') {
+      modifier = getRandomInt(2) === 0 ? '+' : '-';
+    } else if (eventId !== 'sq1') {
+      modifier = MODIFIERS[getRandomInt(modifierCount)];
+    }
+    
+    scramble.push(move + modifier);
+    lastMove = move;
+    lastGroup = move.charAt(0);
   }
   
   return scramble.join(' ');
@@ -68,33 +81,17 @@ export function useCubingScramble(eventId = DEFAULT_EVENT) {
   const [scramble, setScramble] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const retryCountRef = useRef(0);
-  const maxRetries = 3;
 
-  const generateScramble = useCallback(async (targetEventId = eventId) => {
+  const generateScrambleFn = useCallback((targetEventId = eventId) => {
     setLoading(true);
     setError(null);
-
+    
     try {
-      const mod = await import('cubing/scramble');
-      
-      if (mod?.randomScrambleForEvent) {
-        const alg = await mod.randomScrambleForEvent(targetEventId, { worker: false });
-        setScramble(alg.toString());
-        retryCountRef.current = 0;
-      }
+      const newScramble = generateScramble(targetEventId);
+      setScramble(newScramble);
     } catch (e) {
-      console.warn('[Cubing] Worker failed, using fallback scramble:', e.message);
-      
-      retryCountRef.current++;
-      
-      if (retryCountRef.current < maxRetries) {
-        setTimeout(() => generateScramble(targetEventId), 100);
-      } else {
-        const fallbackScramble = generateRandomScramble(targetEventId);
-        setScramble(fallbackScramble);
-        retryCountRef.current = 0;
-      }
+      console.error('Scramble error:', e);
+      setError('Failed to generate scramble');
     } finally {
       setLoading(false);
     }
@@ -102,9 +99,9 @@ export function useCubingScramble(eventId = DEFAULT_EVENT) {
 
   useEffect(() => {
     if (eventId) {
-      generateScramble(eventId);
+      generateScrambleFn(eventId);
     }
-  }, [eventId, generateScramble]);
+  }, [eventId, generateScrambleFn]);
 
-  return { scramble, isLoading: loading, error, generateScramble };
+  return { scramble, isLoading: loading, error, generateScramble: generateScrambleFn };
 }
