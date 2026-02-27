@@ -1,390 +1,383 @@
-'use client';
+"use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { TimerProvider, useTimer } from '@/contexts/TimerContext';
-import { useCubingScramble } from '@/hooks/useCubingScramble';
-import TimerHeader from '@/app/timer/components/TimerHeader';
-import ScrambleCard from '@/app/timer/components/ScrambleCard';
-import TimerDisplay from '@/app/timer/components/TimerDisplay';
-import SolveList from '@/app/timer/components/SolveList';
-import SessionSelector from '@/app/timer/components/SessionSelector';
-import SolveDrawer from '@/app/timer/components/SolveDrawer';
-import NewSessionDialog from '@/app/timer/components/NewSessionDialog';
-import SessionHistoryModal from '@/app/timer/components/SessionHistoryModal';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { X, Settings, Eye, Maximize2, Minimize2, Plus, List } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useCubingScramble } from './hooks/useCubingScramble';
+import { useTimerEngine, TIMER_STATES } from './hooks/useTimerEngine';
+import { useTimerStorage } from './hooks/useTimerStorage';
 
-function TimerPageContent() {
-    const { event: currentEventObj, currentSession, sessions, solves, settings, createSession, stats, deleteSolve, updateSolvePenalty } = useTimer();
-    const eventId = currentEventObj?.id ?? '333';
-    const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(eventId);
-
-    const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
-    const [showSessionHistory, setShowSessionHistory] = useState(false);
-    const [isFocusMode, setIsFocusMode] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [showSolveDrawer, setShowSolveDrawer] = useState(false);
-
-    const router = useRouter();
-
-    const handleNewSession = async () => {
-        if (typeof createSession === 'function') {
-            await createSession();
-            setShowNewSessionDialog(false);
-        }
-    };
-
-    const toggleFocusMode = useCallback(() => {
-        setIsFocusMode(prev => !prev);
-    }, []);
-
-    const toggleFullscreen = useCallback(() => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-            setIsFullscreen(true);
-        } else {
-            document.exitFullscreen();
-            setIsFullscreen(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    }, []);
-
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown, { passive: false });
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
-
-    const handleCloseTimer = () => {
-        router.push('/');
-    };
-
-    const formatTime = (ms) => {
-        if (ms === null || ms === undefined || ms === 0) return '0.00';
-        const seconds = Math.floor(ms / 1000);
-        const centiseconds = Math.floor((ms % 1000) / 10);
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-
-        if (minutes > 0) {
-            return `${minutes}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
-        }
-        return `${secs}.${centiseconds.toString().padStart(2, '0')}`;
-    };
-
-    const eventIcon = currentEventObj?.icon || '🎲';
-    const eventName = currentEventObj?.name || '3x3x3';
-
-    const sortedSolves = solves ? [...solves].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) : [];
-
-    return (
-        <div className="min-h-screen bg-zinc-950 text-white">
-            {/* Timer Header - replaces global Navbar */}
-            <TimerHeader
-                syncStatus="not_synced"
-                isFullscreen={isFullscreen}
-                onToggleFullscreen={toggleFullscreen}
-                isFocusMode={isFocusMode}
-                onToggleFocusMode={toggleFocusMode}
-                sessionName={currentSession?.name || 'Session 1'}
-                onNewSession={() => setShowNewSessionDialog(true)}
-                onViewHistory={() => setShowSessionHistory(true)}
-                onSettingsClick={() => router.push('/timer/settings')}
-                eventIcon={eventIcon}
-                eventName={eventName}
-            />
-
-            {/* Main Content */}
-            <main className={`pt-14 px-2 py-3 pb-20 transition-all duration-300 ${isFocusMode ? 'opacity-0 pointer-events-none absolute inset-0' : ''}`}>
-                {/* Stats Bar with Session on Mobile */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="bg-zinc-900/80 rounded-lg p-2.5 text-center border border-zinc-800">
-                        <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-0.5">Best</div>
-                        <div className="text-base font-bold text-green-400">{stats?.bestSingle ? formatTime(stats.bestSingle) : '--'}</div>
-                    </div>
-                    <div className="bg-zinc-900/80 rounded-lg p-2.5 text-center border border-zinc-800">
-                        <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-0.5">Ao5</div>
-                        <div className="text-base font-bold text-blue-400">{stats?.ao5 ? formatTime(stats.ao5) : '--'}</div>
-                    </div>
-                    <div className="bg-zinc-900/80 rounded-lg p-2.5 text-center border border-zinc-800">
-                        <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-0.5">Solves</div>
-                        <div className="text-base font-bold text-purple-400">{stats?.totalSolves || 0}</div>
-                    </div>
-                </div>
-
-                {/* Session Controls Bar - below stats */}
-                <div className="mb-3 flex items-center justify-between">
-                    {/* Statistics Button - left */}
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowSolveDrawer(true)}
-                        className="text-zinc-400 hover:text-white"
-                    >
-                        <List className="w-4 h-4 mr-1" />
-                        <span className="text-sm">Stats</span>
-                    </Button>
-
-                    {/* Session Selector - center */}
-                    <SessionSelector
-                        onNewSession={() => setShowNewSessionDialog(true)}
-                        onViewHistory={() => setShowSessionHistory(true)}
-                    />
-
-                    {/* Focus & Fullscreen - right */}
-                    <div className="flex items-center gap-1">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleFocusMode}
-                            className="h-8 w-8 text-zinc-400 hover:text-white"
-                            title="Focus Mode"
-                        >
-                            <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleFullscreen}
-                            className="h-8 w-8 text-zinc-400 hover:text-white"
-                            title="Fullscreen"
-                        >
-                            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Timer & Scramble Grid */}
-                <div className="grid grid-cols-1 gap-3">
-                    {/* Timer Section */}
-                    <div className="order-1">
-                        <TimerDisplay
-                            onTimerStop={() => { }}
-                            onGenerateScramble={generateScramble}
-                        />
-                    </div>
-
-                    {/* Scramble Section */}
-                    <div className="order-2">
-                        <ScrambleCard
-                            scramble={scramble}
-                            eventId={eventId}
-                            isLoading={scrambleLoading}
-                            onRefresh={generateScramble}
-                        />
-                    </div>
-                </div>
-
-                {/* Recent Solves */}
-                <section className="mt-3">
-                    <Card className="bg-zinc-900/80 border-zinc-800 rounded-lg">
-                        <CardContent className="p-3">
-                            <h3 className="text-sm font-semibold text-zinc-300 mb-2">Recent Solves</h3>
-                            <SolveList solves={solves} />
-                        </CardContent>
-                    </Card>
-                </section>
-            </main>
-
-            {/* Focus Mode - Timer + Scramble + View Solves Button */}
-            {isFocusMode && (
-                <div className="fixed inset-0 bg-zinc-950 z-40 flex flex-col">
-                    {/* Top Right Controls */}
-                    <div className="absolute top-14 right-4 flex items-center gap-2 z-50">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setShowSolveDrawer(true)}
-                            className="h-10 w-10 text-zinc-400 hover:text-white bg-zinc-900/50"
-                            title="View All Solves"
-                        >
-                            <List className="w-5 h-5" />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleFullscreen}
-                            className="h-10 w-10 text-zinc-400 hover:text-white bg-zinc-900/50"
-                            title="Fullscreen"
-                        >
-                            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleCloseTimer}
-                            className="h-10 w-10 text-zinc-400 hover:text-red-400 bg-zinc-900/50"
-                            title="Close Timer"
-                        >
-                            <X className="w-5 h-5" />
-                        </Button>
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 overflow-auto">
-                        <div className="w-full max-w-md">
-                            <TimerDisplay
-                                onTimerStop={() => { }}
-                                onGenerateScramble={generateScramble}
-                            />
-                        </div>
-
-                        <div className="w-full max-w-md mt-4">
-                            <ScrambleCard
-                                scramble={scramble}
-                                eventId={eventId}
-                                isLoading={scrambleLoading}
-                                onRefresh={generateScramble}
-                            />
-                        </div>
-
-                        {/* View Solves Button */}
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowSolveDrawer(true)}
-                            className="mt-4 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                        >
-                            <List className="w-4 h-4 mr-2" />
-                            View All Solves ({sortedSolves.length})
-                        </Button>
-                    </div>
-
-                    {/* Exit Hint */}
-                    <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                        <Button
-                            variant="ghost"
-                            onClick={toggleFocusMode}
-                            className="text-zinc-500 hover:text-white text-sm"
-                        >
-                            Tap to exit focus mode
-                        </Button>
-                    </div>
-                </div>
-            )}
-
-            {/* Fullscreen Mode - Stats + Scramble + Timer + Solves */}
-            {isFullscreen && !isFocusMode && (
-                <div className="fixed inset-0 bg-zinc-950 z-40 overflow-auto">
-                    {/* Top Right Controls */}
-                    <div className="sticky top-2 right-4 flex items-center gap-2 z-50 float-right">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleFocusMode}
-                            className="h-10 w-10 text-zinc-400 hover:text-white bg-zinc-900/50"
-                            title="Focus Mode"
-                        >
-                            <Eye className="w-5 h-5" />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleFullscreen}
-                            className="h-10 w-10 text-zinc-400 hover:text-white bg-zinc-900/50"
-                            title="Exit Fullscreen"
-                        >
-                            <Minimize2 className="w-5 h-5" />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleCloseTimer}
-                            className="h-10 w-10 text-zinc-400 hover:text-red-400 bg-zinc-900/50"
-                            title="Close Timer"
-                        >
-                            <X className="w-5 h-5" />
-                        </Button>
-                    </div>
-
-                    <div className="p-4 max-w-2xl mx-auto">
-                        {/* Stats Bar */}
-                        <div className="grid grid-cols-3 gap-2 mb-4">
-                            <div className="bg-zinc-900/80 rounded-lg p-3 text-center border border-zinc-800">
-                                <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Best</div>
-                                <div className="text-xl font-bold text-green-400">{stats?.bestSingle ? formatTime(stats.bestSingle) : '--'}</div>
-                            </div>
-                            <div className="bg-zinc-900/80 rounded-lg p-3 text-center border border-zinc-800">
-                                <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Ao5</div>
-                                <div className="text-xl font-bold text-blue-400">{stats?.ao5 ? formatTime(stats.ao5) : '--'}</div>
-                            </div>
-                            <div className="bg-zinc-900/80 rounded-lg p-3 text-center border border-zinc-800">
-                                <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Solves</div>
-                                <div className="text-xl font-bold text-purple-400">{stats?.totalSolves || 0}</div>
-                            </div>
-                        </div>
-
-                        {/* Timer */}
-                        <TimerDisplay
-                            onTimerStop={() => { }}
-                            onGenerateScramble={generateScramble}
-                        />
-
-                        {/* Scramble */}
-                        <div className="mt-4">
-                            <ScrambleCard
-                                scramble={scramble}
-                                eventId={eventId}
-                                isLoading={scrambleLoading}
-                                onRefresh={generateScramble}
-                            />
-                        </div>
-
-                        {/* Recent Solves */}
-                        <div className="mt-4">
-                            <Card className="bg-zinc-900/80 border-zinc-800 rounded-lg">
-                                <CardContent className="p-3">
-                                    <h3 className="text-sm font-semibold text-zinc-300 mb-2">Recent Solves</h3>
-                                    <SolveList solves={solves} />
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <NewSessionDialog
-                isOpen={showNewSessionDialog}
-                onClose={() => setShowNewSessionDialog(false)}
-                onConfirm={handleNewSession}
-                sessionName={currentSession?.name || 'Current Session'}
-            />
-
-            <SessionHistoryModal
-                isOpen={showSessionHistory}
-                onClose={() => setShowSessionHistory(false)}
-                sessions={sessions}
-                currentSessionId={currentSession?.sessionId}
-            />
-
-            <SolveDrawer
-                isOpen={showSolveDrawer}
-                onClose={() => setShowSolveDrawer(false)}
-                solves={sortedSolves}
-                onDeleteSolve={deleteSolve}
-                onUpdatePenalty={updateSolvePenalty}
-            />
-        </div>
-    );
-}
+const WCA_EVENTS = [
+  { id: '333', name: '3x3', icon: '⬜' },
+  { id: '222', name: '2x2', icon: '🟦' },
+  { id: '444', name: '4x4', icon: '🟧' },
+  { id: '555', name: '5x5', icon: '🟥' },
+  { id: '666', name: '6x6', icon: '🟫' },
+  { id: '777', name: '7x7', icon: '⬛' },
+  { id: 'pyram', name: 'Pyraminx', icon: '🔺' },
+  { id: 'skewb', name: 'Skewb', icon: '💎' },
+  { id: 'sq1', name: 'Square-1', icon: '🔳' },
+  { id: 'clock', name: 'Clock', icon: '🕐' },
+  { id: 'minx', name: 'Megaminx', icon: '⬟' },
+];
 
 export default function TimerPage() {
-    return (
-        <TimerProvider>
-            <TimerPageContent />
-        </TimerProvider>
-    );
+  const [currentEvent, setCurrentEvent] = useState('333');
+  const [showEventMenu, setShowEventMenu] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const { scramble, isLoading: scrambleLoading, generateScramble } = useCubingScramble(currentEvent);
+  
+  const { 
+    timerState, 
+    time, 
+    inspectionTimeLeft, 
+    penalty, 
+    setPenalty, 
+    handleAction, 
+    reset,
+    getTimeMs,
+    isInspectionEnabled 
+  } = useTimerEngine({ inspectionEnabled: true });
+
+  const { getSession, addSolve, deleteSolve, updateSolvePenalty, resetSession } = useTimerStorage();
+  
+  const currentSession = getSession(currentEvent);
+  const solves = currentSession.solves || [];
+
+  const currentEventObj = WCA_EVENTS.find(e => e.id === currentEvent) || WCA_EVENTS[0];
+
+  const formatTime = useCallback((ms) => {
+    if (ms === 0 && timerState === TIMER_STATES.IDLE) return '0.00';
+    
+    let displayMs = ms;
+    let displayPenalty = '';
+    
+    if (timerState === TIMER_STATES.STOPPED) {
+      displayMs = getTimeMs();
+      displayPenalty = penalty === '+2' ? '+2' : penalty === 'DNF' ? ' DNF' : '';
+    }
+
+    if (displayMs === null || displayMs === undefined) return '0.00';
+    
+    const totalSeconds = Math.floor(displayMs / 1000);
+    const centiseconds = Math.floor((displayMs % 1000) / 10);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    let timeStr;
+    if (minutes > 0) {
+      timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+    } else {
+      timeStr = `${seconds}.${centiseconds.toString().padStart(2, '0')}`;
+    }
+
+    return timeStr + displayPenalty;
+  }, [timerState, getTimeMs, penalty]);
+
+  const getTimerColor = () => {
+    switch (timerState) {
+      case TIMER_STATES.ARMED:
+        return 'text-yellow-400';
+      case TIMER_STATES.INSPECTION:
+        return inspectionTimeLeft <= 8 ? 'text-red-500' : 'text-yellow-400';
+      case TIMER_STATES.RUNNING:
+        return 'text-green-400';
+      case TIMER_STATES.STOPPED:
+        return 'text-blue-400';
+      default:
+        return 'text-white';
+    }
+  };
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      if (timerState === TIMER_STATES.IDLE) {
+        arm();
+      } else if (timerState === TIMER_STATES.ARMED) {
+        handleAction();
+      } else if (timerState === TIMER_STATES.RUNNING) {
+        handleAction();
+      } else if (timerState === TIMER_STATES.STOPPED) {
+        reset();
+      }
+    }
+  }, [timerState, handleAction, reset]);
+
+  const handleKeyUp = useCallback((e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      if (timerState === TIMER_STATES.ARMED) {
+        handleAction();
+      }
+    }
+  }, [timerState, handleAction]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleKeyDown, handleKeyUp]);
+
+  const arm = () => {
+    if (timerState === TIMER_STATES.IDLE) {
+      const event = { target: { id: 'arm' } };
+    }
+  };
+
+  const handleStop = () => {
+    if (timerState === TIMER_STATES.RUNNING) {
+      handleAction();
+    }
+  };
+
+  const handleSaveSolve = () => {
+    if (timerState === TIMER_STATES.STOPPED) {
+      const timeMs = getTimeMs();
+      addSolve(currentEvent, {
+        time: timeMs,
+        penalty: penalty,
+        scramble: scramble,
+      });
+      reset();
+      generateScramble();
+    }
+  };
+
+  const handlePenalty = (p) => {
+    setPenalty(p);
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  const getBest = () => {
+    const validSolves = solves.filter(s => s.penalty !== 'DNF');
+    if (validSolves.length === 0) return null;
+    return Math.min(...validSolves.map(s => s.penalty === '+2' ? s.time + 2000 : s.time));
+  };
+
+  const getAo5 = () => {
+    const validSolves = solves.filter(s => s.penalty !== 'DNF');
+    if (validSolves.length < 5) return null;
+    const recent = validSolves.slice(0, 5);
+    const times = recent.map(s => s.penalty === '+2' ? s.time + 2000 : s.time);
+    const sorted = [...times].sort((a, b) => a - b);
+    const trimmed = sorted.slice(1, -1);
+    return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+  };
+
+  const best = getBest();
+  const ao5 = getAo5();
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
+      {/* Top Bar */}
+      <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setShowEventMenu(!showEventMenu)}
+              className="flex items-center gap-2 bg-zinc-800 px-3 py-1.5 rounded-lg hover:bg-zinc-700"
+            >
+              <span>{currentEventObj.icon}</span>
+              <span className="text-sm font-medium">{currentEventObj.name}</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showEventMenu && (
+              <div className="absolute top-full left-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                {WCA_EVENTS.map(event => (
+                  <button
+                    key={event.id}
+                    onClick={() => {
+                      setCurrentEvent(event.id);
+                      setShowEventMenu(false);
+                    }}
+                    className={`w-full px-4 py-2 text-left hover:bg-zinc-700 flex items-center gap-2 ${event.id === currentEvent ? 'bg-zinc-700' : ''}`}
+                  >
+                    <span>{event.icon}</span>
+                    <span>{event.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => resetSession(currentEvent)}
+            className="p-2 text-zinc-400 hover:text-white"
+            title="Reset Session"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 text-zinc-400 hover:text-white"
+            title="Fullscreen"
+          >
+            {isFullscreen ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Scramble Section */}
+      <div className="bg-zinc-900/50 border-b border-zinc-800 px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Scramble</span>
+          <button
+            onClick={() => generateScramble()}
+            disabled={scrambleLoading}
+            className="p-1 text-zinc-400 hover:text-white disabled:opacity-50"
+          >
+            <svg className={`w-4 h-4 ${scrambleLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+        <p className="font-mono text-sm text-zinc-300 break-all">
+          {scrambleLoading ? 'Loading...' : scramble || 'Press refresh to generate'}
+        </p>
+      </div>
+
+      {/* Timer Display */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div 
+          onPointerDown={() => {
+            if (timerState === TIMER_STATES.IDLE) {
+              const fakeEvent = { target: { id: 'arm' } };
+            }
+          }}
+          onPointerUp={() => {
+            if (timerState === TIMER_STATES.ARMED || timerState === TIMER_STATES.IDLE) {
+              handleAction();
+            }
+          }}
+          className="text-center cursor-pointer select-none"
+        >
+          {timerState === TIMER_STATES.INSPECTION && (
+            <div className="text-2xl text-yellow-400 mb-4">
+              {inspectionTimeLeft}
+            </div>
+          )}
+          
+          <div className={`text-8xl font-bold font-mono tracking-tight ${getTimerColor()}`}>
+            {formatTime(time)}
+          </div>
+
+          <div className="mt-4 text-zinc-500 text-sm">
+            {timerState === TIMER_STATES.IDLE && 'Press Space to start'}
+            {timerState === TIMER_STATES.ARMED && 'Release to start'}
+            {timerState === TIMER_STATES.INSPECTION && 'Inspecting...'}
+            {timerState === TIMER_STATES.RUNNING && 'Press Space to stop'}
+            {timerState === TIMER_STATES.STOPPED && 'Solved!'}
+          </div>
+        </div>
+
+        {/* Solve Actions */}
+        {timerState === TIMER_STATES.STOPPED && (
+          <div className="mt-8 flex gap-3">
+            <button
+              onClick={() => handlePenalty(penalty === '+2' ? 'none' : '+2')}
+              className={`px-4 py-2 rounded-lg ${penalty === '+2' ? 'bg-yellow-600' : 'bg-zinc-700'} hover:bg-zinc-600`}
+            >
+              +2
+            </button>
+            <button
+              onClick={() => handlePenalty(penalty === 'DNF' ? 'none' : 'DNF')}
+              className={`px-4 py-2 rounded-lg ${penalty === 'DNF' ? 'bg-red-600' : 'bg-zinc-700'} hover:bg-zinc-600`}
+            >
+              DNF
+            </button>
+            <button
+              onClick={handleSaveSolve}
+              className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-medium"
+            >
+              Save
+            </button>
+            <button
+              onClick={reset}
+              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg"
+            >
+              Skip
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Stats Bar */}
+      <div className="bg-zinc-900 border-t border-zinc-800 px-4 py-3">
+        <div className="flex justify-center gap-8">
+          <div className="text-center">
+            <div className="text-xs text-zinc-500 uppercase">Best</div>
+            <div className="text-lg font-bold text-green-400">
+              {best ? formatTime(best).split(' ')[0] : '--'}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-zinc-500 uppercase">Ao5</div>
+            <div className="text-lg font-bold text-blue-400">
+              {ao5 ? formatTime(ao5).split(' ')[0] : '--'}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-zinc-500 uppercase">Solves</div>
+            <div className="text-lg font-bold text-purple-400">
+              {solves.length}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Solves */}
+      {solves.length > 0 && (
+        <div className="bg-zinc-900 border-t border-zinc-800 max-h-48 overflow-y-auto">
+          <div className="px-4 py-2 text-xs text-zinc-500 uppercase">Recent</div>
+          {solves.slice(0, 10).map((solve, index) => (
+            <div
+              key={solve.id}
+              className="flex items-center justify-between px-4 py-2 border-t border-zinc-800"
+            >
+              <span className="text-zinc-500 text-sm">#{index + 1}</span>
+              <span className={`font-mono ${solve.penalty === 'DNF' ? 'text-red-400' : 'text-white'}`}>
+                {formatTime(solve.time).split(' ')[0]}
+                {solve.penalty === '+2' && <span className="text-yellow-400">+2</span>}
+                {solve.penalty === 'DNF' && <span className="text-red-400"> DNF</span>}
+              </span>
+              <button
+                onClick={() => deleteSolve(currentEvent, solve.id)}
+                className="text-zinc-500 hover:text-red-400"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
