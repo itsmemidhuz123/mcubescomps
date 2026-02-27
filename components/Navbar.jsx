@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { TimerProvider } from '@/contexts/TimerContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Menu, X, User, Moon, Sun, Users, Settings, Crown } from 'lucide-react';
