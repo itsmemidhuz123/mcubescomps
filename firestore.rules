@@ -207,7 +207,7 @@ service cloud.firestore {
     // Audit logs (Admin actions)
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isAdmin();
       allow update, delete: if false;
     }
     
@@ -254,6 +254,13 @@ service cloud.firestore {
     // Timer Sessions (per-user timing data)
     match /users/{userId}/timerSessions/{sessionId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Timer Solves - Cloud Sync
+    match /timerSolves/{userId}/solves/{solveId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
     
     // Default deny
