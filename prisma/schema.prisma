@@ -1,0 +1,121 @@
+// Prisma schema for speedcubing competition platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  picture   String?
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  // Verification fields for DIDIT
+  verificationStatus         String?   // UNVERIFIED, PENDING, VERIFIED, REJECTED
+  diditWorkflowId            String?
+  diditSessionId             String?
+  faceHash                  String?
+  documentHash               String?
+  verificationCountry        String?
+  duplicateDetected          Boolean   @default(false)
+  verificationAttemptCount   Int       @default(0)
+  verifiedAt                 DateTime?
+  verificationLevel          Int?
+  suspiciousVerification     Boolean   @default(false)
+  lastVerificationAttemptAt  DateTime?
+  verificationRequestedAt   DateTime?
+  lastVerificationResult     Json?
+  
+  sessions  UserSession[]
+  results   Result[]
+  
+  @@index([email])
+  @@index([verificationStatus])
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([sessionToken])
+}
+
+model Competition {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  status    String   @default("upcoming")
+  createdAt DateTime @default(now())
+  
+  scrambles Scramble[]
+  results   Result[]
+  
+  @@index([slug])
+  @@index([status])
+}
+
+model Scramble {
+  id             String @id @default(uuid())
+  competitionId  String
+  scrambleNumber Int
+  scrambleText   String
+  
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  
+  @@unique([competitionId, scrambleNumber])
+  @@index([competitionId])
+}
+
+model Result {
+  id            String   @id @default(uuid())
+  competitionId String
+  userId        String
+  status        String   @default("started")
+  attempt       Int      @default(0)
+  time1         Float?
+  time2         Float?
+  time3         Float?
+  time4         Float?
+  time5         Float?
+  penalty1      String?
+  penalty2      String?
+  penalty3      String?
+  penalty4      String?
+  penalty5      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([competitionId, userId])
+  @@index([competitionId])
+  @@index([userId])
+  @@index([status])
+}
+
+// Identity Index for duplicate detection
+model IdentityIndex {
+  id        String   @id // hash value
+  userId    String
+  type      String   // FACE, DOCUMENT
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([type])
+}
