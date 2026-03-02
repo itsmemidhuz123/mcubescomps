@@ -954,7 +954,7 @@ export default function TournamentManagementPage() {
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Layers className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                                                     <p>No rounds configured for this event.</p>
-                                                    <p className="text-sm">Click "Add Round" to configure rounds for this event.</p>
+                                                    <p className="text-sm">Click &quot;Add Round&quot; to configure rounds for this event.</p>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-3">
