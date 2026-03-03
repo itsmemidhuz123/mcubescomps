@@ -123,6 +123,13 @@ export function useBattleTimer(settings = {}) {
     const finalTime = getFinalTime();
     const penaltyValue = getPenaltyValue();
     
+    if (finalTime === null) {
+      return {
+        time: 0,
+        penalty: 0,
+      };
+    }
+    
     return {
       time: finalTime,
       penalty: penaltyValue,

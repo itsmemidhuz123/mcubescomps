@@ -46,6 +46,13 @@ export async function POST(request) {
 
     const battleData = battleDoc.data();
 
+    if (battleData.visibility !== 'private') {
+      return NextResponse.json(
+        { success: false, message: 'Battle not found' },
+        { status: 404 }
+      );
+    }
+
     if (battleData.player2 && battleData.player2 !== null) {
       return NextResponse.json(
         { success: false, message: 'Battle is already full' },

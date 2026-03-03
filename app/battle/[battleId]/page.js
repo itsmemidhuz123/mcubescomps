@@ -136,10 +136,15 @@ export default function BattleRoomPage() {
       return;
     }
 
+    const solveData = submitCurrentSolve();
+    
+    if (solveData.time === null || solveData.time === undefined || solveData.time < 0) {
+      alert('Invalid time');
+      return;
+    }
+    
     setSubmitting(true);
     try {
-      const solveData = submitCurrentSolve();
-      
       await fetch('/api/battle/submit-solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -457,19 +462,25 @@ export default function BattleRoomPage() {
             <CardContent className="p-4">
               <div className="text-sm text-zinc-400 mb-2">Your Solves</div>
               <div className="space-y-2">
-                {(Array.isArray(mySolves) ? mySolves : []).map((solve, i) => (
-                  <div key={i} className="flex justify-between">
-                    <span className="text-zinc-500">#{i + 1}</span>
-                    <span className={`font-mono ${
-                      solve.penalty === PENALTY.DNF ? 'text-red-400' : 'text-white'
-                    }`}>
-                      {solve.penalty === PENALTY.DNF 
-                        ? 'DNF' 
-                        : formatBattleTime(solve.time + (solve.penalty * 1000))
-                      }
-                    </span>
-                  </div>
-                ))}
+                {(Array.isArray(mySolves) ? mySolves : []).map((solve, i) => {
+                  const isDNF = solve.penalty === PENALTY.DNF;
+                  const isValidTime = typeof solve.time === 'number' && solve.time >= 0;
+                  return (
+                    <div key={i} className="flex justify-between">
+                      <span className="text-zinc-500">#{i + 1}</span>
+                      <span className={`font-mono ${
+                        isDNF ? 'text-red-400' : 'text-white'
+                      }`}>
+                        {!isValidTime 
+                          ? '--' 
+                          : isDNF 
+                            ? 'DNF' 
+                            : formatBattleTime(solve.time + (solve.penalty * 1000))
+                        }
+                      </span>
+                    </div>
+                  );
+                })}
                                 {[...(Array.isArray(mySolves) && mySolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - mySolves.length) : [])].map((_, i) => (
                   <div key={`empty-${i}`} className="flex justify-between">
                     <span className="text-zinc-500">#{mySolves.length + i + 1}</span>
@@ -484,19 +495,25 @@ export default function BattleRoomPage() {
             <CardContent className="p-4">
               <div className="text-sm text-zinc-400 mb-2">Opponent Solves</div>
               <div className="space-y-2">
-                {(Array.isArray(opponentSolves) ? opponentSolves : []).map((solve, i) => (
-                  <div key={i} className="flex justify-between">
-                    <span className="text-zinc-500">#{i + 1}</span>
-                    <span className={`font-mono ${
-                      solve.penalty === PENALTY.DNF ? 'text-red-400' : 'text-white'
-                    }`}>
-                      {solve.penalty === PENALTY.DNF 
-                        ? 'DNF' 
-                        : formatBattleTime(solve.time + (solve.penalty * 1000))
-                      }
-                    </span>
-                  </div>
-                ))}
+                {(Array.isArray(opponentSolves) ? opponentSolves : []).map((solve, i) => {
+                  const isDNF = solve.penalty === PENALTY.DNF;
+                  const isValidTime = typeof solve.time === 'number' && solve.time >= 0;
+                  return (
+                    <div key={i} className="flex justify-between">
+                      <span className="text-zinc-500">#{i + 1}</span>
+                      <span className={`font-mono ${
+                        isDNF ? 'text-red-400' : 'text-white'
+                      }`}>
+                        {!isValidTime 
+                          ? '--' 
+                          : isDNF 
+                            ? 'DNF' 
+                            : formatBattleTime(solve.time + (solve.penalty * 1000))
+                        }
+                      </span>
+                    </div>
+                  );
+                })}
                                 {[...(Array.isArray(opponentSolves) && opponentSolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - opponentSolves.length) : [])].map((_, i) => (
                   <div key={`empty-${i}`} className="flex justify-between">
                     <span className="text-zinc-500">#{opponentSolves.length + i + 1}</span>

@@ -73,6 +73,7 @@ export async function POST(request) {
       player2: null,
       status: 'waiting',
       winner: null,
+      visibility: 'private',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: null,
       completedAt: null,
