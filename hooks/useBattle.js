@@ -62,15 +62,17 @@ export function useBattle(battleId, currentUserUid) {
 
   const getMySolves = useCallback(() => {
     if (!battle || !currentUserUid) return [];
-    if (battle.player1 === currentUserUid) return player1Solves;
-    if (battle.player2 === currentUserUid) return player2Solves;
+    if (!battle.player1 || !battle.player2) return [];
+    if (battle.player1 === currentUserUid) return Array.isArray(player1Solves) ? player1Solves : [];
+    if (battle.player2 === currentUserUid) return Array.isArray(player2Solves) ? player2Solves : [];
     return [];
   }, [battle, currentUserUid, player1Solves, player2Solves]);
 
   const getOpponentSolves = useCallback(() => {
     if (!battle || !currentUserUid) return [];
-    if (battle.player1 === currentUserUid) return player2Solves;
-    if (battle.player2 === currentUserUid) return player1Solves;
+    if (!battle.player1 || !battle.player2) return [];
+    if (battle.player1 === currentUserUid) return Array.isArray(player2Solves) ? player2Solves : [];
+    if (battle.player2 === currentUserUid) return Array.isArray(player1Solves) ? player1Solves : [];
     return [];
   }, [battle, currentUserUid, player1Solves, player2Solves]);
 

@@ -457,7 +457,7 @@ export default function BattleRoomPage() {
             <CardContent className="p-4">
               <div className="text-sm text-zinc-400 mb-2">Your Solves</div>
               <div className="space-y-2">
-                {mySolves.map((solve, i) => (
+                {(Array.isArray(mySolves) ? mySolves : []).map((solve, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-zinc-500">#{i + 1}</span>
                     <span className={`font-mono ${
@@ -470,7 +470,7 @@ export default function BattleRoomPage() {
                     </span>
                   </div>
                 ))}
-                {[...Array(TOTAL_SCRAMBLES - mySolves.length)].map((_, i) => (
+                                {[...(Array.isArray(mySolves) && mySolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - mySolves.length) : [])].map((_, i) => (
                   <div key={`empty-${i}`} className="flex justify-between">
                     <span className="text-zinc-500">#{mySolves.length + i + 1}</span>
                     <span className="text-zinc-600">--</span>
@@ -484,7 +484,7 @@ export default function BattleRoomPage() {
             <CardContent className="p-4">
               <div className="text-sm text-zinc-400 mb-2">Opponent Solves</div>
               <div className="space-y-2">
-                {opponentSolves.map((solve, i) => (
+                {(Array.isArray(opponentSolves) ? opponentSolves : []).map((solve, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-zinc-500">#{i + 1}</span>
                     <span className={`font-mono ${
@@ -497,7 +497,7 @@ export default function BattleRoomPage() {
                     </span>
                   </div>
                 ))}
-                {[...Array(TOTAL_SCRAMBLES - opponentSolves.length)].map((_, i) => (
+                                {[...(Array.isArray(opponentSolves) && opponentSolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - opponentSolves.length) : [])].map((_, i) => (
                   <div key={`empty-${i}`} className="flex justify-between">
                     <span className="text-zinc-500">#{opponentSolves.length + i + 1}</span>
                     <span className="text-zinc-600">--</span>
