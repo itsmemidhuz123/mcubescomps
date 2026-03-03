@@ -1,6 +1,20 @@
 {
     "indexes": [
         {
+            "collectionGroup": "battles",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "competitions",
             "queryScope": "COLLECTION",
             "fields": [

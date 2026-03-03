@@ -1,10 +1,10 @@
 {
     "name": "nextjs-mongo-template",
     "version": "0.1.0",
-  "private": true,
-  "engines": {
-    "node": ">=22.3.0"
-  },
+    "private": true,
+    "engines": {
+        "node": ">=22.3.0"
+    },
     "scripts": {
         "dev": "NODE_OPTIONS='--max-old-space-size=512' next dev --hostname 0.0.0.0 --port 3000",
         "dev:no-reload": "next dev --hostname 0.0.0.0 --port 3000",
@@ -52,7 +52,6 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "cubing": "^0.63.3",
-        "scramble-display": "^0.59.1",
         "date-fns": "^4.1.0",
         "embla-carousel-react": "^8.6.0",
         "firebase": "^11.0.0",
@@ -80,6 +79,7 @@
         "zod": "^3.25.67"
     },
     "devDependencies": {
+        "@types/react": "^19.2.14",
         "autoprefixer": "^10.4.19",
         "eslint": "^8.57.1",
         "eslint-config-next": "15.5.9",

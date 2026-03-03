@@ -263,6 +263,23 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
     
+    // Battles collection
+    match /battles/{battleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.resource.data.player1 == request.auth.uid ||
+        request.resource.data.player2 == request.auth.uid ||
+        request.resource.data.createdBy == request.auth.uid
+      );
+    }
+    
+    // Battle solves subcollection
+    match /battles/{battleId}/solves/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+    
     // Default deny
     match /{document=**} {
       allow read, write: if false;
