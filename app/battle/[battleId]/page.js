@@ -215,7 +215,7 @@ export default function BattleRoomPage() {
             {isTie ? (
               <>
                 <Trophy className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                <h2 className="text-3xl font-bold mb-2">It's a Tie!</h2>
+                <h2 className="text-3xl font-bold mb-2">It&apos;s a Tie!</h2>
               </>
             ) : iWon ? (
               <>
