@@ -78,7 +78,6 @@ export function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/competitions', label: 'Competitions' },
     { href: '/rankings', label: 'Rankings' },
-    { href: '/battle', label: 'Battle' },
   ];
 
   const isActive = (path) => pathname === path;
