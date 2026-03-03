@@ -49,6 +49,7 @@ export default function BattleRoomPage() {
     handleAction,
     reset,
     submitCurrentSolve,
+    getFinalTime,
   } = useBattleTimer({ inspectionEnabled: false });
 
   useEffect(() => {
@@ -380,7 +381,7 @@ export default function BattleRoomPage() {
                 'text-white'
               }`}>
                 {timerState === TIMER_STATES.STOPPED 
-                  ? formatBattleTime(submitCurrentSolve().time)
+                  ? formatBattleTime(getFinalTime())
                   : formatBattleTime(time)
                 }
               </div>

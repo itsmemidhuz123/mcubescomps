@@ -48,8 +48,10 @@ export function useBattle(battleId, currentUserUid) {
       snapshot.forEach((doc) => {
         solvesData[doc.id] = doc.data();
       });
-      setPlayer1Solves(solvesData[battle.player1]?.solves || []);
-      setPlayer2Solves(solvesData[battle.player2]?.solves || []);
+      const p1Solves = battle.player1 ? (solvesData[battle.player1]?.solves || []) : [];
+      const p2Solves = battle.player2 ? (solvesData[battle.player2]?.solves || []) : [];
+      setPlayer1Solves(Array.isArray(p1Solves) ? p1Solves : []);
+      setPlayer2Solves(Array.isArray(p2Solves) ? p2Solves : []);
     }, (err) => {
       console.error('Solves snapshot error:', err);
     });
