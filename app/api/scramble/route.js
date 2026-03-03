@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { randomScrambleForEvent } from 'cubing/dist/lib/cubing/scramble/index.js';
+import { randomScrambleForEvent } from 'cubing/scramble';
 import crypto from 'crypto';
 
 const API_KEY = process.env.SCRAMBLE_API_KEY;
