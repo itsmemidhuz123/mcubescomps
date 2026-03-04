@@ -265,11 +265,14 @@ service cloud.firestore {
     
     // Battles collection - Private battles (link-only access)
     match /battles/{battleId} {
-      // Only participants can read the battle
+      // Allow spectators if allowSpectators is true
+      // Participants (player1, player2, creator) can always read
+      // Spectators can read if allowSpectators == true
       allow read: if isSignedIn() && (
         resource.data.player1 == request.auth.uid ||
         resource.data.player2 == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.allowSpectators == true
       );
       
       // Only signed in users can create battles
@@ -283,12 +286,13 @@ service cloud.firestore {
       );
     }
     
-    // Battle solves subcollection - Only participants can read/write
+    // Battle solves subcollection - Only participants can read/write (spectators can read)
     match /battles/{battleId}/solves/{uid} {
       allow read: if isSignedIn() && (
         get(/databases/$(database)/documents/battles/$(battleId)).data.player1 == request.auth.uid ||
         get(/databases/$(database)/documents/battles/$(battleId)).data.player2 == request.auth.uid ||
-        get(/databases/$(database)/documents/battles/$(battleId)).data.createdBy == request.auth.uid
+        get(/databases/$(database)/documents/battles/$(battleId)).data.createdBy == request.auth.uid ||
+        get(/databases/$(database)/documents/battles/$(battleId)).data.allowSpectators == true
       );
       allow write: if isSignedIn() && request.auth.uid == uid;
     }

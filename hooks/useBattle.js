@@ -135,10 +135,10 @@ export function useBattle(battleId, currentUserUid) {
 
   return {
     battle,
-    player1Solves,
-    player2Solves,
     loading,
     error,
+    player1Solves,
+    player2Solves,
     getMySolves,
     getOpponentSolves,
     getCurrentScramble,

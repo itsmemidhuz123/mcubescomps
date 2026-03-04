@@ -97,6 +97,8 @@ export async function POST(request) {
       format: format,
       winsRequired: winsReq,
       scores: { player1: 0, player2: 0 },
+      allowSpectators: true,
+      spectators: [],
       startTime: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: null,

@@ -8,7 +8,7 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
@@ -279,6 +279,7 @@ export default function BattleRoomPage() {
   const isPlayer1 = battle?.player1 === user?.uid;
   const isPlayer2 = battle?.player2 === user?.uid;
   const isParticipant = isPlayer1 || isPlayer2;
+  const isSpectator = !isParticipant && battle?.allowSpectators === true;
 
   const mySolves = getMySolves();
   const opponentSolves = getOpponentSolves();
@@ -308,7 +309,7 @@ export default function BattleRoomPage() {
     );
   }
 
-  if (!isParticipant) {
+  if (!isParticipant && !isSpectator) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <Card className="bg-zinc-900 border-zinc-800 max-w-md">
@@ -316,7 +317,7 @@ export default function BattleRoomPage() {
             <Sword className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
             <h2 className="text-xl font-bold mb-2">Not a Participant</h2>
             <p className="text-zinc-400 mb-4">
-              You are not part of this battle.
+              You are not part of this battle. Spectators are not allowed.
             </p>
             <Button onClick={() => router.push('/battle')}>
               Back to Battles
@@ -536,6 +537,14 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
+      {isSpectator && (
+        <div className="bg-yellow-500/20 border-b border-yellow-500/30 py-2 px-4 text-center">
+          <span className="text-yellow-400 font-medium flex items-center justify-center gap-2">
+            <Eye className="w-4 h-4" />
+            Spectator Mode - You are watching this battle
+          </span>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto p-4">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -616,20 +625,31 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
         </div>
 
         <Card className="bg-zinc-900 border-zinc-800 mb-6">
-          <CardContent className="p-6 text-center">
-            <div className="text-sm text-zinc-400 mb-2">Current Scramble</div>
-            <div className="text-2xl md:text-3xl font-mono tracking-wider">
-              {currentScramble}
-            </div>
-            {(!canViewNextScramble() && mySolves.length > 0) && (
-              <div className="mt-2 text-xs text-yellow-400">
-                Next scramble will reveal when opponent finishes
+          {isSpectator ? (
+            <CardContent className="p-8 text-center">
+              <div className="text-zinc-400 mb-4">Waiting for players to solve...</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-zinc-800 rounded-lg p-4">
+                  <div className="text-sm text-zinc-400 mb-1">Player 1</div>
+                  <div className="text-lg font-bold text-green-400">
+                    {isPlayer1 ? (userProfile?.displayName || 'You') : 'Waiting...'}
+                  </div>
+                  <div className="text-sm text-zinc-500 mt-2">
+                    Solves: {player1Solves?.length || 0}/{TOTAL_SCRAMBLES}
+                  </div>
+                </div>
+                <div className="bg-zinc-800 rounded-lg p-4">
+                  <div className="text-sm text-zinc-400 mb-1">Player 2</div>
+                  <div className="text-lg font-bold text-blue-400">
+                    {isPlayer2 ? (userProfile?.displayName || 'You') : 'Waiting...'}
+                  </div>
+                  <div className="text-sm text-zinc-500 mt-2">
+                    Solves: {player2Solves?.length || 0}/{TOTAL_SCRAMBLES}
+                  </div>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-zinc-900 border-zinc-800">
+            </CardContent>
+          ) : (
           <CardContent className="p-8">
             <div className="text-center mb-8">
               <div className={`text-8xl font-bold font-mono tabular-nums ${
@@ -698,7 +718,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                   </div>
                 )}
               </div>
-            ) : (
+              ) : (
               <div className="text-center text-zinc-400">
                 {mySolves.length >= TOTAL_SCRAMBLES ? (
                   'All solves completed! Waiting for opponent...'
@@ -707,7 +727,8 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                 )}
               </div>
             )}
-          </CardContent>
+            </CardContent>
+          )}
         </Card>
 
         <div className="grid md:grid-cols-2 gap-4 mt-6">

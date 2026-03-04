@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Save, Trophy, CreditCard, User, Award, TrendingUp, LogOut, Shield, MapPin, Calendar, Hash, Crown, LayoutDashboard, Settings, Activity, Sparkles, Camera, Loader2, Trash2, CheckCircle, XCircle, AlertCircle, Swords } from 'lucide-react';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
 import Link from 'next/link';
@@ -75,6 +75,13 @@ function ProfilePage() {
     const [dataLoading, setDataLoading] = useState(true);
     const [message, setMessage] = useState({ type: '', text: '' });
     const [verificationStatus, setVerificationStatus] = useState(null);
+    const [battleSettings, setBattleSettings] = useState({
+        defaultFormat: 'bo5',
+        defaultEvent: '333',
+        allowSpectators: true,
+        showOpponentStats: true,
+    });
+    const [savingBattle, setSavingBattle] = useState(false);
 
     useEffect(() => {
         async function fetchVerificationStatus() {
@@ -122,6 +129,9 @@ function ProfilePage() {
                 country: userProfile.country || '',
                 wcaId: userProfile.wcaId || ''
             });
+            if (userProfile.battleSettings) {
+                setBattleSettings(userProfile.battleSettings);
+            }
             fetchUserData();
         }
     }, [userProfile]);
@@ -190,6 +200,25 @@ function ProfilePage() {
             setMessage({ type: 'error', text: 'Failed to update profile: ' + error.message });
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function handleSaveBattleSettings() {
+        if (!user) return;
+
+        setSavingBattle(true);
+        setMessage({ type: '', text: '' });
+
+        try {
+            await updateProfile({
+                battleSettings: battleSettings
+            });
+            setMessage({ type: 'success', text: 'Battle settings saved!' });
+        } catch (error) {
+            console.error('Failed to save battle settings:', error);
+            setMessage({ type: 'error', text: 'Failed to save settings: ' + error.message });
+        } finally {
+            setSavingBattle(false);
         }
     }
 
@@ -466,6 +495,7 @@ function ProfilePage() {
                                             { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
                                             { id: 'results', icon: Activity, label: 'Results' },
                                             { id: 'payments', icon: CreditCard, label: 'History' },
+                                            { id: 'battle', icon: Swords, label: 'Battle' },
                                             { id: 'edit', icon: Settings, label: 'Settings' }
                                         ].map((tab) => (
                                             <TabsTrigger
@@ -616,6 +646,100 @@ function ProfilePage() {
                                                         </div>
                                                     ))
                                                 )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </TabsContent>
+
+                                <TabsContent value="battle" className="mt-0 animate-in fade-in-50 slide-in-from-bottom-2 duration-500">
+                                    <Card className="bg-zinc-50 dark:bg-zinc-900/20 border-zinc-200 dark:border-white/5">
+                                        <CardHeader>
+                                            <CardTitle className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                                                <Swords className="w-4 h-4" /> Battle Settings
+                                            </CardTitle>
+                                            <CardDescription className="text-xs text-zinc-500">Configure your battle preferences</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="grid gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs text-zinc-600 dark:text-zinc-400">Default Battle Format</Label>
+                                                    <Select 
+                                                        value={battleSettings.defaultFormat} 
+                                                        onValueChange={(value) => setBattleSettings({...battleSettings, defaultFormat: value})}
+                                                    >
+                                                        <SelectTrigger className="bg-white dark:bg-black/40 border-zinc-300 dark:border-white/10 h-9 text-sm">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-white/10">
+                                                            <SelectItem value="bo5" className="text-sm">Best of 5 (Ao5)</SelectItem>
+                                                            <SelectItem value="firstTo3" className="text-sm">First to 3</SelectItem>
+                                                            <SelectItem value="firstTo5" className="text-sm">First to 5</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs text-zinc-600 dark:text-zinc-400">Default WCA Event</Label>
+                                                    <Select 
+                                                        value={battleSettings.defaultEvent} 
+                                                        onValueChange={(value) => setBattleSettings({...battleSettings, defaultEvent: value})}
+                                                    >
+                                                        <SelectTrigger className="bg-white dark:bg-black/40 border-zinc-300 dark:border-white/10 h-9 text-sm">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-white/10">
+                                                            <SelectItem value="333" className="text-sm">3x3</SelectItem>
+                                                            <SelectItem value="222" className="text-sm">2x2</SelectItem>
+                                                            <SelectItem value="444" className="text-sm">4x4</SelectItem>
+                                                            <SelectItem value="555" className="text-sm">5x5</SelectItem>
+                                                            <SelectItem value="666" className="text-sm">6x6</SelectItem>
+                                                            <SelectItem value="777" className="text-sm">7x7</SelectItem>
+                                                            <SelectItem value="333oh" className="text-sm">3x3 OH</SelectItem>
+                                                            <SelectItem value="pyram" className="text-sm">Pyraminx</SelectItem>
+                                                            <SelectItem value="skewb" className="text-sm">Skewb</SelectItem>
+                                                            <SelectItem value="sq1" className="text-sm">Square-1</SelectItem>
+                                                            <SelectItem value="megaminx" className="text-sm">Megaminx</SelectItem>
+                                                            <SelectItem value="clock" className="text-sm">Clock</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Allow Spectators</p>
+                                                        <p className="text-xs text-zinc-500">Let others watch your battles</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setBattleSettings({...battleSettings, allowSpectators: !battleSettings.allowSpectators})}
+                                                        className={`w-11 h-6 rounded-full transition-colors ${battleSettings.allowSpectators ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-transform ${battleSettings.allowSpectators ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                    </button>
+                                                </div>
+
+                                                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Show Opponent Stats</p>
+                                                        <p className="text-xs text-zinc-500">Display opponent's ratings before battle</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setBattleSettings({...battleSettings, showOpponentStats: !battleSettings.showOpponentStats})}
+                                                        className={`w-11 h-6 rounded-full transition-colors ${battleSettings.showOpponentStats ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-transform ${battleSettings.showOpponentStats ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-end pt-2">
+                                                <Button
+                                                    onClick={handleSaveBattleSettings}
+                                                    disabled={savingBattle}
+                                                    size="sm"
+                                                    className="bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 h-8 px-4 text-xs font-medium"
+                                                >
+                                                    {savingBattle ? 'Saving...' : 'Save Battle Settings'}
+                                                </Button>
                                             </div>
                                         </CardContent>
                                     </Card>
