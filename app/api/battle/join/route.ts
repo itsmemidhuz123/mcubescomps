@@ -79,6 +79,7 @@ export async function POST(request) {
       status: 'countdown',
       startTime: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      opponentJoined: true,
     });
 
     return NextResponse.json({

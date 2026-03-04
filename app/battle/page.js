@@ -17,6 +17,7 @@ export default function BattlePage() {
   const router = useRouter();
   
   const [selectedEvent, setSelectedEvent] = useState('333');
+  const [selectedVisibility, setSelectedVisibility] = useState('public');
   const [creating, setCreating] = useState(false);
   const [waitingBattles, setWaitingBattles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +37,6 @@ export default function BattlePage() {
     try {
       const q = query(
         collection(db, 'battles'),
-        where('visibility', '==', 'public'),
         where('status', '==', 'waiting'),
         orderBy('createdAt', 'desc'),
         limit(20)
@@ -44,10 +44,19 @@ export default function BattlePage() {
       
       const snapshot = await getDocs(q);
       const battles = [];
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const now = Date.now();
       
       snapshot.forEach((doc) => {
         const data = doc.data();
-        battles.push({ id: doc.id, ...data });
+        if (data.player1 !== user?.uid) {
+          const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
+          const battleAge = now - createdAt.getTime();
+          
+          if (battleAge <= oneDayMs) {
+            battles.push({ id: doc.id, ...data });
+          }
+        }
       });
       
       setWaitingBattles(battles);
@@ -63,14 +72,14 @@ export default function BattlePage() {
     
     setCreating(true);
     try {
-      const response = await fetch('/api/battle/create', {
+       const response = await fetch('/api/battle/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event: selectedEvent,
           userId: user.uid,
           roundCount: 5,
-          visibility: 'private',
+          visibility: selectedVisibility,
           allowSpectators: true,
         }),
       });
@@ -194,11 +203,23 @@ export default function BattlePage() {
                     <option key={event.id} value={event.id}>
                       {event.icon} {event.name}
                     </option>
-                  ))}
-                </select>
-              </div>
+                   ))}
+                 </select>
+               </div>
 
-              <Button
+               <div>
+                 <label className="text-sm text-zinc-400 mb-2 block">Visibility</label>
+                 <select
+                   value={selectedVisibility}
+                   onChange={(e) => setSelectedVisibility(e.target.value)}
+                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                 >
+                   <option value="public">Public (shown in Open Battles)</option>
+                   <option value="private">Private (link-only)</option>
+                 </select>
+               </div>
+
+               <Button
                 onClick={createBattle}
                 disabled={creating}
                 className="w-full bg-red-600 hover:bg-red-500"

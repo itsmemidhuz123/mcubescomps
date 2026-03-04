@@ -8,7 +8,7 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
@@ -276,8 +276,35 @@ export default function BattleRoomPage() {
     return events[battle?.event] || '3x3';
   };
 
+  const handleJoinAsOpponent = async () => {
+    if (!user || !battle) return;
+
+    try {
+      const response = await fetch('/api/battle/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          battleId,
+          userId: user.uid,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        router.push(`/battle/${battleId}`);
+      } else {
+        alert(data.message || 'Failed to join battle');
+      }
+    } catch (error) {
+      console.error('Join battle error:', error);
+      alert('Failed to join battle');
+    }
+  };
+
   const isPlayer1 = battle?.player1 === user?.uid;
   const isPlayer2 = battle?.player2 === user?.uid;
+  const isCreator = battle?.createdBy === user?.uid;
   const isParticipant = isPlayer1 || isPlayer2;
   const isSpectator = !isParticipant && battle?.allowSpectators === true;
 
@@ -311,13 +338,94 @@ export default function BattleRoomPage() {
 
   if (!isParticipant && !isSpectator) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
           <CardContent className="p-8 text-center">
             <Sword className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
             <h2 className="text-xl font-bold mb-2">Not a Participant</h2>
             <p className="text-zinc-400 mb-4">
               You are not part of this battle. Spectators are not allowed.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button onClick={() => router.push('/battle')}>
+                Back to Battles
+              </Button>
+              {battle.status === 'waiting' && (
+                <Button 
+                  onClick={handleJoinAsOpponent}
+                  className="bg-green-600 hover:bg-green-500 w-full"
+                >
+                  Join as Opponent
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isSpectator && battle.status === 'waiting') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <Eye className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
+            <h2 className="text-xl font-bold mb-2">You are watching this battle</h2>
+            <p className="text-zinc-400 mb-4">
+              {battle.player1 ? 'Player 1 is waiting for an opponent...' : 'Waiting for players...'}
+            </p>
+            {battle.player1 && battle.player2 === null && (
+              <div className="flex flex-col gap-3">
+                <Button 
+                  onClick={handleJoinAsOpponent}
+                  className="bg-green-600 hover:bg-green-500 w-full"
+                >
+                  Join as Opponent
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => router.push('/battle')}
+                  className="w-full"
+                >
+                  Leave and Browse Battles
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (battle.status === 'expired') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+          <CardContent className="p-8 text-center">
+            <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
+            <h2 className="text-xl font-bold mb-2">Battle Expired</h2>
+            <p className="text-zinc-400 mb-4">
+              This battle has expired due to inactivity.
+            </p>
+            <Button onClick={() => router.push('/battle')}>
+              Back to Battles
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (battle.status === 'expired') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+          <CardContent className="p-8 text-center">
+            <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
+            <h2 className="text-xl font-bold mb-2">Battle Expired</h2>
+            <p className="text-zinc-400 mb-4">
+              This battle has expired due to inactivity.
             </p>
             <Button onClick={() => router.push('/battle')}>
               Back to Battles
@@ -340,6 +448,11 @@ export default function BattleRoomPage() {
     const opponentScore = isPlayer1 ? scores.player2 : scores.player1;
 
     const handleRematch = async () => {
+      if (!isCreator) {
+        alert('Only the creator can start a rematch');
+        return;
+      }
+
       try {
         const response = await fetch('/api/battle/create', {
           method: 'POST',
@@ -472,44 +585,47 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
             </div>
 
             <div className="flex gap-3">
+              {isCreator && (
+                <Button
+                  onClick={handleRematch}
+                  className="flex-1 bg-green-600 hover:bg-green-500"
+                  size="lg"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Rematch
+                </Button>
+              )}
+              {isPlayer1 && (
+                <Button
+                  onClick={handleShare}
+                  variant="outline"
+                  className="flex-1"
+                  size="lg"
+                >
+                  Share Result
+                </Button>
+              )}
               <Button
-                onClick={handleRematch}
-                className="flex-1 bg-green-600 hover:bg-green-500"
-                size="lg"
+                onClick={() => router.push('/battle')}
+                variant="ghost"
+                className="mt-4 w-full"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Rematch
-              </Button>
-              <Button
-                onClick={handleShare}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-              >
-                Share Result
+                Back to Battles
               </Button>
             </div>
-
-            <Button
-              onClick={() => router.push('/battle')}
-              variant="ghost"
-              className="mt-4 w-full"
-            >
-              Back to Battles
-            </Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (battle.status === BATTLE_STATES.WAITING && isPlayer1) {
+  if (battle.status === BATTLE_STATES.WAITING && isCreator) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <Card className="bg-zinc-900 border-zinc-800 max-w-md">
           <CardContent className="p-8 text-center">
             <RefreshCw className="w-12 h-12 mx-auto mb-4 text-zinc-400 animate-spin" />
-            <h2 className="text-xl font-bold mb-2">Waiting for Opponent</h2>
+            <h2 className="text-xl font-bold mb-2">Battle Created</h2>
             <p className="text-zinc-400 mb-4">
               Share this link with your opponent:
             </p>
@@ -518,15 +634,54 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                 {typeof window !== 'undefined' ? window.location.href : ''}
               </code>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-              }}
-              className="w-full"
-            >
-              Copy Link
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                }}
+                className="w-full"
+              >
+                Copy Link
+              </Button>
+              <Button
+                onClick={handleJoinAsOpponent}
+                variant="outline"
+                className="w-full"
+              >
+                Rejoin as Opponent
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (battle.status === BATTLE_STATES.WAITING && isPlayer2) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+          <CardContent className="p-8 text-center">
+            <RefreshCw className="w-12 h-12 mx-auto mb-4 text-zinc-400 animate-spin" />
+            <h2 className="text-xl font-bold mb-2">Waiting for Creator</h2>
+            <p className="text-zinc-400 mb-4">
+              Battle will start when creator joins.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={handleJoinAsOpponent}
+                className="w-full"
+              >
+                Rejoin Battle
+              </Button>
+              <Button
+                onClick={() => router.push('/battle')}
+                variant="outline"
+                className="w-full"
+              >
+                Back to Lobby
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -101,6 +101,8 @@ export async function POST(request) {
       scores: { player1: 0, player2: 0 },
       allowSpectators: allowSpectators,
       spectators: [],
+      creatorJoined: true,
+      opponentJoined: false,
       startTime: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: null,

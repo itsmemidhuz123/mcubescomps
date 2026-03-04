@@ -278,7 +278,7 @@ service cloud.firestore {
       // Only signed in users can create battles
       allow create: if isSignedIn();
       
-      // Only participants can update
+      // Only participants or creator can update (creator can discontinue, start countdown, etc.)
       allow update: if isSignedIn() && (
         resource.data.player1 == request.auth.uid ||
         resource.data.player2 == request.auth.uid ||
