@@ -11,7 +11,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
-import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES } from '../../../lib/battleUtils';
+import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
 
 export default function BattleRoomPage() {
@@ -23,6 +23,9 @@ export default function BattleRoomPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [cheatFlags, setCheatFlags] = useState([]);
 
   const {
     battle,
@@ -32,6 +35,7 @@ export default function BattleRoomPage() {
     getMySolves,
     getOpponentSolves,
     getCurrentScramble,
+    canViewNextScramble,
     isMyTurn,
     canSubmitSolve,
     myAo5,
@@ -124,6 +128,91 @@ export default function BattleRoomPage() {
     }
   }, [timerState, battle, user, battleId, getMySolves]);
 
+  useEffect(() => {
+    if (battle?.status === 'countdown' && !countdownActive) {
+      setCountdown(5);
+      setCountdownActive(true);
+    }
+  }, [battle?.status, countdownActive]);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0 && countdownActive && battle?.status === 'countdown') {
+      fetch('/api/battle/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ battleId, uid: user?.uid }),
+      }).then(() => {
+        setCountdownActive(false);
+      });
+    }
+  }, [countdown, countdownActive, battle, battleId, user]);
+
+  useEffect(() => {
+    if (battle?.status !== 'live' || timerState !== TIMER_STATES.RUNNING) return;
+
+    const timeout = setTimeout(async () => {
+      if (timerState === TIMER_STATES.RUNNING && battle?.status === 'live') {
+        const mySolves = getMySolves();
+        const expectedIndex = mySolves.length;
+        
+        try {
+          await fetch('/api/battle/submit-solve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              battleId,
+              uid: user.uid,
+              time: MAX_SOLVE_TIME_MS,
+              penalty: -1,
+              scrambleIndex: expectedIndex,
+              reason: 'TIMEOUT_DNF',
+            }),
+          });
+          reset();
+        } catch (e) {
+          console.error('Auto DNF failed:', e);
+        }
+      }
+    }, MAX_SOLVE_TIME_MS);
+
+    return () => clearTimeout(timeout);
+  }, [battle?.status, timerState, battleId, user, getMySolves, reset]);
+
+  useEffect(() => {
+    if (battle?.status !== 'live') return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && timerState === TIMER_STATES.RUNNING) {
+        setCheatFlags(prev => [...prev, { type: 'TAB_SWITCH', timestamp: Date.now() }]);
+      }
+    };
+
+    const handleBlur = () => {
+      if (timerState === TIMER_STATES.RUNNING) {
+        setCheatFlags(prev => [...prev, { type: 'WINDOW_BLUR', timestamp: Date.now() }]);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [battle?.status, timerState]);
+
+  useEffect(() => {
+    if (timerState === TIMER_STATES.STOPPED && time > 0 && time < 2000) {
+      setCheatFlags(prev => [...prev, { type: 'FAST_SOLVE', time, timestamp: Date.now() }]);
+    }
+  }, [timerState, time]);
+
   const handleSubmitSolve = async () => {
     if (!user || !battle) return;
     if (timerState !== TIMER_STATES.STOPPED) return;
@@ -138,14 +227,21 @@ export default function BattleRoomPage() {
 
     const solveData = submitCurrentSolve();
     
-    if (solveData.time === null || solveData.time === undefined || solveData.time < 0) {
-      alert('Invalid time');
+    if (!solveData.valid || solveData.time === null || solveData.time === undefined) {
+      alert('Please complete a valid solve before submitting');
       return;
     }
+
+    if (solveData.time < 100) {
+      alert('Time too short - please complete a valid solve');
+      return;
+    }
+
+    const currentFlags = cheatFlags.filter(f => f.timestamp > Date.now() - 60000);
     
     setSubmitting(true);
     try {
-      await fetch('/api/battle/submit-solve', {
+      const response = await fetch('/api/battle/submit-solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,9 +250,18 @@ export default function BattleRoomPage() {
           time: solveData.time,
           penalty: solveData.penalty,
           scrambleIndex: expectedIndex,
+          flags: currentFlags,
         }),
       });
 
+      const result = await response.json();
+      
+      if (!result.success) {
+        alert(result.message || 'Failed to submit solve');
+        return;
+      }
+
+      setCheatFlags([]);
       reset();
     } catch (error) {
       console.error('Submit solve error:', error);
@@ -189,6 +294,20 @@ export default function BattleRoomPage() {
     );
   }
 
+  if (countdown > 0) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-12 text-center">
+            <div className="text-8xl font-bold text-yellow-400 mb-4">{countdown}</div>
+            <h2 className="text-2xl font-bold text-white">Get Ready!</h2>
+            <p className="text-zinc-400 mt-2">Battle starting soon...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!isParticipant) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -211,51 +330,171 @@ export default function BattleRoomPage() {
   if (battle.status === BATTLE_STATES.COMPLETED) {
     const myAo5Value = myAo5();
     const opponentAo5Value = opponentAo5();
+    const myBestValue = myBestSingle();
+    const opponentBestValue = opponentBestSingle();
     const iWon = battle.winner === user?.uid;
     const isTie = battle.winner === 'tie';
+    const scores = battle.scores || { player1: 0, player2: 0 };
+    const myScore = isPlayer1 ? scores.player1 : scores.player2;
+    const opponentScore = isPlayer1 ? scores.player2 : scores.player1;
+
+    const handleRematch = async () => {
+      try {
+        const response = await fetch('/api/battle/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.uid,
+            event: battle.event,
+            roundCount: battle.roundCount,
+            format: battle.format,
+            winsRequired: battle.winsRequired,
+          }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          router.push(`/battle/${data.battleId}`);
+        } else {
+          alert(data.message || 'Failed to create rematch');
+        }
+      } catch (e) {
+        alert('Failed to create rematch');
+      }
+    };
+
+    const handleShare = async () => {
+      const resultText = `🏆 Battle Results - ${getCurrentEventName()}
+${iWon ? '🎉 You Won!' : isTie ? '🤝 It\'s a Tie!' : '😢 You Lost'}
+Score: ${myScore} - ${opponentScore}
+Your Ao5: ${formatBattleTime(myAo5Value) || 'DNF'}
+Best Single: ${formatBattleTime(myBestValue) || 'DNF'}
+
+Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena.com'}`;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ text: resultText });
+        } catch (e) {
+          navigator.clipboard.writeText(resultText);
+          alert('Result copied to clipboard!');
+        }
+      } else {
+        navigator.clipboard.writeText(resultText);
+        alert('Result copied to clipboard!');
+      }
+    };
 
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-lg w-full">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-2xl w-full">
           <CardContent className="p-8 text-center">
             {isTie ? (
               <>
-                <Trophy className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                <h2 className="text-3xl font-bold mb-2">It&apos;s a Tie!</h2>
+                <Trophy className="w-20 h-20 mx-auto mb-4 text-yellow-500" />
+                <h2 className="text-4xl font-bold mb-2">It&apos;s a Tie!</h2>
               </>
             ) : iWon ? (
               <>
-                <Crown className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                <h2 className="text-3xl font-bold mb-2 text-yellow-500">You Win!</h2>
+                <Crown className="w-20 h-20 mx-auto mb-4 text-yellow-500" />
+                <h2 className="text-4xl font-bold mb-2 text-yellow-500">You Win!</h2>
               </>
             ) : (
               <>
-                <Sword className="w-16 h-16 mx-auto mb-4 text-red-500" />
-                <h2 className="text-3xl font-bold mb-2 text-red-500">You Lost!</h2>
+                <Sword className="w-20 h-20 mx-auto mb-4 text-red-500" />
+                <h2 className="text-4xl font-bold mb-2 text-red-500">You Lost!</h2>
               </>
             )}
             
-            <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="flex items-center justify-center gap-4 mt-4 mb-6">
+              <div className="text-4xl font-bold text-green-400">{myScore}</div>
+              <span className="text-2xl text-zinc-500">-</span>
+              <div className="text-4xl font-bold text-blue-400">{opponentScore}</div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-zinc-800 rounded-lg p-4">
                 <div className="text-sm text-zinc-400">Your Ao5</div>
-                <div className="text-2xl font-bold">
-                  {formatBattleTime(myAo5Value)}
+                <div className="text-2xl font-bold text-green-400">
+                  {formatBattleTime(myAo5Value) || 'DNF'}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  Best: {formatBattleTime(myBestValue) || 'DNF'}
                 </div>
               </div>
               <div className="bg-zinc-800 rounded-lg p-4">
                 <div className="text-sm text-zinc-400">Opponent Ao5</div>
-                <div className="text-2xl font-bold">
-                  {formatBattleTime(opponentAo5Value)}
+                <div className="text-2xl font-bold text-blue-400">
+                  {formatBattleTime(opponentAo5Value) || 'DNF'}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  Best: {formatBattleTime(opponentBestValue) || 'DNF'}
                 </div>
               </div>
             </div>
 
+            <div className="mb-6">
+              <div className="text-sm text-zinc-400 mb-2">Solve Comparison</div>
+              <div className="bg-zinc-800 rounded-lg p-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-zinc-500">
+                      <th className="py-1">#</th>
+                      <th className="py-1 text-green-400">You</th>
+                      <th className="py-1 text-blue-400">Opponent</th>
+                      <th className="py-1">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mySolves.map((solve, i) => {
+                      const oppSolve = opponentSolves[i];
+                      const myTime = solve.penalty === PENALTY.DNF ? 'DNF' : formatBattleTime(solve.time);
+                      const oppTime = oppSolve?.penalty === PENALTY.DNF ? 'DNF' : formatBattleTime(oppSolve?.time);
+                      let result = '';
+                      if (solve.penalty === PENALTY.DNF && (!oppSolve || oppSolve.penalty === PENALTY.DNF)) result = 'Tie';
+                      else if (solve.penalty === PENALTY.DNF) result = 'Lost';
+                      else if (!oppSolve || oppSolve.penalty === PENALTY.DNF) result = 'Won';
+                      else if (solve.time < oppSolve.time) result = 'Won';
+                      else if (solve.time > oppSolve.time) result = 'Lost';
+                      else result = 'Tie';
+                      return (
+                        <tr key={i} className="border-t border-zinc-700">
+                          <td className="py-1 text-zinc-500">{i + 1}</td>
+                          <td className="py-1 text-green-400">{myTime}</td>
+                          <td className="py-1 text-blue-400">{oppTime || '-'}</td>
+                          <td className={`py-1 ${result === 'Won' ? 'text-green-400' : result === 'Lost' ? 'text-red-400' : 'text-zinc-400'}`}>{result}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={handleRematch}
+                className="flex-1 bg-green-600 hover:bg-green-500"
+                size="lg"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Rematch
+              </Button>
+              <Button
+                onClick={handleShare}
+                variant="outline"
+                className="flex-1"
+                size="lg"
+              >
+                Share Result
+              </Button>
+            </div>
+
             <Button
               onClick={() => router.push('/battle')}
-              className="mt-6 w-full"
-              size="lg"
+              variant="ghost"
+              className="mt-4 w-full"
             >
-              Play Again
+              Back to Battles
             </Button>
           </CardContent>
         </Card>
@@ -317,9 +556,18 @@ export default function BattleRoomPage() {
               </p>
             </div>
           </div>
-          <Badge variant={battle.status === 'live' ? 'default' : 'secondary'} className="bg-green-600">
-            {battle.status === 'live' ? 'LIVE' : battle.status}
-          </Badge>
+          <div className="flex items-center gap-4">
+            {battle.scores && (
+              <div className="flex items-center gap-2 bg-zinc-800 px-3 py-1 rounded-lg">
+                <span className="text-green-400 font-bold">{battle.scores.player1 || 0}</span>
+                <span className="text-zinc-400">-</span>
+                <span className="text-blue-400 font-bold">{battle.scores.player2 || 0}</span>
+              </div>
+            )}
+            <Badge variant={battle.status === 'live' ? 'default' : 'secondary'} className="bg-green-600">
+              {battle.status === 'live' ? 'LIVE' : battle.status}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-4 mb-6">
@@ -373,6 +621,11 @@ export default function BattleRoomPage() {
             <div className="text-2xl md:text-3xl font-mono tracking-wider">
               {currentScramble}
             </div>
+            {(!canViewNextScramble() && mySolves.length > 0) && (
+              <div className="mt-2 text-xs text-yellow-400">
+                Next scramble will reveal when opponent finishes
+              </div>
+            )}
           </CardContent>
         </Card>
 

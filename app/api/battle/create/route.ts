@@ -25,7 +25,13 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { event = '333', userId, roundCount = 5 } = body;
+    const { 
+      event = '333', 
+      userId, 
+      roundCount = 5,
+      format = 'ao5',
+      winsRequired = null 
+    } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -40,6 +46,19 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const validFormats = ['ao5', 'firstTo3', 'firstTo5', 'single'];
+    if (!validFormats.includes(format)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid battle format' },
+        { status: 400 }
+      );
+    }
+
+    let winsReq = winsRequired;
+    if (format === 'firstTo3') winsReq = 3;
+    if (format === 'firstTo5') winsReq = 5;
+    if (format === 'ao5' || format === 'single') winsReq = null;
 
     let scrambleData;
     try {
@@ -68,12 +87,17 @@ export async function POST(request) {
       scrambleId: scrambleData.scrambleId,
       scrambles: scrambleData.scrambles,
       currentScrambleIndex: 0,
+      currentRound: 1,
       createdBy: userId,
       player1: userId,
       player2: null,
       status: 'waiting',
       winner: null,
       visibility: 'private',
+      format: format,
+      winsRequired: winsReq,
+      scores: { player1: 0, player2: 0 },
+      startTime: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: null,
       completedAt: null,

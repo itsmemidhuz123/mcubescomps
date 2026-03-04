@@ -82,6 +82,13 @@ export function useBattle(battleId, currentUserUid) {
     return battle.scrambles[index] || '';
   }, [battle]);
 
+  const canViewNextScramble = useCallback(() => {
+    if (!battle) return false;
+    const mySolves = getMySolves();
+    const opponentSolves = getOpponentSolves();
+    return mySolves.length === opponentSolves.length;
+  }, [battle, getMySolves, getOpponentSolves]);
+
   const isMyTurn = useCallback(() => {
     if (!battle || battle.status !== BATTLE_STATES.LIVE) return false;
     if (!currentUserUid) return false;
@@ -135,6 +142,7 @@ export function useBattle(battleId, currentUserUid) {
     getMySolves,
     getOpponentSolves,
     getCurrentScramble,
+    canViewNextScramble,
     isMyTurn,
     canSubmitSolve,
     isBattleComplete,

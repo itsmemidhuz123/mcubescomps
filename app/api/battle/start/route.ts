@@ -24,11 +24,11 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { battleId, userId } = body;
+    const { battleId, uid } = body;
 
-    if (!battleId || !userId) {
+    if (!battleId || !uid) {
       return NextResponse.json(
-        { success: false, message: 'Battle ID and User ID are required' },
+        { success: false, message: 'Battle ID and UID are required' },
         { status: 400 }
       );
     }
@@ -46,50 +46,35 @@ export async function POST(request) {
 
     const battleData = battleDoc.data();
 
-    if (battleData.visibility !== 'private') {
-      return NextResponse.json(
-        { success: false, message: 'Battle not found' },
-        { status: 404 }
-      );
+    if (battleData.status !== 'countdown') {
+      return NextResponse.json({
+        success: true,
+        status: battleData.status,
+      });
     }
 
-    if (battleData.player2 && battleData.player2 !== null) {
-      return NextResponse.json(
-        { success: false, message: 'Battle is already full' },
-        { status: 400 }
-      );
-    }
+    const isPlayer1 = battleData.player1 === uid;
+    const isPlayer2 = battleData.player2 === uid;
 
-    if (battleData.player1 === userId) {
+    if (!isPlayer1 && !isPlayer2) {
       return NextResponse.json(
-        { success: false, message: 'You cannot join your own battle' },
-        { status: 400 }
-      );
-    }
-
-    if (battleData.status !== 'waiting') {
-      return NextResponse.json(
-        { success: false, message: 'Battle is not accepting players' },
-        { status: 400 }
+        { success: false, message: 'Not a participant' },
+        { status: 403 }
       );
     }
 
     await battleRef.update({
-      player2: userId,
-      status: 'countdown',
-      startTime: admin.firestore.FieldValue.serverTimestamp(),
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'live',
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Joined battle successfully',
-      status: 'countdown',
+      status: 'live',
     });
   } catch (error) {
-    console.error('Join battle error:', error);
+    console.error('Start battle error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to join battle' },
+      { success: false, message: 'Failed to start battle' },
       { status: 500 }
     );
   }

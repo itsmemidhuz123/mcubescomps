@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trophy, Search, Medal, User, ChevronDown } from 'lucide-react';
+import { Trophy, Search, Medal, User, ChevronDown, Swords } from 'lucide-react';
 import Link from 'next/link';
 import { getEventName } from '@/lib/wcaEvents';
 import EventIcon from '@/lib/EventIcon';
@@ -32,6 +32,8 @@ function RankingsPage() {
     const [tab, setTab] = useState('rankings');
     const [rankings, setRankings] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [battleRankings, setBattleRankings] = useState([]);
+    const [battleLoading, setBattleLoading] = useState(true);
 
     // Stats for the "My Progress" style header cards (preserved from logic)
     const [stats, setStats] = useState({ competitors: 0, solves: 0 });
@@ -46,6 +48,25 @@ function RankingsPage() {
         fetchStats();
         fetchRankings();
     }, [selectedEvent, mode]);
+
+    useEffect(() => {
+        fetchBattleRankings();
+    }, [selectedEvent]);
+
+    async function fetchBattleRankings() {
+        setBattleLoading(true);
+        try {
+            const response = await fetch(`/api/leaderboard?event=${selectedEvent}&limit=50`);
+            const data = await response.json();
+            if (data.success) {
+                setBattleRankings(data.leaderboard);
+            }
+        } catch (error) {
+            console.error('Failed to fetch battle rankings:', error);
+        } finally {
+            setBattleLoading(false);
+        }
+    }
 
     async function fetchStats() {
         try {
@@ -325,6 +346,47 @@ function RankingsPage() {
                         </div>
                     )}
                 </Card>
+
+                {/* Battle ELO Rankings Section */}
+                <div className="mt-8">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Swords className="w-5 h-5 text-yellow-500" />
+                        <h2 className="text-xl font-bold">Battle ELO Rankings</h2>
+                    </div>
+                    <Card className="border border-zinc-200 dark:border-zinc-800">
+                        {battleLoading ? (
+                            <div className="p-8 text-center">
+                                <div className="animate-spin w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full mx-auto"></div>
+                            </div>
+                        ) : battleRankings.length === 0 ? (
+                            <div className="p-8 text-center text-zinc-500">
+                                <p>No battle rankings yet</p>
+                                <p className="text-sm">Play battles to earn ELO!</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Rank</TableHead>
+                                        <TableHead>Player</TableHead>
+                                        <TableHead className="text-right">ELO Rating</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {battleRankings.slice(0, 10).map((player) => (
+                                        <TableRow key={player.uid}>
+                                            <TableCell className="font-mono">{player.rank}</TableCell>
+                                            <TableCell>{player.displayName}</TableCell>
+                                            <TableCell className="text-right font-mono font-bold text-yellow-600 dark:text-yellow-400">
+                                                {player.rating}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </Card>
+                </div>
 
             </div>
         </div>

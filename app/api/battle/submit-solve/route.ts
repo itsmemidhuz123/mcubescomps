@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import admin from 'firebase-admin';
-import { PENALTY, calculateAo5, calculateBestSingle, determineWinner, TOTAL_SCRAMBLES } from '@/lib/battleUtils';
+import { 
+  PENALTY, 
+  calculateAo5, 
+  calculateBestSingle, 
+  determineBattleWinner, 
+  TOTAL_SCRAMBLES,
+  getScrambleWinner,
+  BATTLE_FORMATS,
+  calculateBattleEloChanges,
+  ELO_DEFAULT_RATING
+} from '@/lib/battleUtils';
 
 function getAdminDb() {
   if (getApps().length === 0) {
@@ -25,7 +35,7 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { battleId, uid, time, penalty = 0, scrambleIndex, reason } = body;
+    const { battleId, uid, time, penalty = 0, scrambleIndex, reason, flags = [] } = body;
 
     if (!battleId || !uid || time === undefined || time === null) {
       return NextResponse.json(
@@ -34,9 +44,9 @@ export async function POST(request) {
       );
     }
 
-    if (typeof time !== 'number' || time < 0) {
+    if (typeof time !== 'number' || time < 100) {
       return NextResponse.json(
-        { success: false, message: 'Time must be a valid positive number' },
+        { success: false, message: 'Time must be at least 0.1 seconds' },
         { status: 400 }
       );
     }
@@ -44,6 +54,13 @@ export async function POST(request) {
     if (penalty !== 0 && penalty !== 2 && penalty !== -1) {
       return NextResponse.json(
         { success: false, message: 'Invalid penalty value' },
+        { status: 400 }
+      );
+    }
+
+    if (penalty === -1 && reason !== 'MANUAL_DNF' && reason !== 'INSPECTION_DNF' && reason !== 'TIMEOUT_DNF') {
+      return NextResponse.json(
+        { success: false, message: 'DNF requires a valid reason' },
         { status: 400 }
       );
     }
@@ -72,6 +89,13 @@ export async function POST(request) {
       return NextResponse.json(
         { success: false, message: 'Battle not found' },
         { status: 404 }
+      );
+    }
+
+    if (battleData.status === 'countdown') {
+      return NextResponse.json(
+        { success: false, message: 'Battle is starting - please wait' },
+        { status: 400 }
       );
     }
 
@@ -107,6 +131,9 @@ export async function POST(request) {
       penalty: penalty,
       reason: reason || null,
       timestamp: Date.now(),
+      submittedAt: Date.now(),
+      locked: true,
+      flags: flags,
     };
 
     existingSolves.push(solveEntry);
@@ -138,32 +165,81 @@ export async function POST(request) {
       });
     }
 
+    const format = battleData.format || 'ao5';
+    const winsRequired = battleData.winsRequired;
     const bothReadyForNext = p1Solves.length === p2Solves.length;
+    const currentScores = battleData.scores || { player1: 0, player2: 0 };
 
     let battleUpdate: Record<string, unknown> = {};
     let winner = null;
+    let newScores = { ...currentScores };
 
-    if (bothReadyForNext && p1Solves.length >= TOTAL_SCRAMBLES) {
-      const result = determineWinner(p1Solves, p2Solves);
-      
-      if (result === 'player1') {
-        winner = battleData.player1;
-      } else if (result === 'player2') {
-        winner = battleData.player2;
-      } else {
-        winner = 'tie';
+    if (bothReadyForNext) {
+      const scrambleWinner = getScrambleWinner(
+        p1Solves[p1Solves.length - 1],
+        p2Solves[p2Solves.length - 1]
+      );
+
+      if (scrambleWinner === 'player1') {
+        newScores.player1++;
+      } else if (scrambleWinner === 'player2') {
+        newScores.player2++;
       }
 
-      battleUpdate = {
-        status: 'completed',
-        winner,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-    } else if (bothReadyForNext && p1Solves.length < TOTAL_SCRAMBLES) {
-      const nextIndex = (battleData.currentScrambleIndex || 0) + 1;
-      battleUpdate = {
-        currentScrambleIndex: nextIndex,
-      };
+      battleUpdate.scores = newScores;
+
+      const isFormatComplete = (format === BATTLE_FORMATS.AO5 && p1Solves.length >= TOTAL_SCRAMBLES) ||
+                              (format === BATTLE_FORMATS.SINGLE && p1Solves.length >= 1) ||
+                              (winsRequired && (newScores.player1 >= winsRequired || newScores.player2 >= winsRequired));
+
+      if (isFormatComplete) {
+        const result = determineBattleWinner(p1Solves, p2Solves, format, winsRequired, battleData.roundCount);
+        
+        if (result === 'player1') {
+          winner = battleData.player1;
+        } else if (result === 'player2') {
+          winner = battleData.player2;
+        } else {
+          winner = 'tie';
+        }
+
+        battleUpdate = {
+          ...battleUpdate,
+          status: 'completed',
+          winner,
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        const player1UserDoc = await db.collection('users').doc(battleData.player1).get();
+        const player2UserDoc = await db.collection('users').doc(battleData.player2).get();
+
+        const player1Data = player1UserDoc.exists ? player1UserDoc.data() : {};
+        const player2Data = player2UserDoc.exists ? player2UserDoc.data() : {};
+
+        const event = battleData.event || '333';
+        const ratingField = `rating${event}`;
+        
+        const player1Rating = (player1Data[ratingField] || ELO_DEFAULT_RATING);
+        const player2Rating = (player2Data[ratingField] || ELO_DEFAULT_RATING);
+
+        const resultKey = result === 'player1' ? 'player1' : (result === 'player2' ? 'player2' : 'tie');
+        const eloChanges = calculateBattleEloChanges(player1Rating, player2Rating, resultKey);
+
+        await db.collection('users').doc(battleData.player1).set({
+          [ratingField]: Math.max(100, player1Rating + eloChanges.player1Change),
+        }, { merge: true });
+
+        await db.collection('users').doc(battleData.player2).set({
+          [ratingField]: Math.max(100, player2Rating + eloChanges.player2Change),
+        }, { merge: true });
+      } else if (newScores.player1 !== currentScores.player1 || newScores.player2 !== currentScores.player2) {
+        const nextIndex = (battleData.currentScrambleIndex || 0) + 1;
+        battleUpdate = {
+          ...battleUpdate,
+          currentScrambleIndex: nextIndex,
+          currentRound: (battleData.currentRound || 1) + 1,
+        };
+      }
     }
 
     if (Object.keys(battleUpdate).length > 0) {
@@ -176,6 +252,7 @@ export async function POST(request) {
       success: true,
       solves: existingSolves,
       ao5,
+      scores: newScores,
       battleStatus: currentStatus,
       winner,
     });
