@@ -30,11 +30,10 @@ export default function TimerPage() {
     setScrambleLoading(true);
     try {
       if (!cubingRef.current) {
-        const cubing = await import('cubing');
-        cubingRef.current = cubing;
+        const { randomScrambleForEvent } = await import('cubing/scramble');
+        cubingRef.current = { randomScrambleForEvent };
       }
-      const { randomScrambleForEvent } = cubingRef.current;
-      const result = await randomScrambleForEvent(eventId, { worker: false });
+      const result = await cubingRef.current.randomScrambleForEvent(eventId, { worker: false });
       setScramble(result.toString());
     } catch (e) {
       console.error('Scramble error:', e);

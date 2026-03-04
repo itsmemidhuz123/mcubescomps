@@ -720,7 +720,7 @@ function ProfilePage() {
                                                 <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5">
                                                     <div>
                                                         <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Show Opponent Stats</p>
-                                                        <p className="text-xs text-zinc-500">Display opponent's ratings before battle</p>
+                                                        <p className="text-xs text-zinc-500">Display opponent&apos;s ratings before battle</p>
                                                     </div>
                                                     <button
                                                         onClick={() => setBattleSettings({...battleSettings, showOpponentStats: !battleSettings.showOpponentStats})}
