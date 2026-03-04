@@ -80,6 +80,7 @@ function ProfilePage() {
         defaultEvent: '333',
         allowSpectators: true,
         showOpponentStats: true,
+        visibility: 'private',
     });
     const [savingBattle, setSavingBattle] = useState(false);
 
@@ -727,6 +728,19 @@ function ProfilePage() {
                                                         className={`w-11 h-6 rounded-full transition-colors ${battleSettings.showOpponentStats ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
                                                     >
                                                         <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-transform ${battleSettings.showOpponentStats ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                    </button>
+                                                </div>
+
+                                                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Visibility</p>
+                                                        <p className="text-xs text-zinc-500">Make your battle visible to others</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setBattleSettings({...battleSettings, visibility: battleSettings.visibility === 'private' ? 'public' : 'private'})}
+                                                        className={`w-11 h-6 rounded-full transition-colors ${battleSettings.visibility === 'public' ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-transform ${battleSettings.visibility === 'public' ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                     </button>
                                                 </div>
                                             </div>

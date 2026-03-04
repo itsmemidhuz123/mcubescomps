@@ -30,7 +30,9 @@ export async function POST(request) {
       userId, 
       roundCount = 5,
       format = 'ao5',
-      winsRequired = null 
+      winsRequired = null,
+      visibility = 'private',
+      allowSpectators = true
     } = body;
 
     if (!userId) {
@@ -93,11 +95,11 @@ export async function POST(request) {
       player2: null,
       status: 'waiting',
       winner: null,
-      visibility: 'private',
+      visibility: visibility,
       format: format,
       winsRequired: winsReq,
       scores: { player1: 0, player2: 0 },
-      allowSpectators: true,
+      allowSpectators: allowSpectators,
       spectators: [],
       startTime: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),

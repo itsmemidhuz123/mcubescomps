@@ -46,50 +46,34 @@ export async function POST(request) {
 
     const battleData = battleDoc.data();
 
-    if (battleData.visibility !== 'public' && battleData.visibility !== 'private') {
+    // Only creator can open the battle
+    if (battleData.createdBy !== userId) {
       return NextResponse.json(
-        { success: false, message: 'Battle not found' },
-        { status: 404 }
+        { success: false, message: 'Only the creator can open this battle' },
+        { status: 403 }
       );
     }
 
-    if (battleData.player2 && battleData.player2 !== null) {
+    if (battleData.status === 'live') {
       return NextResponse.json(
-        { success: false, message: 'Battle is already full' },
-        { status: 400 }
-      );
-    }
-
-    if (battleData.player1 === userId && battleData.player2 === null) {
-      return NextResponse.json(
-        { success: false, message: 'You cannot join your own battle' },
-        { status: 400 }
-      );
-    }
-
-    if (battleData.status !== 'waiting' && battleData.status !== 'countdown') {
-      return NextResponse.json(
-        { success: false, message: 'Battle is not accepting players' },
+        { success: false, message: 'Battle is already live' },
         { status: 400 }
       );
     }
 
     await battleRef.update({
-      player2: userId,
-      status: 'countdown',
-      startTime: admin.firestore.FieldValue.serverTimestamp(),
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'waiting',
+      visibility: 'public',
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Joined battle successfully',
-      status: 'countdown',
+      message: 'Battle opened successfully',
     });
   } catch (error) {
-    console.error('Join battle error:', error);
+    console.error('Open battle error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to join battle' },
+      { success: false, message: 'Failed to open battle' },
       { status: 500 }
     );
   }

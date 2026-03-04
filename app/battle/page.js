@@ -36,6 +36,7 @@ export default function BattlePage() {
     try {
       const q = query(
         collection(db, 'battles'),
+        where('visibility', '==', 'public'),
         where('status', '==', 'waiting'),
         orderBy('createdAt', 'desc'),
         limit(20)
@@ -46,9 +47,7 @@ export default function BattlePage() {
       
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (data.player1 !== user?.uid) {
-          battles.push({ id: doc.id, ...data });
-        }
+        battles.push({ id: doc.id, ...data });
       });
       
       setWaitingBattles(battles);
@@ -71,6 +70,8 @@ export default function BattlePage() {
           event: selectedEvent,
           userId: user.uid,
           roundCount: 5,
+          visibility: 'private',
+          allowSpectators: true,
         }),
       });
 
@@ -112,6 +113,32 @@ export default function BattlePage() {
     } catch (error) {
       console.error('Join battle error:', error);
       alert('Failed to join battle');
+    }
+  };
+
+  const openBattle = async (battleId) => {
+    if (!user) return;
+    
+    try {
+      const response = await fetch('/api/battle/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          battleId,
+          userId: user.uid,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        router.push(`/battle/${battleId}`);
+      } else {
+        alert(data.message || 'Failed to open battle');
+      }
+    } catch (error) {
+      console.error('Open battle error:', error);
+      alert('Failed to open battle');
     }
   };
 
@@ -240,13 +267,23 @@ export default function BattlePage() {
                             <Copy className="w-4 h-4" />
                           )}
                         </Button>
-                        <Button
-                          onClick={() => joinBattle(battle.id)}
-                          className="bg-green-600 hover:bg-green-500"
-                          size="sm"
-                        >
-                          Join
-                        </Button>
+                        {user?.uid === battle.createdBy ? (
+                          <Button
+                            onClick={() => openBattle(battle.id)}
+                            className="bg-blue-600 hover:bg-blue-500"
+                            size="sm"
+                          >
+                            Open
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => joinBattle(battle.id)}
+                            className="bg-green-600 hover:bg-green-500"
+                            size="sm"
+                          >
+                            Join
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
