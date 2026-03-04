@@ -85,13 +85,6 @@ export async function POST(request) {
       );
     }
 
-    if (battleData.visibility !== 'private') {
-      return NextResponse.json(
-        { success: false, message: 'Battle not found' },
-        { status: 404 }
-      );
-    }
-
     if (battleData.status === 'countdown') {
       return NextResponse.json(
         { success: false, message: 'Battle is starting - please wait' },
