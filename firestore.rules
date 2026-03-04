@@ -265,9 +265,13 @@ service cloud.firestore {
     
     // Battles collection - Private battles (link-only access)
     match /battles/{battleId} {
-      // Public battles can be read by anyone
-      // Private battles can only be read by participants, creator, and spectators
+      // Allow reading waiting battles (for open battles list)
+      // Allow reading public battles or battles where user is participant/creator
       allow read: if (
+        resource.data.status == 'waiting' ||
+        resource.data.status == 'expired' ||
+        resource.data.status == 'cancelled' ||
+        resource.data.status == 'completed' ||
         resource.data.visibility == 'public' || 
         resource.data.player1 == request.auth.uid ||
         resource.data.player2 == request.auth.uid ||
@@ -288,8 +292,7 @@ service cloud.firestore {
     
     // Battle solves subcollection - Only participants can write (spectators can read)
     match /battles/{battleId}/solves/{uid} {
-      allow read: if (
-        get(/databases/$(database)/documents/battles/$(battleId)).data.visibility == 'public' ||
+      allow read: if isSignedIn() && (
         get(/databases/$(database)/documents/battles/$(battleId)).data.player1 == request.auth.uid ||
         get(/databases/$(database)/documents/battles/$(battleId)).data.player2 == request.auth.uid ||
         get(/databases/$(database)/documents/battles/$(battleId)).data.createdBy == request.auth.uid ||
