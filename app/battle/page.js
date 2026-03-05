@@ -88,6 +88,7 @@ export default function BattlePage() {
       const q = query(
         collection(db, 'battles'),
         where('status', '==', 'waiting'),
+        where('visibility', '==', 'public'),
         orderBy('createdAt', 'desc'),
         limit(20)
       );

@@ -1115,10 +1115,13 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                  timerState === TIMER_STATES.RUNNING ? 'text-green-400' :
                  timerState === TIMER_STATES.STOPPED ? 'text-yellow-400' :
                  timerState === TIMER_STATES.ARMED ? 'text-yellow-400' :
+                 timerState === TIMER_STATES.INSPECTION ? 'text-red-400' :
                  'text-white'
                }`}>
                  {timerState === TIMER_STATES.STOPPED 
                    ? formatBattleTime(getFinalTime())
+                   : timerState === TIMER_STATES.INSPECTION
+                   ? formatBattleTime(inspectionTimeLeft)
                    : formatBattleTime(time)
                  }
                </div>
@@ -1127,7 +1130,11 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                  <div className="text-yellow-400 mt-2 font-medium">Press or Hold Space to Start</div>
                )}
                {timerState === TIMER_STATES.INSPECTION && (
-                 <div className="text-red-400 mt-2 font-medium">Stop during inspection or wait for time to run out</div>
+                 <div className="text-red-400 mt-2 font-medium">
+                   {inspectionTimeLeft > 0 
+                     ? `Inspection: ${Math.ceil(inspectionTimeLeft / 1000)}s - Press Space to Stop`
+                     : 'Inspection over! Solving now - Press Space to Stop'}
+                 </div>
                )}
                {timerState === TIMER_STATES.RUNNING && (
                  <div className="text-green-400 mt-2 font-medium">Press Space to Stop Timer</div>
