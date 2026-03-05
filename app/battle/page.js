@@ -9,8 +9,9 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
-import { Loader2, Sword, Users, Clock, ArrowLeft, Copy, Check } from 'lucide-react';
-import { BATTLE_EVENTS } from '../../lib/battleUtils';
+import { Loader2, Sword, Users, Clock, ArrowLeft, Copy, Check, Zap, Eye, X } from 'lucide-react';
+import { BATTLE_EVENTS, TEAM_SIZES } from '../../lib/battleUtils';
+import { useMatchmaking } from '../../hooks/useMatchmaking';
 
 export default function BattlePage() {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -18,12 +19,22 @@ export default function BattlePage() {
   
   const [selectedEvent, setSelectedEvent] = useState('333');
   const [selectedFormat, setSelectedFormat] = useState('ao5');
+  const [selectedTeamSize, setSelectedTeamSize] = useState(1);
   const [selectedVisibility, setSelectedVisibility] = useState('public');
   const [battleName, setBattleName] = useState('');
   const [creating, setCreating] = useState(false);
   const [waitingBattles, setWaitingBattles] = useState([]);
+  const [myBattles, setMyBattles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  const { status: matchmakingStatus, battleId: matchBattleId, error: matchmakingError, startMatchmaking, leaveQueue } = useMatchmaking(user);
+
+  useEffect(() => {
+    if (matchmakingStatus === 'matched' && matchBattleId) {
+      router.push(`/battle/${matchBattleId}`);
+    }
+  }, [matchmakingStatus, matchBattleId, router]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -33,7 +44,44 @@ export default function BattlePage() {
 
   useEffect(() => {
     loadWaitingBattles();
+    loadMyBattles();
   }, []);
+
+  const loadMyBattles = async () => {
+    if (!user) return;
+
+    try {
+      const q = query(
+        collection(db, 'battles'),
+        where('createdBy', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+
+      const snapshot = await getDocs(q);
+      const battles = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      
+      const oneHourMs = 60 * 60 * 1000;
+      const now = Date.now();
+      
+      const filteredBattles = battles.filter((battle) => {
+        if (battle.status === 'expired') {
+          return false;
+        }
+        if (battle.status === 'waiting') {
+          const lastActivity = battle.lastActivityAt || battle.createdAt;
+          const lastActivityTime = lastActivity?.toDate?.() || new Date(lastActivity?._seconds * 1000);
+          const battleAge = now - lastActivityTime.getTime();
+          return battleAge <= oneHourMs;
+        }
+        return true;
+      });
+      
+      setMyBattles(filteredBattles);
+    } catch (error) {
+      console.error('Error loading my battles:', error);
+    }
+  };
 
   const loadWaitingBattles = async () => {
     try {
@@ -85,6 +133,8 @@ export default function BattlePage() {
           allowSpectators: true,
           battleName: battleName,
           format: selectedFormat,
+          battleType: 'room',
+          teamSize: selectedTeamSize,
         }),
       });
 
@@ -155,6 +205,10 @@ export default function BattlePage() {
     }
   };
 
+  const watchBattle = (battleId) => {
+    router.push(`/battle/${battleId}?watch=true`);
+  };
+
   const copyBattleLink = (battleId) => {
     const link = `${window.location.origin}/battle/${battleId}`;
     navigator.clipboard.writeText(link);
@@ -183,11 +237,58 @@ export default function BattlePage() {
           </Button>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Sword className="w-6 h-6 text-red-500" />
-            1v1 Battle
+            Battle Arena
           </h1>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        {/* QUICK BATTLE SECTION */}
+        <Card className="bg-zinc-900 border-zinc-800 mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-500" />
+              Quick Battle
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {matchmakingStatus === 'searching' || matchmakingStatus === 'waiting' ? (
+              <div className="text-center py-4">
+                <Loader2 className="w-8 h-8 animate-spin text-yellow-500 mx-auto mb-4" />
+                <p className="text-lg mb-2">
+                  {matchmakingStatus === 'searching' ? 'Starting matchmaking...' : 'Searching for opponent...'}
+                </p>
+                <p className="text-sm text-zinc-400 mb-4">3x3 • Best of 3</p>
+                <Button
+                  onClick={leaveQueue}
+                  variant="outline"
+                  className="mx-auto"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-zinc-400 mb-4">Find an opponent instantly!</p>
+                <p className="text-sm text-zinc-500 mb-4">3x3 • Best of 3 • 1v1</p>
+                <Button
+                  onClick={startMatchmaking}
+                  disabled={matchmakingStatus === 'timeout'}
+                  className="bg-yellow-600 hover:bg-yellow-500"
+                  size="lg"
+                >
+                  <Zap className="w-5 h-5 mr-2" />
+                  Quick Battle
+                </Button>
+                {matchmakingError && (
+                  <p className="text-red-400 mt-2 text-sm">{matchmakingError}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* CREATE BATTLE SECTION */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -208,48 +309,63 @@ export default function BattlePage() {
                 />
               </div>
 
-               <div>
-                 <label className="text-sm text-zinc-400 mb-2 block">Event</label>
-                 <select
-                   value={selectedEvent}
-                   onChange={(e) => setSelectedEvent(e.target.value)}
-                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
-                 >
-                   {BATTLE_EVENTS.map((event) => (
-                     <option key={event.id} value={event.id}>
-                       {event.icon} {event.name}
-                     </option>
-                    ))}
-                 </select>
-               </div>
+              <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Event</label>
+                <select
+                  value={selectedEvent}
+                  onChange={(e) => setSelectedEvent(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                >
+                  {BATTLE_EVENTS.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.icon} {event.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-               <div>
-                 <label className="text-sm text-zinc-400 mb-2 block">Format</label>
-                 <select
-                   value={selectedFormat}
-                   onChange={(e) => setSelectedFormat(e.target.value)}
-                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
-                 >
-                   <option value="ao5">Ao5 (Best of 5 Average)</option>
-                   <option value="firstTo3">First to 3 Wins</option>
-                   <option value="firstTo5">First to 5 Wins</option>
-                   <option value="single">Single Solve</option>
-                 </select>
-               </div>
+              <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Format</label>
+                <select
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                >
+                  <option value="ao5">Ao5 (Best of 5 Average)</option>
+                  <option value="firstTo3">First to 3 Wins</option>
+                  <option value="firstTo5">First to 5 Wins</option>
+                  <option value="single">Single Solve</option>
+                </select>
+              </div>
 
-               <div>
-                 <label className="text-sm text-zinc-400 mb-2 block">Visibility</label>
-                 <select
-                   value={selectedVisibility}
-                   onChange={(e) => setSelectedVisibility(e.target.value)}
-                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
-                 >
-                   <option value="public">Public (shown in Open Battles)</option>
-                   <option value="private">Private (link-only)</option>
-                 </select>
-               </div>
+              <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Team Size</label>
+                <select
+                  value={selectedTeamSize}
+                  onChange={(e) => setSelectedTeamSize(parseInt(e.target.value))}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                >
+                  {TEAM_SIZES.map((size) => (
+                    <option key={size.id} value={size.id}>
+                      {size.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-               <Button
+              <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Visibility</label>
+                <select
+                  value={selectedVisibility}
+                  onChange={(e) => setSelectedVisibility(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                >
+                  <option value="public">Public (shown in Open Battles)</option>
+                  <option value="private">Private (link-only)</option>
+                </select>
+              </div>
+
+              <Button
                 onClick={createBattle}
                 disabled={creating}
                 className="w-full bg-red-600 hover:bg-red-500"
@@ -263,13 +379,14 @@ export default function BattlePage() {
                 ) : (
                   <>
                     <Sword className="w-4 h-4 mr-2" />
-                    Create 1v1 Battle
+                    Create {selectedTeamSize}v{selectedTeamSize} Battle
                   </>
                 )}
               </Button>
             </CardContent>
           </Card>
 
+          {/* OPEN BATTLES SECTION */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -297,7 +414,7 @@ export default function BattlePage() {
                     >
                       <div>
                         <div className="font-medium">
-                          {battle.battleName || 'Battle'}
+                          {battle.battleName || 'Battle'} • {battle.teamSize || 1}v{battle.teamSize || 1}
                         </div>
                         <div className="text-xs text-zinc-400 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -317,6 +434,13 @@ export default function BattlePage() {
                           ) : (
                             <Copy className="w-4 h-4" />
                           )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => watchBattle(battle.id)}
+                        >
+                          <Eye className="w-4 h-4" />
                         </Button>
                         {user?.uid === battle.createdBy ? (
                           <Button
@@ -343,6 +467,87 @@ export default function BattlePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* MY BATTLES SECTION */}
+        <Card className="bg-zinc-900 border-zinc-800 mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sword className="w-5 h-5" />
+              My Battles
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!user ? (
+              <div className="text-center py-4 text-zinc-500">
+                <p>Sign in to see your battles</p>
+              </div>
+            ) : myBattles.length === 0 ? (
+              <div className="text-center py-8 text-zinc-500">
+                <Sword className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>No battles created</p>
+                <p className="text-sm">Create a battle to get started!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {myBattles.map((battle) => (
+                  <div
+                    key={battle.id}
+                    className="flex items-center justify-between bg-zinc-800 rounded-lg p-3"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {battle.battleName || 'Battle'} • {battle.teamSize || 1}v{battle.teamSize || 1}
+                      </div>
+                      <div className="text-xs text-zinc-400 flex items-center gap-2">
+                        <Badge variant={battle.status === 'live' ? 'default' : 'secondary'}>
+                          {battle.status}
+                        </Badge>
+                        <span>{battle.event}</span>
+                        <span>{battle.format}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => copyBattleLink(battle.id)}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                      {battle.status === 'waiting' && (
+                        <>
+                          <Button
+                            onClick={() => router.push(`/battle/${battle.id}`)}
+                            className="bg-green-600 hover:bg-green-500"
+                            size="sm"
+                          >
+                            Rejoin
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openBattle(battle.id)}
+                          >
+                            Open
+                          </Button>
+                        </>
+                      )}
+                      {battle.status === 'completed' && (
+                        <Button
+                          onClick={() => router.push(`/battle/result/${battle.id}`)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Results
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

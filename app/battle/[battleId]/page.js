@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../../contexts/AuthContext';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -17,8 +17,11 @@ import { TIMER_STATES } from '../../../hooks/useTimerEngine';
 
 export default function BattleRoomPage() {
   const { battleId } = useParams();
+  const searchParams = useSearchParams();
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
+  
+  const watchMode = searchParams.get('watch') === 'true';
   
   const [battleData, setBattleData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,31 @@ export default function BattleRoomPage() {
       router.push('/auth/login?redirect=/battle/' + battleId);
     }
   }, [authLoading, user, router, battleId]);
+
+  // Auto-join as spectator when visiting with ?watch=true
+  useEffect(() => {
+    if (!battle || !user || !watchMode) return;
+    
+    const spectators = battle.spectators || [];
+    if (!spectators.includes(user.uid)) {
+      const battleRef = doc(db, 'battles', battleId);
+      updateDoc(battleRef, {
+        spectators: arrayUnion(user.uid)
+      }).catch(console.error);
+    }
+  }, [battle, user, watchMode, battleId]);
+
+  // Remove from spectators on unmount
+  useEffect(() => {
+    return () => {
+      if (user && battleId && watchMode) {
+        const battleRef = doc(db, 'battles', battleId);
+        updateDoc(battleRef, {
+          spectators: arrayRemove ? arrayRemove(user.uid) : []
+        }).catch(console.error);
+      }
+    };
+  }, [user, battleId, watchMode]);
 
   useEffect(() => {
     if (battle && user && !introDismissed) {
@@ -344,7 +372,9 @@ export default function BattleRoomPage() {
   const isPlayer2 = battle?.player2 === user?.uid;
   const isCreator = battle?.createdBy === user?.uid;
   const isParticipant = isPlayer1 || isPlayer2;
-  const isSpectator = !isParticipant && battle?.allowSpectators === true;
+  const isSpectator = watchMode || (!isParticipant && battle?.allowSpectators === true);
+
+  const spectatorCount = battle?.spectators?.length || 0;
 
   const mySolves = getMySolves();
   const opponentSolves = getOpponentSolves();
@@ -812,6 +842,12 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {spectatorCount > 0 && (
+              <div className="flex items-center gap-1 text-sm text-zinc-400">
+                <Eye className="w-4 h-4" />
+                <span>{spectatorCount} watching</span>
+              </div>
+            )}
             {battle.scores && (
               <div className="flex items-center gap-2 bg-zinc-800 px-3 py-1 rounded-lg">
                 <span className="text-green-400 font-bold">{battle.scores.player1 || 0}</span>

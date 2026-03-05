@@ -33,7 +33,9 @@ export async function POST(request) {
       winsRequired = null,
       visibility = 'private',
       allowSpectators = true,
-      battleName = ''
+      battleName = '',
+      battleType = 'room',
+      teamSize = 1
     } = body;
 
     if (!userId) {
@@ -54,6 +56,14 @@ export async function POST(request) {
     if (!validFormats.includes(format)) {
       return NextResponse.json(
         { success: false, message: 'Invalid battle format' },
+        { status: 400 }
+      );
+    }
+
+    const validTeamSizes = [1, 2, 4, 8];
+    if (!validTeamSizes.includes(teamSize)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid team size' },
         { status: 400 }
       );
     }
@@ -88,6 +98,7 @@ export async function POST(request) {
     const battleData = {
       battleId: '',
       battleName: battleName || 'Battle vs Opponent',
+      battleType: battleType,
       event: scrambleData.event,
       scrambleId: scrambleData.scrambleId,
       scrambles: scrambleData.scrambles,
@@ -112,6 +123,10 @@ export async function POST(request) {
       startedAt: null,
       completedAt: null,
       roundCount: roundCount,
+      teamSize: teamSize,
+      teamA: teamSize > 1 ? [userId] : [userId],
+      teamB: [],
+      players: [userId],
     };
 
     const battleRef = await db.collection('battles').add(battleData);

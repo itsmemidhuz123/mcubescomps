@@ -263,10 +263,16 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
     
+    // Matchmaking Queue - Users can read all and manage their own entry
+    match /matchmakingQueue/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+    
     // Battles collection - Private battles (link-only access)
     match /battles/{battleId} {
       // Allow reading waiting battles (for open battles list)
-      // Allow reading public battles or battles where user is participant/creator
+      // Allow reading public battles or battles where user is participant/creator/spectator
       allow read: if (
         resource.data.status == 'waiting' ||
         resource.data.status == 'expired' ||
