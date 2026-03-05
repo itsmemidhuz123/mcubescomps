@@ -73,6 +73,33 @@ export default function BattleRoomPage() {
     }
   }, [authLoading, user, router, battleId]);
 
+  // Mark player as joined when they visit the battle
+  useEffect(() => {
+    if (!battle || !user || battle.status !== 'waiting') return;
+    
+    const isPlayer1 = battle.player1 === user.uid;
+    const isPlayer2 = battle.player2 === user.uid;
+    
+    if (!isPlayer1 && !isPlayer2) return;
+    
+    // Check if this player has already joined
+    const hasJoined = isPlayer1 ? battle.creatorJoined : battle.opponentJoined;
+    
+    if (!hasJoined) {
+      const battleRef = doc(db, 'battles', battleId);
+      const updateData = isPlayer1 
+        ? { creatorJoined: true }
+        : { opponentJoined: true };
+      
+      // If this is a quick match (battleType: matchmaking), also update status to countdown
+      if (battle.battleType === 'matchmaking') {
+        updateData.status = 'waiting';
+      }
+      
+      updateDoc(battleRef, updateData).catch(console.error);
+    }
+  }, [battle, user, battleId]);
+
   // Auto-join as spectator when visiting with ?watch=true
   useEffect(() => {
     if (!battle || !user || !watchMode) return;
@@ -798,6 +825,39 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
     );
   }
 
+  // Quick Match waiting screen - when battle is waiting for opponent to join
+  const isQuickMatch = battle.battleType === 'matchmaking';
+  const hasBothPlayers = battle.creatorJoined && battle.opponentJoined;
+  
+  if (battle.status === BATTLE_STATES.WAITING && isQuickMatch && !hasBothPlayers) {
+    const isWaitingForOpponent = (isPlayer1 && !battle.opponentJoined) || (isPlayer2 && !battle.creatorJoined);
+    
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
+          <CardContent className="p-8 text-center">
+            <RefreshCw className="w-12 h-12 mx-auto mb-4 text-yellow-500 animate-spin" />
+            <h2 className="text-xl font-bold mb-2">
+              {isWaitingForOpponent ? 'Waiting for Opponent...' : 'Opponent Joined!'}
+            </h2>
+            <p className="text-zinc-400 mb-4">
+              {isWaitingForOpponent 
+                ? 'Your opponent is connecting...' 
+                : 'Battle starting soon...'}
+            </p>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className={`w-3 h-3 rounded-full ${battle.creatorJoined ? 'bg-green-500' : 'bg-zinc-500'}`} />
+              <span className="text-sm text-zinc-400">Player 1</span>
+              <span className="text-zinc-600">•</span>
+              <div className={`w-3 h-3 rounded-full ${battle.opponentJoined ? 'bg-green-500' : 'bg-zinc-500'}`} />
+              <span className="text-sm text-zinc-400">Player 2</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (battle.status === BATTLE_STATES.WAITING && isCreator) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
@@ -1127,7 +1187,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                </div>
 
                {timerState === TIMER_STATES.ARMED && (
-                 <div className="text-yellow-400 mt-2 font-medium">Press or Hold Space to Start</div>
+                  <div className="text-yellow-400 mt-2 font-medium">Press Space or Tap to Start</div>
                )}
                {timerState === TIMER_STATES.INSPECTION && (
                  <div className="text-red-400 mt-2 font-medium">
@@ -1158,17 +1218,16 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                        onTouchEnd={handleTouchEnd}
                        disabled={timerState === TIMER_STATES.STOPPED || submitting}
                        className={`w-48 h-16 text-xl touch-manipulation ${
-                         timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED
+                         timerState === TIMER_STATES.IDLE
                            ? 'bg-green-600 hover:bg-green-500'
                            : timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION
                            ? 'bg-red-600 hover:bg-red-500'
                            : 'bg-zinc-700'
                        }`}
                      >
-                       {timerState === TIMER_STATES.IDLE && 'Hold to Start'}
-                       {timerState === TIMER_STATES.ARMED && 'Release'}
-                       {timerState === TIMER_STATES.INSPECTION && 'Stop'}
-                       {timerState === TIMER_STATES.RUNNING && 'Stop'}
+                       {timerState === TIMER_STATES.IDLE && 'Tap to Start'}
+                       {timerState === TIMER_STATES.INSPECTION && 'Tap to Solve'}
+                       {timerState === TIMER_STATES.RUNNING && 'Tap to Stop'}
                        {timerState === TIMER_STATES.STOPPED && 'Solved!'}
                      </Button>
 
@@ -1226,22 +1285,8 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                               Submitting...
                             </>
                           ) : (
-                            <>
-                              Confirm & Submit
-                            </>
+                            'Submit Solve'
                           )}
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setPenalty('none');
-                            reset();
-                          }}
-                          disabled={submitting}
-                          className="w-full"
-                        >
-                          Resolve Again
                         </Button>
                       </div>
                     )}

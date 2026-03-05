@@ -53,9 +53,6 @@ export async function POST(request) {
     });
 
     if (opponent) {
-      await queueRef.doc(opponent.userId).delete();
-      await queueRef.doc(userId).delete();
-
       let scrambleData;
       try {
         scrambleData = await generateScrambleForBattle({
@@ -109,21 +106,29 @@ export async function POST(request) {
       const battleId = battleRef.id;
       await battleRef.update({ battleId });
 
-      // Write to matches subcollection for both users
-      // This is how clients discover their battle
-      await db.collection('matchmakingQueue').doc(userId).collection('matches').doc(battleId).set({
+      // Write to matches collection for both users (separate from queue to avoid deletion issues)
+      // This is how clients discover their battle in real-time
+      await db.collection('matches').doc(battleId).set({
         battleId: battleId,
         createdAt: now,
-        opponentId: opponent.userId,
-        opponentName: opponent.username,
+        player1: userId,
+        player2: opponent.userId,
+        player1Name: username || 'Player',
+        player2Name: opponent.username,
       });
 
-      await db.collection('matchmakingQueue').doc(opponent.userId).collection('matches').doc(battleId).set({
+      // Also update the queue entries to mark them as matched (but don't delete yet)
+      await queueRef.doc(userId).update({
+        matched: true,
         battleId: battleId,
-        createdAt: now,
-        opponentId: userId,
-        opponentName: username || 'Player',
-      });
+        matchedAt: now,
+      }).catch(() => {});
+
+      await queueRef.doc(opponent.userId).update({
+        matched: true,
+        battleId: battleId,
+        matchedAt: now,
+      }).catch(() => {});
 
       return NextResponse.json({
         success: true,

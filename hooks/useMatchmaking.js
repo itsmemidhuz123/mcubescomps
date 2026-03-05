@@ -58,20 +58,29 @@ export function useMatchmaking(user) {
       if (data.status === 'waiting') {
         setStatus('waiting');
 
-        // Listen to matches subcollection for this user
-        const matchesRef = collection(db, 'matchmakingQueue', user.uid, 'matches');
+        // Listen to matches collection for this user
+        const matchesRef = collection(db, 'matches');
         const q = query(matchesRef);
 
         unsubscribeRef.current = onSnapshot(q, (snapshot) => {
           snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
+            if (change.type === 'added' || change.type === 'modified') {
               const matchData = change.doc.data();
-              if (matchData.battleId) {
+              // Check if this match involves this user
+              if (matchData.battleId && 
+                  (matchData.player1 === user.uid || matchData.player2 === user.uid)) {
                 setBattleId(matchData.battleId);
                 setStatus('matched');
                 
-                // Clean up the match document after getting battleId
+                // Clean up: delete the match doc and remove from queue
                 deleteDoc(change.doc.ref).catch(console.error);
+                
+                // Also delete from queue
+                fetch('/api/battle/queue', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: user.uid }),
+                }).catch(console.error);
               }
             }
           });
