@@ -16,6 +16,7 @@ export function useBattleTimer(settings = {}) {
   const [penalty, setPenalty] = useState('none');
 
   const startTimeRef = useRef(null);
+  const inspectionStartTimeRef = useRef(null);
   const inspectionIntervalRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const solvedTimeRef = useRef(null);
@@ -23,6 +24,12 @@ export function useBattleTimer(settings = {}) {
   const arm = useCallback(() => {
     if (timerState === TIMER_STATES.IDLE) {
       setTimerState(TIMER_STATES.ARMED);
+    }
+  }, [timerState]);
+
+  const disarm = useCallback(() => {
+    if (timerState === TIMER_STATES.ARMED) {
+      setTimerState(TIMER_STATES.IDLE);
     }
   }, [timerState]);
 
@@ -34,20 +41,35 @@ export function useBattleTimer(settings = {}) {
 
     setTimerState(TIMER_STATES.INSPECTION);
     setInspectionTimeLeft(inspectionTime);
+    inspectionStartTimeRef.current = performance.now();
 
     inspectionIntervalRef.current = setInterval(() => {
-      setInspectionTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(inspectionIntervalRef.current);
-          startTimer();
-          return 0;
-        }
-        return prev - 1000;
-      });
-    }, 1000);
+      const elapsed = performance.now() - inspectionStartTimeRef.current;
+      const remaining = Math.max(inspectionTime - elapsed, -3000); // Allow up to -3 seconds
+      
+      setInspectionTimeLeft(remaining);
+
+      if (remaining <= -2000) {
+        clearInterval(inspectionIntervalRef.current);
+        setPenalty('DNF');
+        setTimerState(TIMER_STATES.STOPPED);
+        setTime(0);
+        solvedTimeRef.current = 0;
+      } else if (remaining <= 0) {
+        // Timer goes negative during inspection
+        setTime(remaining);
+      }
+      
+      if (remaining <= 0 && !inspectionIntervalRef.current) {
+        startTimer();
+      }
+    }, 50);
   }, [inspectionEnabled, inspectionTime]);
 
   const startTimer = useCallback(() => {
+    clearInterval(inspectionIntervalRef.current);
+    inspectionIntervalRef.current = null;
+    
     setTimerState(TIMER_STATES.RUNNING);
     setTime(0);
     startTimeRef.current = performance.now();
@@ -59,16 +81,40 @@ export function useBattleTimer(settings = {}) {
   }, []);
 
   const stop = useCallback(() => {
-    if (timerState !== TIMER_STATES.RUNNING) return;
+    if (timerState !== TIMER_STATES.RUNNING && timerState !== TIMER_STATES.INSPECTION) return;
 
     clearInterval(timerIntervalRef.current);
+    clearInterval(inspectionIntervalRef.current);
     timerIntervalRef.current = null;
+    inspectionIntervalRef.current = null;
 
     const finalTime = performance.now() - startTimeRef.current;
     solvedTimeRef.current = finalTime;
-    setTime(finalTime);
+    
+    // Check if inspection went past 0
+    if (inspectionStartTimeRef.current !== null && timerState === TIMER_STATES.INSPECTION) {
+      const inspectionElapsed = performance.now() - inspectionStartTimeRef.current;
+      
+      if (inspectionElapsed > inspectionTime + 2000) {
+        // More than 2 seconds over inspection = DNF
+        setPenalty('DNF');
+        solvedTimeRef.current = 0;
+        setTime(0);
+      } else if (inspectionElapsed > inspectionTime) {
+        // 0-2 seconds over = +2
+        setPenalty('+2');
+        solvedTimeRef.current = inspectionElapsed;
+        setTime(inspectionElapsed);
+      } else {
+        setTime(finalTime);
+      }
+    } else {
+      setTime(finalTime);
+    }
+    
     setTimerState(TIMER_STATES.STOPPED);
-  }, [timerState]);
+    inspectionStartTimeRef.current = null;
+  }, [timerState, inspectionTime]);
 
   const reset = useCallback(() => {
     clearInterval(timerIntervalRef.current);
@@ -81,6 +127,7 @@ export function useBattleTimer(settings = {}) {
     setInspectionTimeLeft(inspectionTime);
     setPenalty('none');
     startTimeRef.current = null;
+    inspectionStartTimeRef.current = null;
     solvedTimeRef.current = null;
   }, [inspectionTime]);
 
@@ -92,6 +139,7 @@ export function useBattleTimer(settings = {}) {
       case TIMER_STATES.ARMED:
         startInspection();
         break;
+      case TIMER_STATES.INSPECTION:
       case TIMER_STATES.RUNNING:
         stop();
         break;
@@ -102,6 +150,25 @@ export function useBattleTimer(settings = {}) {
         break;
     }
   }, [timerState, arm, startInspection, stop, reset]);
+
+  // Touch handlers for mobile
+  const handleTouchStart = useCallback((e) => {
+    e.preventDefault();
+    if (timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED) {
+      arm();
+    }
+  }, [timerState, arm]);
+
+  const handleTouchEnd = useCallback((e) => {
+    e.preventDefault();
+    if (timerState === TIMER_STATES.ARMED) {
+      startInspection();
+    } else if (timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION) {
+      stop();
+    } else if (timerState === TIMER_STATES.STOPPED) {
+      reset();
+    }
+  }, [timerState, startInspection, stop, reset]);
 
   const getFinalTime = useCallback(() => {
     if (solvedTimeRef.current === null) return null;
@@ -152,6 +219,8 @@ export function useBattleTimer(settings = {}) {
     penalty,
     setPenalty,
     handleAction,
+    handleTouchStart,
+    handleTouchEnd,
     reset,
     getFinalTime,
     getPenaltyValue,

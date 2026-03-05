@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { MATCHMAKING_TIMEOUT_MS } from '@/lib/battleUtils';
 
@@ -58,17 +58,26 @@ export function useMatchmaking(user) {
       if (data.status === 'waiting') {
         setStatus('waiting');
 
-        unsubscribeRef.current = onSnapshot(
-          doc(db, 'matchmakingQueue', user.uid),
-          (docSnap) => {
-            if (!docSnap.exists()) {
-              setStatus('matched');
+        // Listen to matches subcollection for this user
+        const matchesRef = collection(db, 'matchmakingQueue', user.uid, 'matches');
+        const q = query(matchesRef);
+
+        unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const matchData = change.doc.data();
+              if (matchData.battleId) {
+                setBattleId(matchData.battleId);
+                setStatus('matched');
+                
+                // Clean up the match document after getting battleId
+                deleteDoc(change.doc.ref).catch(console.error);
+              }
             }
-          },
-          (err) => {
-            console.error('Queue listener error:', err);
-          }
-        );
+          });
+        }, (err) => {
+          console.error('Match listener error:', err);
+        });
 
         timeoutRef.current = setTimeout(async () => {
           if (status === 'waiting') {

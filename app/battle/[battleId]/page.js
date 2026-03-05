@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../../contexts/AuthContext';
 import { doc, getDoc, onSnapshot, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2 } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds';
@@ -60,10 +60,12 @@ export default function BattleRoomPage() {
     penalty,
     setPenalty,
     handleAction,
+    handleTouchStart,
+    handleTouchEnd,
     reset,
     submitCurrentSolve,
     getFinalTime,
-  } = useBattleTimer({ inspectionEnabled: false });
+  } = useBattleTimer({ inspectionEnabled: true });
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -373,6 +375,7 @@ export default function BattleRoomPage() {
   const isCreator = battle?.createdBy === user?.uid;
   const isParticipant = isPlayer1 || isPlayer2;
   const isSpectator = watchMode || (!isParticipant && battle?.allowSpectators === true);
+  const isTeamBattle = battle?.teamSize && battle?.teamSize > 1;
 
   const spectatorCount = battle?.spectators?.length || 0;
 
@@ -381,6 +384,66 @@ export default function BattleRoomPage() {
 
   const currentScramble = getCurrentScramble();
   const currentScrambleIndex = battle?.currentScrambleIndex || 0;
+
+  const getTeamMemberName = (playerId) => {
+    if (!playerId) return 'Player ?';
+    if (playerId === user?.uid) return userProfile?.displayName || 'You';
+    if (battle?.player1 === playerId) return battle?.player1Name || 'Player 1';
+    if (battle?.player2 === playerId) return battle?.player2Name || 'Player 2';
+    if (battle?.teamA?.includes(playerId)) return battle?.teamA?.find(p => p === playerId)?.name || `Team A ${battle?.teamA?.indexOf(playerId) + 1}`;
+    if (battle?.teamB?.includes(playerId)) return battle?.teamB?.find(p => p === playerId)?.name || `Team B ${battle?.teamB?.indexOf(playerId) + 1}`;
+    return 'Player ?';
+  };
+
+  const getMyTeam = () => {
+    if (!isTeamBattle) return null;
+    if (isPlayer1) return 'teamA';
+    if (isPlayer2) return 'teamB';
+    return null;
+  };
+
+  const getMyTeamName = () => {
+    const myTeam = getMyTeam();
+    if (myTeam === 'teamA') return 'Team A';
+    if (myTeam === 'teamB') return 'Team B';
+    return '';
+  };
+
+  const getOpponentTeamName = () => {
+    if (!isTeamBattle) return '';
+    const myTeam = getMyTeam();
+    if (myTeam === 'teamA') return 'Team B';
+    if (myTeam === 'teamB') return 'Team A';
+    return '';
+  };
+
+  const getTeamMembers = (teamKey) => {
+    if (!isTeamBattle) return [];
+    const team = battle?.[teamKey];
+    return team?.map(uid => {
+      let name = 'Player ?';
+      let nameOverride = null;
+      
+      if (uid === user?.uid) {
+        name = userProfile?.displayName || 'You';
+      } else if (battle?.player1 === uid) {
+        name = battle?.player1Name || 'Player 1';
+      } else if (battle?.player2 === uid) {
+        name = battle?.player2Name || 'Player 2';
+      } else if (uid?.name) {
+        name = uid.name;
+      } else if (uid?.displayName) {
+        name = uid.displayName;
+      }
+      
+      return { uid, name, nameOverride };
+    }) || [];
+  };
+
+  const getTeamSolvesForMember = (playerId) => {
+    const allSolves = mySolves.concat(opponentSolves);
+    return allSolves.filter(solve => solve.uid === playerId);
+  };
 
   if (authLoading || battleLoading || !battle) {
     return (
@@ -393,7 +456,7 @@ export default function BattleRoomPage() {
   if (showIntro) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-2xl w-full">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8">
             <div className="flex items-center gap-3 mb-6">
               <Volume2 className="w-8 h-8 text-red-500" />
@@ -460,7 +523,7 @@ export default function BattleRoomPage() {
   if (!isParticipant && !isSpectator) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             <Eye className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
             <h2 className="text-xl font-bold mb-2">Visitor Mode</h2>
@@ -489,7 +552,7 @@ export default function BattleRoomPage() {
   if (isSpectator && battle.status === 'waiting') {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             <Eye className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
             <h2 className="text-xl font-bold mb-2">Visitor Mode</h2>
@@ -522,26 +585,7 @@ export default function BattleRoomPage() {
   if (battle.status === 'expired') {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
-          <CardContent className="p-8 text-center">
-            <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
-            <h2 className="text-xl font-bold mb-2">Battle Expired</h2>
-            <p className="text-zinc-400 mb-4">
-              This battle has expired due to inactivity.
-            </p>
-            <Button onClick={() => router.push('/battle')}>
-              Back to Battles
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (battle.status === 'expired') {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
             <h2 className="text-xl font-bold mb-2">Battle Expired</h2>
@@ -621,7 +665,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
 
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-2xl w-full">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             {isTie ? (
               <>
@@ -743,7 +787,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
   if (battle.status === BATTLE_STATES.WAITING && isCreator) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             <RefreshCw className="w-12 h-12 mx-auto mb-4 text-zinc-400 animate-spin" />
             <h2 className="text-xl font-bold mb-2">Battle Created</h2>
@@ -781,7 +825,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
   if (battle.status === BATTLE_STATES.WAITING && isPlayer2) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 max-w-md">
+        <Card className="bg-zinc-900 border-zinc-800 w-full">
           <CardContent className="p-8 text-center">
             <RefreshCw className="w-12 h-12 mx-auto mb-4 text-zinc-400 animate-spin" />
             <h2 className="text-xl font-bold mb-2">Waiting for Creator</h2>
@@ -861,76 +905,188 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-zinc-400 mb-1">You</div>
-              <div className="text-lg font-bold">{userProfile?.displayName || 'Player'}</div>
-              <div className="text-2xl font-mono mt-2 text-green-400">
-                {formatBattleTime(myAo5()) || '--'}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                Best: {formatBattleTime(myBestSingle()) || '--'}
-              </div>
-              <div className="text-sm mt-2">
-                Solves: {mySolves.length}/{TOTAL_SCRAMBLES}
-              </div>
-            </CardContent>
-          </Card>
+         <div className="grid md:grid-cols-3 gap-4 mb-6">
+           {isTeamBattle ? (
+             <>
+               <Card className="bg-zinc-900 border-zinc-800">
+                 <CardContent className="p-4">
+                   <div className="text-sm text-zinc-400 mb-2">{getMyTeamName()}</div>
+                   {getTeamMembers('teamA').map((member, idx) => (
+                     <div key={idx} className="flex items-center gap-2 mb-2">
+                       {member.nameOverride?.photoURL && (
+                         <img 
+                           src={member.nameOverride.photoURL} 
+                           alt={member.name}
+                           className="w-8 h-8 rounded-full"
+                         />
+                       )}
+                       <div className="flex-1">
+                         <div className="text-sm font-medium">{member.name}</div>
+                         <div className="text-xs text-zinc-500">
+                           {getTeamSolvesForMember(member.uid).length}/{TOTAL_SCRAMBLES}
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </CardContent>
+               </Card>
 
-          <Card className="bg-zinc-900 border-zinc-800 md:col-span-1">
-            <CardContent className="p-4 flex flex-col items-center justify-center">
-              <div className="text-6xl font-mono font-bold my-4">
-                {currentScrambleIndex + 1}/{TOTAL_SCRAMBLES}
-              </div>
-              <div className="text-xs text-zinc-400">
-                Current Scramble
-              </div>
-            </CardContent>
-          </Card>
+               <Card className="bg-zinc-900 border-zinc-800 md:col-span-1">
+                 <CardContent className="p-4 flex flex-col items-center justify-center">
+                   <div className="text-6xl font-mono font-bold my-4">
+                     {currentScrambleIndex + 1}/{TOTAL_SCRAMBLES}
+                   </div>
+                   <div className="text-xs text-zinc-400">
+                     Current Scramble
+                   </div>
+                 </CardContent>
+               </Card>
 
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-zinc-400 mb-1">Opponent</div>
-              <div className="text-lg font-bold">Player {isPlayer1 ? '2' : '1'}</div>
-              <div className="text-2xl font-mono mt-2 text-blue-400">
-                {formatBattleTime(opponentAo5()) || '--'}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                Best: {formatBattleTime(opponentBestSingle()) || '--'}
-              </div>
-              <div className="text-sm mt-2">
-                Solves: {opponentSolves.length}/{TOTAL_SCRAMBLES}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+               <Card className="bg-zinc-900 border-zinc-800">
+                 <CardContent className="p-4">
+                   <div className="text-sm text-zinc-400 mb-2">{getOpponentTeamName()}</div>
+                   {getTeamMembers('teamB').map((member, idx) => (
+                     <div key={idx} className="flex items-center gap-2 mb-2">
+                       {member.nameOverride?.photoURL && (
+                         <img 
+                           src={member.nameOverride.photoURL} 
+                           alt={member.name}
+                           className="w-8 h-8 rounded-full"
+                         />
+                       )}
+                       <div className="flex-1">
+                         <div className="text-sm font-medium">{member.name}</div>
+                         <div className="text-xs text-zinc-500">
+                           {getTeamSolvesForMember(member.uid).length}/{TOTAL_SCRAMBLES}
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </CardContent>
+               </Card>
+             </>
+           ) : (
+             <>
+               <Card className="bg-zinc-900 border-zinc-800">
+                 <CardContent className="p-4">
+                   <div className="text-sm text-zinc-400 mb-1">You</div>
+                   <div className="text-lg font-bold">{userProfile?.displayName || 'Player'}</div>
+                   <div className="text-2xl font-mono mt-2 text-green-400">
+                     {formatBattleTime(myAo5()) || '--'}
+                   </div>
+                   <div className="text-xs text-zinc-500 mt-1">
+                     Best: {formatBattleTime(myBestSingle()) || '--'}
+                   </div>
+                   <div className="text-sm mt-2">
+                     Solves: {mySolves.length}/{TOTAL_SCRAMBLES}
+                   </div>
+                 </CardContent>
+               </Card>
+
+               <Card className="bg-zinc-900 border-zinc-800 md:col-span-1">
+                 <CardContent className="p-4 flex flex-col items-center justify-center">
+                   <div className="text-6xl font-mono font-bold my-4">
+                     {currentScrambleIndex + 1}/{TOTAL_SCRAMBLES}
+                   </div>
+                   <div className="text-xs text-zinc-400">
+                     Current Scramble
+                   </div>
+                 </CardContent>
+               </Card>
+
+               <Card className="bg-zinc-900 border-zinc-800">
+                 <CardContent className="p-4">
+                   <div className="text-sm text-zinc-400 mb-1">Opponent</div>
+                   <div className="text-lg font-bold">Player {isPlayer1 ? '2' : '1'}</div>
+                   <div className="text-2xl font-mono mt-2 text-blue-400">
+                     {formatBattleTime(opponentAo5()) || '--'}
+                   </div>
+                   <div className="text-xs text-zinc-500 mt-1">
+                     Best: {formatBattleTime(opponentBestSingle()) || '--'}
+                   </div>
+                   <div className="text-sm mt-2">
+                     Solves: {opponentSolves.length}/{TOTAL_SCRAMBLES}
+                   </div>
+                 </CardContent>
+               </Card>
+             </>
+           )}
+         </div>
 
         <Card className="bg-zinc-900 border-zinc-800 mb-6">
-          {isSpectator ? (
-            <CardContent className="p-8 text-center">
-              <div className="text-zinc-400 mb-4">Waiting for players to solve...</div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-zinc-800 rounded-lg p-4">
-                  <div className="text-sm text-zinc-400 mb-1">Player 1</div>
-                  <div className="text-lg font-bold text-green-400">
-                    {isPlayer1 ? (userProfile?.displayName || 'You') : 'Waiting...'}
-                  </div>
-                  <div className="text-sm text-zinc-500 mt-2">
-                    Solves: {player1Solves?.length || 0}/{TOTAL_SCRAMBLES}
-                  </div>
-                </div>
-                <div className="bg-zinc-800 rounded-lg p-4">
-                  <div className="text-sm text-zinc-400 mb-1">Player 2</div>
-                  <div className="text-lg font-bold text-blue-400">
-                    {isPlayer2 ? (userProfile?.displayName || 'You') : 'Waiting...'}
-                  </div>
-                  <div className="text-sm text-zinc-500 mt-2">
-                    Solves: {player2Solves?.length || 0}/{TOTAL_SCRAMBLES}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
+           {isSpectator ? (
+             <CardContent className="p-8 text-center">
+               {isTeamBattle ? (
+                 <div className="text-zinc-400 mb-4">Waiting for teams to solve...</div>
+               ) : (
+                 <div className="text-zinc-400 mb-4">Waiting for players to solve...</div>
+               )}
+               {isTeamBattle ? (
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-zinc-800 rounded-lg p-4">
+                     <div className="text-sm text-zinc-400 mb-1">{getMyTeamName()}</div>
+                     {getTeamMembers('teamA').map((member, idx) => (
+                       <div key={idx} className="flex items-center gap-2 mb-2">
+                         {member.nameOverride?.photoURL && (
+                           <img 
+                             src={member.nameOverride.photoURL} 
+                             alt={member.name}
+                             className="w-8 h-8 rounded-full"
+                           />
+                         )}
+                         <div className="flex-1">
+                           <div className="text-sm font-medium">{member.name}</div>
+                           <div className="text-xs text-zinc-500">
+                             {getTeamSolvesForMember(member.uid).length}/{TOTAL_SCRAMBLES}
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                   <div className="bg-zinc-800 rounded-lg p-4">
+                     <div className="text-sm text-zinc-400 mb-1">{getOpponentTeamName()}</div>
+                     {getTeamMembers('teamB').map((member, idx) => (
+                       <div key={idx} className="flex items-center gap-2 mb-2">
+                         {member.nameOverride?.photoURL && (
+                           <img 
+                             src={member.nameOverride.photoURL} 
+                             alt={member.name}
+                             className="w-8 h-8 rounded-full"
+                           />
+                         )}
+                         <div className="flex-1">
+                           <div className="text-sm font-medium">{member.name}</div>
+                           <div className="text-xs text-zinc-500">
+                             {getTeamSolvesForMember(member.uid).length}/{TOTAL_SCRAMBLES}
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-zinc-800 rounded-lg p-4">
+                     <div className="text-sm text-zinc-400 mb-1">Player 1</div>
+                     <div className="text-lg font-bold text-green-400">
+                       {isPlayer1 ? (userProfile?.displayName || 'You') : 'Waiting...'}
+                     </div>
+                     <div className="text-sm text-zinc-500 mt-2">
+                       Solves: {player1Solves?.length || 0}/{TOTAL_SCRAMBLES}
+                     </div>
+                   </div>
+                   <div className="bg-zinc-800 rounded-lg p-4">
+                     <div className="text-sm text-zinc-400 mb-1">Player 2</div>
+                     <div className="text-lg font-bold text-blue-400">
+                       {isPlayer2 ? (userProfile?.displayName || 'You') : 'Waiting...'}
+                     </div>
+                     <div className="text-sm text-zinc-500 mt-2">
+                       Solves: {player2Solves?.length || 0}/{TOTAL_SCRAMBLES}
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </CardContent>
           ) : (
           <CardContent className="p-8">
             <div className="bg-zinc-800 rounded-lg p-4 mb-8 text-center">
@@ -967,21 +1123,24 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                       Leave Battle
                     </Button>
                   </div>
-                ) : (
+                  ) : (
                   <>
                     <Button
                       onClick={handleAction}
+                      onTouchStart={handleTouchStart}
+                      onTouchEnd={handleTouchEnd}
                       disabled={timerState === TIMER_STATES.STOPPED || submitting}
-                      className={`w-48 h-16 text-xl ${
+                      className={`w-48 h-16 text-xl touch-manipulation ${
                         timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED
                           ? 'bg-green-600 hover:bg-green-500'
-                          : timerState === TIMER_STATES.RUNNING
+                          : timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION
                           ? 'bg-red-600 hover:bg-red-500'
                           : 'bg-zinc-700'
                       }`}
                     >
                       {timerState === TIMER_STATES.IDLE && 'Hold to Start'}
                       {timerState === TIMER_STATES.ARMED && 'Release'}
+                      {timerState === TIMER_STATES.INSPECTION && 'Stop'}
                       {timerState === TIMER_STATES.RUNNING && 'Stop'}
                       {timerState === TIMER_STATES.STOPPED && 'Solved!'}
                     </Button>

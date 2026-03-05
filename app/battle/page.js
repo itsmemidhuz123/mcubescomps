@@ -30,11 +30,22 @@ export default function BattlePage() {
 
   const { status: matchmakingStatus, battleId: matchBattleId, error: matchmakingError, startMatchmaking, leaveQueue } = useMatchmaking(user);
 
+  const [teamMatchmakingStatus, setTeamMatchmakingStatus] = useState('idle');
+  const [teamMatchBattleId, setTeamMatchBattleId] = useState(null);
+  const [teamMatchError, setTeamMatchError] = useState(null);
+  const [selectedTeamBattleSize, setSelectedTeamBattleSize] = useState(2);
+
   useEffect(() => {
     if (matchmakingStatus === 'matched' && matchBattleId) {
       router.push(`/battle/${matchBattleId}`);
     }
   }, [matchmakingStatus, matchBattleId, router]);
+
+  useEffect(() => {
+    if (teamMatchmakingStatus === 'matched' && teamMatchBattleId) {
+      router.push(`/battle/${teamMatchBattleId}`);
+    }
+  }, [teamMatchmakingStatus, teamMatchBattleId, router]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -179,6 +190,86 @@ export default function BattlePage() {
     }
   };
 
+  const startTeamMatchmaking = async () => {
+    if (!user) return;
+    
+    setTeamMatchmakingStatus('searching');
+    setTeamMatchError(null);
+    
+    try {
+      const response = await fetch('/api/battle/team-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          username: userProfile?.displayName || 'Player',
+          teamSize: selectedTeamBattleSize,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.battleId) {
+          setTeamMatchBattleId(data.battleId);
+          setTeamMatchmakingStatus('matched');
+        } else {
+          setTeamMatchmakingStatus('waiting');
+          pollForTeamMatch();
+        }
+      } else {
+        setTeamMatchError(data.message || 'Failed to find team match');
+        setTeamMatchmakingStatus('idle');
+      }
+    } catch (error) {
+      console.error('Team matchmaking error:', error);
+      setTeamMatchError('Failed to join team matchmaking');
+      setTeamMatchmakingStatus('idle');
+    }
+  };
+
+  const pollForTeamMatch = async () => {
+    if (!user || teamMatchmakingStatus !== 'waiting') return;
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/battle/team-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.uid,
+            username: userProfile?.displayName || 'Player',
+            teamSize: selectedTeamBattleSize,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.battleId) {
+          clearInterval(pollInterval);
+          setTeamMatchBattleId(data.battleId);
+          setTeamMatchmakingStatus('matched');
+        }
+      } catch (error) {
+        console.error('Poll error:', error);
+      }
+    }, 3000);
+
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      if (teamMatchmakingStatus === 'waiting') {
+        setTeamMatchmakingStatus('idle');
+        setTeamMatchError('No opponents found. Try again later.');
+      }
+    }, 60000);
+  };
+
+  const leaveTeamQueue = async () => {
+    setTeamMatchmakingStatus('idle');
+    setTeamMatchBattleId(null);
+    setTeamMatchError(null);
+  };
+
   const openBattle = async (battleId) => {
     if (!user) return;
     
@@ -281,6 +372,63 @@ export default function BattlePage() {
                 </Button>
                 {matchmakingError && (
                   <p className="text-red-400 mt-2 text-sm">{matchmakingError}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* TEAM BATTLE SECTION */}
+        <Card className="bg-zinc-900 border-zinc-800 mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-500" />
+              Quick Team Battle
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {teamMatchmakingStatus === 'searching' || teamMatchmakingStatus === 'waiting' ? (
+              <div className="text-center py-4">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
+                <p className="text-lg mb-2">
+                  {teamMatchmakingStatus === 'searching' ? 'Finding players...' : 'Waiting for players...'}
+                </p>
+                <p className="text-sm text-zinc-400 mb-4">3x3 • Best of 3 • {selectedTeamBattleSize}v{selectedTeamBattleSize}</p>
+                <Button
+                  onClick={leaveTeamQueue}
+                  variant="outline"
+                  className="mx-auto"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                 <p className="text-zinc-400 mb-4">Team up and battle against another team!</p>
+                 <div className="flex justify-center gap-2 mb-4">
+                   {[2, 4, 8].map((size) => (
+                     <Button
+                       key={size}
+                       variant={selectedTeamBattleSize === size ? 'default' : 'outline'}
+                       onClick={() => setSelectedTeamBattleSize(size)}
+                       className={selectedTeamBattleSize === size ? 'bg-blue-600' : ''}
+                     >
+                       {size}v{size}
+                     </Button>
+                   ))}
+                 </div>
+                 <p className="text-sm text-zinc-500 mb-4">3x3 • Best of 3 • {selectedTeamBattleSize}v{selectedTeamBattleSize} Teams</p>
+                <Button
+                  onClick={startTeamMatchmaking}
+                  className="bg-blue-600 hover:bg-blue-500"
+                  size="lg"
+                >
+                  <Users className="w-5 h-5 mr-2" />
+                  Find Team Battle
+                </Button>
+                {teamMatchError && (
+                  <p className="text-red-400 mt-2 text-sm">{teamMatchError}</p>
                 )}
               </div>
             )}
