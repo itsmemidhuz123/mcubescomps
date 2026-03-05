@@ -46,21 +46,14 @@ export async function POST(request) {
 
     const battleData = battleDoc.data();
 
-    if (battleData.visibility !== 'public' && battleData.visibility !== 'private') {
-      return NextResponse.json(
-        { success: false, message: 'Battle not found' },
-        { status: 404 }
-      );
-    }
-
-    if (battleData.player2 && battleData.player2 !== null) {
+    if (battleData.player2 !== null) {
       return NextResponse.json(
         { success: false, message: 'Battle is already full' },
         { status: 400 }
       );
     }
 
-    if (battleData.player1 === userId && battleData.player2 === null) {
+    if (battleData.player1 === userId) {
       return NextResponse.json(
         { success: false, message: 'You cannot join your own battle' },
         { status: 400 }

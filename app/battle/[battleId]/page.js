@@ -806,6 +806,13 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
             </CardContent>
           ) : (
           <CardContent className="p-8">
+            <div className="bg-zinc-800 rounded-lg p-4 mb-8 text-center">
+              <div className="text-sm text-zinc-400 mb-2">Current Scramble</div>
+              <div className="text-lg font-mono font-bold text-yellow-400 break-all">
+                {currentScramble || 'Loading...'}
+              </div>
+            </div>
+
             <div className="text-center mb-8">
               <div className={`text-8xl font-bold font-mono tabular-nums ${
                 timerState === TIMER_STATES.RUNNING ? 'text-green-400' :

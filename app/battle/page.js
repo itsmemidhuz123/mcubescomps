@@ -17,6 +17,7 @@ export default function BattlePage() {
   const router = useRouter();
   
   const [selectedEvent, setSelectedEvent] = useState('333');
+  const [selectedFormat, setSelectedFormat] = useState('ao5');
   const [selectedVisibility, setSelectedVisibility] = useState('public');
   const [battleName, setBattleName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -83,6 +84,7 @@ export default function BattlePage() {
           visibility: selectedVisibility,
           allowSpectators: true,
           battleName: battleName,
+          format: selectedFormat,
         }),
       });
 
@@ -206,18 +208,32 @@ export default function BattlePage() {
                 />
               </div>
 
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">Event</label>
-                <select
-                  value={selectedEvent}
-                  onChange={(e) => setSelectedEvent(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
-                >
-                  {BATTLE_EVENTS.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.icon} {event.name}
-                    </option>
-                   ))}
+               <div>
+                 <label className="text-sm text-zinc-400 mb-2 block">Event</label>
+                 <select
+                   value={selectedEvent}
+                   onChange={(e) => setSelectedEvent(e.target.value)}
+                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                 >
+                   {BATTLE_EVENTS.map((event) => (
+                     <option key={event.id} value={event.id}>
+                       {event.icon} {event.name}
+                     </option>
+                    ))}
+                 </select>
+               </div>
+
+               <div>
+                 <label className="text-sm text-zinc-400 mb-2 block">Format</label>
+                 <select
+                   value={selectedFormat}
+                   onChange={(e) => setSelectedFormat(e.target.value)}
+                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                 >
+                   <option value="ao5">Ao5 (Best of 5 Average)</option>
+                   <option value="firstTo3">First to 3 Wins</option>
+                   <option value="firstTo5">First to 5 Wins</option>
+                   <option value="single">Single Solve</option>
                  </select>
                </div>
 
