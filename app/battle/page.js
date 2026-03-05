@@ -30,22 +30,11 @@ export default function BattlePage() {
 
   const { status: matchmakingStatus, battleId: matchBattleId, error: matchmakingError, startMatchmaking, leaveQueue } = useMatchmaking(user);
 
-  const [teamMatchmakingStatus, setTeamMatchmakingStatus] = useState('idle');
-  const [teamMatchBattleId, setTeamMatchBattleId] = useState(null);
-  const [teamMatchError, setTeamMatchError] = useState(null);
-  const [selectedTeamBattleSize, setSelectedTeamBattleSize] = useState(2);
-
   useEffect(() => {
     if (matchmakingStatus === 'matched' && matchBattleId) {
       router.push(`/battle/${matchBattleId}`);
     }
   }, [matchmakingStatus, matchBattleId, router]);
-
-  useEffect(() => {
-    if (teamMatchmakingStatus === 'matched' && teamMatchBattleId) {
-      router.push(`/battle/${teamMatchBattleId}`);
-    }
-  }, [teamMatchmakingStatus, teamMatchBattleId, router]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -190,86 +179,6 @@ export default function BattlePage() {
     }
   };
 
-  const startTeamMatchmaking = async () => {
-    if (!user) return;
-    
-    setTeamMatchmakingStatus('searching');
-    setTeamMatchError(null);
-    
-    try {
-      const response = await fetch('/api/battle/team-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          username: userProfile?.displayName || 'Player',
-          teamSize: selectedTeamBattleSize,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        if (data.battleId) {
-          setTeamMatchBattleId(data.battleId);
-          setTeamMatchmakingStatus('matched');
-        } else {
-          setTeamMatchmakingStatus('waiting');
-          pollForTeamMatch();
-        }
-      } else {
-        setTeamMatchError(data.message || 'Failed to find team match');
-        setTeamMatchmakingStatus('idle');
-      }
-    } catch (error) {
-      console.error('Team matchmaking error:', error);
-      setTeamMatchError('Failed to join team matchmaking');
-      setTeamMatchmakingStatus('idle');
-    }
-  };
-
-  const pollForTeamMatch = async () => {
-    if (!user || teamMatchmakingStatus !== 'waiting') return;
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch('/api/battle/team-match', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.uid,
-            username: userProfile?.displayName || 'Player',
-            teamSize: selectedTeamBattleSize,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.battleId) {
-          clearInterval(pollInterval);
-          setTeamMatchBattleId(data.battleId);
-          setTeamMatchmakingStatus('matched');
-        }
-      } catch (error) {
-        console.error('Poll error:', error);
-      }
-    }, 3000);
-
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      if (teamMatchmakingStatus === 'waiting') {
-        setTeamMatchmakingStatus('idle');
-        setTeamMatchError('No opponents found. Try again later.');
-      }
-    }, 60000);
-  };
-
-  const leaveTeamQueue = async () => {
-    setTeamMatchmakingStatus('idle');
-    setTeamMatchBattleId(null);
-    setTeamMatchError(null);
-  };
-
   const openBattle = async (battleId) => {
     if (!user) return;
     
@@ -372,63 +281,6 @@ export default function BattlePage() {
                 </Button>
                 {matchmakingError && (
                   <p className="text-red-400 mt-2 text-sm">{matchmakingError}</p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* TEAM BATTLE SECTION */}
-        <Card className="bg-zinc-900 border-zinc-800 mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-blue-500" />
-              Quick Team Battle
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {teamMatchmakingStatus === 'searching' || teamMatchmakingStatus === 'waiting' ? (
-              <div className="text-center py-4">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
-                <p className="text-lg mb-2">
-                  {teamMatchmakingStatus === 'searching' ? 'Finding players...' : 'Waiting for players...'}
-                </p>
-                <p className="text-sm text-zinc-400 mb-4">3x3 • Best of 3 • {selectedTeamBattleSize}v{selectedTeamBattleSize}</p>
-                <Button
-                  onClick={leaveTeamQueue}
-                  variant="outline"
-                  className="mx-auto"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                 <p className="text-zinc-400 mb-4">Team up and battle against another team!</p>
-                 <div className="flex justify-center gap-2 mb-4">
-                   {[2, 4, 8].map((size) => (
-                     <Button
-                       key={size}
-                       variant={selectedTeamBattleSize === size ? 'default' : 'outline'}
-                       onClick={() => setSelectedTeamBattleSize(size)}
-                       className={selectedTeamBattleSize === size ? 'bg-blue-600' : ''}
-                     >
-                       {size}v{size}
-                     </Button>
-                   ))}
-                 </div>
-                 <p className="text-sm text-zinc-500 mb-4">3x3 • Best of 3 • {selectedTeamBattleSize}v{selectedTeamBattleSize} Teams</p>
-                <Button
-                  onClick={startTeamMatchmaking}
-                  className="bg-blue-600 hover:bg-blue-500"
-                  size="lg"
-                >
-                  <Users className="w-5 h-5 mr-2" />
-                  Find Team Battle
-                </Button>
-                {teamMatchError && (
-                  <p className="text-red-400 mt-2 text-sm">{teamMatchError}</p>
                 )}
               </div>
             )}
@@ -542,77 +394,97 @@ export default function BattlePage() {
                 Open Battles
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
-                </div>
-              ) : waitingBattles.length === 0 ? (
-                <div className="text-center py-8 text-zinc-500">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No open battles</p>
-                  <p className="text-sm">Create one to start!</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {waitingBattles.map((battle) => (
-                    <div
-                      key={battle.id}
-                      className="flex items-center justify-between bg-zinc-800 rounded-lg p-3"
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {battle.battleName || 'Battle'} • {battle.teamSize || 1}v{battle.teamSize || 1}
-                        </div>
-                        <div className="text-xs text-zinc-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {battle.createdAt?.toDate?.() 
-                            ? new Date(battle.createdAt.seconds * 1000).toLocaleTimeString()
-                            : 'Just now'}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => copyBattleLink(battle.id)}
-                        >
-                          {copied ? (
-                            <Check className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <Copy className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => watchBattle(battle.id)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {user?.uid === battle.createdBy ? (
-                          <Button
-                            onClick={() => openBattle(battle.id)}
-                            className="bg-blue-600 hover:bg-blue-500"
-                            size="sm"
-                          >
-                            Open
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={() => joinBattle(battle.id)}
-                            className="bg-green-600 hover:bg-green-500"
-                            size="sm"
-                          >
-                            Join
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+             <CardContent>
+               {loading ? (
+                 <div className="flex justify-center py-8">
+                   <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                 </div>
+               ) : waitingBattles.length === 0 ? (
+                 <div className="text-center py-8 text-zinc-500">
+                   <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                   <p>No open battles</p>
+                   <p className="text-sm">Create one to start!</p>
+                 </div>
+               ) : (
+                 <div className="space-y-3">
+                   {waitingBattles.map((battle) => {
+                     const event = BATTLE_EVENTS.find(e => e.id === battle.event) || BATTLE_EVENTS[0];
+                     const isTeamBattle = battle.teamSize && battle.teamSize > 1;
+                     const eventIcon = event?.icon || '⚔️';
+                     
+                     return (
+                       <div
+                         key={battle.id}
+                         className="flex flex-col sm:flex-row sm:items-center justify-between bg-zinc-800 rounded-lg p-3 gap-2 sm:gap-0"
+                       >
+                         <div className="flex-1 min-w-0">
+                           <div className="font-medium flex items-center gap-2 flex-wrap">
+                             {battle.battleName || 'Battle'}
+                             {isTeamBattle && (
+                               <Badge variant="secondary" className="text-xs">
+                                 {battle.teamSize}v{battle.teamSize}
+                               </Badge>
+                             )}
+                           </div>
+                           <div className="flex flex-wrap items-center gap-2 mt-1">
+                             <span className="text-xs text-zinc-400">
+                               {eventIcon} {event?.name || '3x3'}
+                             </span>
+                             {battle.format && (
+                               <span className="text-xs text-zinc-500">
+                                 • {battle.format === 'ao5' ? 'Ao5' : battle.format === 'firstTo3' ? 'First to 3' : battle.format === 'firstTo5' ? 'First to 5' : battle.format === 'single' ? 'Single' : battle.format}
+                               </span>
+                             )}
+                             <span className="text-xs text-zinc-500">
+                               • {new Date(battle.createdAt.seconds * 1000).toLocaleTimeString()}
+                             </span>
+                           </div>
+                         </div>
+                         <div className="flex gap-2 w-full sm:w-auto justify-end">
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             onClick={() => copyBattleLink(battle.id)}
+                             className="flex-1 sm:flex-none"
+                           >
+                             {copied ? (
+                               <Check className="w-4 h-4 text-green-500" />
+                             ) : (
+                               <Copy className="w-4 h-4" />
+                             )}
+                           </Button>
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             onClick={() => watchBattle(battle.id)}
+                             className="flex-1 sm:flex-none"
+                           >
+                             <Eye className="w-4 h-4" />
+                           </Button>
+                           {user?.uid === battle.createdBy ? (
+                             <Button
+                               onClick={() => openBattle(battle.id)}
+                               className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
+                               size="sm"
+                             >
+                               Open
+                             </Button>
+                           ) : (
+                             <Button
+                               onClick={() => joinBattle(battle.id)}
+                               className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
+                               size="sm"
+                             >
+                               Join
+                             </Button>
+                           )}
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+               )}
+             </CardContent>
           </Card>
         </div>
 
