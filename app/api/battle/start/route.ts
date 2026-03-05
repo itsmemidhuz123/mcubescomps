@@ -46,7 +46,7 @@ export async function POST(request) {
 
     const battleData = battleDoc.data();
 
-    if (battleData.status !== 'countdown') {
+    if (battleData.status !== 'waiting') {
       return NextResponse.json({
         success: true,
         status: battleData.status,
@@ -60,6 +60,13 @@ export async function POST(request) {
       return NextResponse.json(
         { success: false, message: 'Not a participant' },
         { status: 403 }
+      );
+    }
+
+    if (!battleData.creatorJoined || !battleData.opponentJoined) {
+      return NextResponse.json(
+        { success: false, message: 'Both players must be connected to start' },
+        { status: 400 }
       );
     }
 

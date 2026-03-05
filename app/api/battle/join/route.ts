@@ -69,9 +69,8 @@ export async function POST(request) {
 
     await battleRef.update({
       player2: userId,
-      status: 'countdown',
+      status: 'waiting',
       startTime: admin.firestore.FieldValue.serverTimestamp(),
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
       opponentJoined: true,
       lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
     });
