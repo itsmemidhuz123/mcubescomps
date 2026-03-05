@@ -24,7 +24,7 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const db = getAdminDb();
-    const oneDayMs = 24 * 60 * 60 * 1000;
+    const oneHourMs = 60 * 60 * 1000;
     const now = Date.now();
 
     const battlesRef = db.collection('battles');
@@ -37,10 +37,11 @@ export async function POST(request) {
 
     snapshot.forEach((doc) => {
       const battle = doc.data();
-      const createdAt = battle.createdAt?.toDate?.() || new Date(battle.createdAt?._seconds * 1000);
-      const battleAge = now - createdAt.getTime();
+      const lastActivity = battle.lastActivityAt || battle.createdAt;
+      const lastActivityTime = lastActivity?.toDate?.() || new Date(lastActivity?._seconds * 1000);
+      const battleAge = now - lastActivityTime.getTime();
 
-      if (battleAge > oneDayMs && !battle.player2) {
+      if (battleAge > oneHourMs && !battle.player2) {
         batch.update(doc.ref, { 
           status: 'expired',
           expiredAt: admin.firestore.FieldValue.serverTimestamp()

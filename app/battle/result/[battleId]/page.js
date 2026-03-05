@@ -108,7 +108,7 @@ export default function BattleResultPage() {
     <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
-          <h1 className="text-2xl font-bold">Battle Results</h1>
+          <h1 className="text-2xl font-bold">{battle.battleName || 'Battle Results'}</h1>
         </div>
 
         <Card className="bg-zinc-900 border-zinc-800 mb-6">

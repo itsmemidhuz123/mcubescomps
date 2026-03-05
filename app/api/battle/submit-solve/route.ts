@@ -236,6 +236,7 @@ export async function POST(request) {
     }
 
     if (Object.keys(battleUpdate).length > 0) {
+      battleUpdate.lastActivityAt = admin.firestore.FieldValue.serverTimestamp();
       await battleRef.update(battleUpdate);
     }
 

@@ -80,6 +80,7 @@ export async function POST(request) {
       startTime: admin.firestore.FieldValue.serverTimestamp(),
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
       opponentJoined: true,
+      lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({

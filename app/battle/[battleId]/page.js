@@ -341,10 +341,10 @@ export default function BattleRoomPage() {
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <Sword className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
-            <h2 className="text-xl font-bold mb-2">Not a Participant</h2>
+            <Eye className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
+            <h2 className="text-xl font-bold mb-2">Visitor Mode</h2>
             <p className="text-zinc-400 mb-4">
-              You are not part of this battle. Spectators are not allowed.
+              Spectators are not allowed for this battle.
             </p>
             <div className="flex flex-col gap-3">
               <Button onClick={() => router.push('/battle')}>
@@ -371,9 +371,9 @@ export default function BattleRoomPage() {
         <Card className="bg-zinc-900 border-zinc-800 max-w-md w-full">
           <CardContent className="p-8 text-center">
             <Eye className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
-            <h2 className="text-xl font-bold mb-2">You are watching this battle</h2>
+            <h2 className="text-xl font-bold mb-2">Visitor Mode</h2>
             <p className="text-zinc-400 mb-4">
-              {battle.player1 ? 'Player 1 is waiting for an opponent...' : 'Waiting for players...'}
+              You are watching this battle
             </p>
             {battle.player1 && battle.player2 === null && (
               <div className="flex flex-col gap-3">
@@ -713,7 +713,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
             <div>
               <h1 className="text-xl font-bold flex items-center gap-2">
                 <Sword className="w-5 h-5 text-red-500" />
-                Battle
+                {battle.battleName || 'Battle'}
               </h1>
               <p className="text-sm text-zinc-400">
                 {getCurrentEventName()} • Round {Math.min(currentScrambleIndex + 1, TOTAL_SCRAMBLES)}/{TOTAL_SCRAMBLES}
@@ -826,51 +826,62 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
 
             {canSolve ? (
               <div className="flex flex-col items-center gap-4">
-                <Button
-                  onClick={handleAction}
-                  disabled={timerState === TIMER_STATES.STOPPED || submitting}
-                  className={`w-48 h-16 text-xl ${
-                    timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED
-                      ? 'bg-green-600 hover:bg-green-500'
-                      : timerState === TIMER_STATES.RUNNING
-                      ? 'bg-red-600 hover:bg-red-500'
-                      : 'bg-zinc-700'
-                  }`}
-                >
-                  {timerState === TIMER_STATES.IDLE && 'Hold to Start'}
-                  {timerState === TIMER_STATES.ARMED && 'Release'}
-                  {timerState === TIMER_STATES.RUNNING && 'Stop'}
-                  {timerState === TIMER_STATES.STOPPED && 'Solved!'}
-                </Button>
-
-                {timerState === TIMER_STATES.STOPPED && (
-                  <div className="flex gap-4">
-                    <Button
-                      variant={penalty === '+2' ? 'default' : 'outline'}
-                      onClick={() => setPenalty(penalty === '+2' ? 'none' : '+2')}
-                      className={penalty === '+2' ? 'bg-yellow-600' : ''}
-                    >
-                      +2
-                    </Button>
-                    <Button
-                      variant={penalty === 'DNF' ? 'default' : 'outline'}
-                      onClick={() => setPenalty(penalty === 'DNF' ? 'none' : 'DNF')}
-                      className={penalty === 'DNF' ? 'bg-red-600' : ''}
-                    >
-                      DNF
-                    </Button>
-                    <Button
-                      onClick={handleSubmitSolve}
-                      disabled={submitting}
-                      className="bg-green-600 hover:bg-green-500"
-                    >
-                      {submitting ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        'Submit'
-                      )}
+                {isSpectator ? (
+                  <div className="text-center text-zinc-400 bg-zinc-800 rounded-lg p-4">
+                    <p className="mb-2">Visitor Mode - Cannot interact with timer</p>
+                    <Button variant="outline" onClick={() => router.push('/battle')}>
+                      Leave Battle
                     </Button>
                   </div>
+                ) : (
+                  <>
+                    <Button
+                      onClick={handleAction}
+                      disabled={timerState === TIMER_STATES.STOPPED || submitting}
+                      className={`w-48 h-16 text-xl ${
+                        timerState === TIMER_STATES.IDLE || timerState === TIMER_STATES.ARMED
+                          ? 'bg-green-600 hover:bg-green-500'
+                          : timerState === TIMER_STATES.RUNNING
+                          ? 'bg-red-600 hover:bg-red-500'
+                          : 'bg-zinc-700'
+                      }`}
+                    >
+                      {timerState === TIMER_STATES.IDLE && 'Hold to Start'}
+                      {timerState === TIMER_STATES.ARMED && 'Release'}
+                      {timerState === TIMER_STATES.RUNNING && 'Stop'}
+                      {timerState === TIMER_STATES.STOPPED && 'Solved!'}
+                    </Button>
+
+                    {timerState === TIMER_STATES.STOPPED && (
+                      <div className="flex gap-4">
+                        <Button
+                          variant={penalty === '+2' ? 'default' : 'outline'}
+                          onClick={() => setPenalty(penalty === '+2' ? 'none' : '+2')}
+                          className={penalty === '+2' ? 'bg-yellow-600' : ''}
+                        >
+                          +2
+                        </Button>
+                        <Button
+                          variant={penalty === 'DNF' ? 'default' : 'outline'}
+                          onClick={() => setPenalty(penalty === 'DNF' ? 'none' : 'DNF')}
+                          className={penalty === 'DNF' ? 'bg-red-600' : ''}
+                        >
+                          DNF
+                        </Button>
+                        <Button
+                          onClick={handleSubmitSolve}
+                          disabled={submitting}
+                          className="bg-green-600 hover:bg-green-500"
+                        >
+                          {submitting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            'Submit'
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               ) : (

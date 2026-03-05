@@ -18,6 +18,7 @@ export default function BattlePage() {
   
   const [selectedEvent, setSelectedEvent] = useState('333');
   const [selectedVisibility, setSelectedVisibility] = useState('public');
+  const [battleName, setBattleName] = useState('');
   const [creating, setCreating] = useState(false);
   const [waitingBattles, setWaitingBattles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +45,7 @@ export default function BattlePage() {
       
       const snapshot = await getDocs(q);
       const battles = [];
-      const oneDayMs = 24 * 60 * 60 * 1000;
+      const oneHourMs = 60 * 60 * 1000;
       const now = Date.now();
       
       snapshot.forEach((doc) => {
@@ -53,7 +54,7 @@ export default function BattlePage() {
           const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
           const battleAge = now - createdAt.getTime();
           
-          if (battleAge <= oneDayMs) {
+          if (battleAge <= oneHourMs) {
             battles.push({ id: doc.id, ...data });
           }
         }
@@ -81,6 +82,7 @@ export default function BattlePage() {
           roundCount: 5,
           visibility: selectedVisibility,
           allowSpectators: true,
+          battleName: battleName,
         }),
       });
 
@@ -193,6 +195,18 @@ export default function BattlePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Battle Name (optional)</label>
+                <input
+                  type="text"
+                  value={battleName}
+                  onChange={(e) => setBattleName(e.target.value)}
+                  placeholder="Example: Evening Practice Battle"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2"
+                  maxLength={50}
+                />
+              </div>
+
+              <div>
                 <label className="text-sm text-zinc-400 mb-2 block">Event</label>
                 <select
                   value={selectedEvent}
@@ -267,7 +281,7 @@ export default function BattlePage() {
                     >
                       <div>
                         <div className="font-medium">
-                          {BATTLE_EVENTS.find(e => e.id === battle.event)?.icon} 3x3
+                          {battle.battleName || 'Battle'}
                         </div>
                         <div className="text-xs text-zinc-400 flex items-center gap-1">
                           <Clock className="w-3 h-3" />

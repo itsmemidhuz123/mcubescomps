@@ -43,14 +43,18 @@ export default function MyBattlesPage() {
       const snapshot = await getDocs(q);
       const battles = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       
-      const oneDayMs = 24 * 60 * 60 * 1000;
+      const oneHourMs = 60 * 60 * 1000;
       const now = Date.now();
       
       const filteredBattles = battles.filter((battle) => {
         if (battle.status === 'expired') {
-          const createdAt = battle.createdAt?.toDate?.() || new Date(battle.createdAt?._seconds * 1000);
-          const battleAge = now - createdAt.getTime();
-          return battleAge <= oneDayMs * 7;
+          return false;
+        }
+        if (battle.status === 'waiting') {
+          const lastActivity = battle.lastActivityAt || battle.createdAt;
+          const lastActivityTime = lastActivity?.toDate?.() || new Date(lastActivity?._seconds * 1000);
+          const battleAge = now - lastActivityTime.getTime();
+          return battleAge <= oneHourMs;
         }
         return true;
       });
@@ -125,7 +129,7 @@ export default function MyBattlesPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <CardTitle className="flex items-center gap-2">
-                      {BATTLE_EVENTS.find(e => e.id === battle.event)?.icon} {getCurrentEventName(battle.event)}
+                      {battle.battleName || 'Battle'}
                       <Badge
                         variant={
                           battle.status === 'live' ? 'default' :

@@ -32,7 +32,8 @@ export async function POST(request) {
       format = 'ao5',
       winsRequired = null,
       visibility = 'private',
-      allowSpectators = true
+      allowSpectators = true,
+      battleName = ''
     } = body;
 
     if (!userId) {
@@ -82,9 +83,11 @@ export async function POST(request) {
     }
 
     const db = getAdminDb();
+    const now = admin.firestore.FieldValue.serverTimestamp();
 
     const battleData = {
       battleId: '',
+      battleName: battleName || 'Battle vs Opponent',
       event: scrambleData.event,
       scrambleId: scrambleData.scrambleId,
       scrambles: scrambleData.scrambles,
@@ -104,7 +107,8 @@ export async function POST(request) {
       creatorJoined: true,
       opponentJoined: false,
       startTime: null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: now,
+      lastActivityAt: now,
       startedAt: null,
       completedAt: null,
       roundCount: roundCount,
