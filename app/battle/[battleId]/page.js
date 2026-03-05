@@ -8,9 +8,10 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2 } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
+import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
 
@@ -26,6 +27,11 @@ export default function BattleRoomPage() {
   const [countdown, setCountdown] = useState(0);
   const [countdownActive, setCountdownActive] = useState(false);
   const [cheatFlags, setCheatFlags] = useState([]);
+  const [showIntro, setShowIntro] = useState(false);
+  const [introDismissed, setIntroDismissed] = useState(false);
+
+  const { playIntro, playCountdown, playBattleStart, playVictory, playDefeat } = useBattleSounds();
+  const { shouldShowIntro, dismissIntro } = useBattleIntro();
 
   const {
     battle,
@@ -61,6 +67,36 @@ export default function BattleRoomPage() {
       router.push('/auth/login?redirect=/battle/' + battleId);
     }
   }, [authLoading, user, router, battleId]);
+
+  useEffect(() => {
+    if (battle && user && !introDismissed) {
+      const shouldShow = shouldShowIntro();
+      setShowIntro(shouldShow);
+      if (shouldShow) {
+        playIntro();
+      }
+    }
+  }, [battle, user, introDismissed, shouldShowIntro, playIntro]);
+
+  const handleDismissIntro = () => {
+    dismissIntro();
+    setShowIntro(false);
+    setIntroDismissed(true);
+  };
+
+  // Play victory/defeat sounds when battle completes
+  useEffect(() => {
+    if (battle?.status === 'completed' && battle.winner && user) {
+      const iWon = battle.winner === user.uid;
+      const isTie = battle.winner === 'tie';
+      
+      if (iWon && !isTie) {
+        playVictory();
+      } else if (!iWon && !isTie) {
+        playDefeat();
+      }
+    }
+  }, [battle?.status, battle?.winner, user, playVictory, playDefeat]);
 
   useEffect(() => {
     if (battle && user) {
@@ -137,11 +173,13 @@ export default function BattleRoomPage() {
 
   useEffect(() => {
     if (countdown > 0) {
+      playCountdown(countdown);
       const timer = setTimeout(() => {
         setCountdown(countdown - 1);
       }, 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0 && countdownActive && battle?.status === 'countdown') {
+      playBattleStart();
       fetch('/api/battle/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -150,7 +188,7 @@ export default function BattleRoomPage() {
         setCountdownActive(false);
       });
     }
-  }, [countdown, countdownActive, battle, battleId, user]);
+  }, [countdown, countdownActive, battle, battleId, user, playCountdown, playBattleStart]);
 
   useEffect(() => {
     if (battle?.status !== 'live' || timerState !== TIMER_STATES.RUNNING) return;
@@ -318,6 +356,59 @@ export default function BattleRoomPage() {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  if (showIntro) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 max-w-2xl w-full">
+          <CardContent className="p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <Volume2 className="w-8 h-8 text-red-500" />
+              <h2 className="text-2xl font-bold">Welcome to MCubes Arena Battle Mode</h2>
+            </div>
+            
+            <div className="text-zinc-300 space-y-4 text-sm leading-relaxed">
+              <p>In battle mode, you compete head-to-head against another cuber using the same scramble. Both players will receive identical scrambles for each round to ensure a fair competition.</p>
+              
+              <p>Before every solve, you will have a short inspection period to examine the scramble. When the countdown finishes, start your solve and complete the cube as fast as possible.</p>
+              
+              <p>The player with the fastest valid solve wins the round. If a solve receives a plus two penalty or a DNF, the penalty will automatically affect the round result.</p>
+              
+              <p>Both players must complete their solve before the next scramble is revealed. Once both results are submitted, the system will automatically move to the next round.</p>
+              
+              <p>Battles are played in the selected format, such as best of five or first to three wins. The first player to win the required number of rounds wins the battle.</p>
+              
+              <p className="text-yellow-400 font-medium">Do not refresh the page or navigate away which leads to a penalty and you may be disqualified.</p>
+              
+              <p className="text-green-400 font-medium">Stay focused, solve fast, and enjoy the competition. Good luck!</p>
+            </div>
+
+            <div className="mt-8 flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-zinc-400">
+                <input 
+                  type="checkbox" 
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      dismissIntro();
+                    }
+                  }}
+                  className="w-4 h-4 rounded"
+                />
+                Don&apos;t show again
+              </label>
+              <Button 
+                onClick={handleDismissIntro}
+                className="bg-red-600 hover:bg-red-500"
+                size="lg"
+              >
+                I&apos;m Ready! Let&apos;s Battle
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
