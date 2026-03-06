@@ -75,6 +75,7 @@ export async function POST(request) {
 
     const db = getAdminDb();
     const now = admin.firestore.FieldValue.serverTimestamp();
+    const nowDate = new Date();
     const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000));
 
     // For team battles (teamSize > 1), create a waiting room instead of actual battle
@@ -93,7 +94,7 @@ export async function POST(request) {
         username: i === 0 ? creatorUsername : null,
         photoURL: i === 0 ? creatorPhotoURL : null,
         joined: i === 0,
-        joinedAt: i === 0 ? now : null,
+        joinedAt: i === 0 ? nowDate.toISOString() : null,
       }));
       
       const teamBSlots = Array.from({ length: teamSize }, () => ({
