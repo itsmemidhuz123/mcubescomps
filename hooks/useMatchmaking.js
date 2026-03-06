@@ -11,6 +11,15 @@ export function useMatchmaking(user) {
   const unsubscribeRef = useRef(null);
 
   const leaveQueue = useCallback(async () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+    
     if (user?.uid) {
       try {
         await fetch('/api/battle/queue', {
@@ -24,18 +33,23 @@ export function useMatchmaking(user) {
     }
     setStatus('idle');
     setBattleId(null);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-    }
+    setError(null);
   }, [user?.uid]);
 
   const startMatchmaking = useCallback(async () => {
     if (!user?.uid) return;
 
-    // Clear any previous battleId before starting new match
+    // Clear any previous state before starting new match
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+    
+    // Reset all state
     setBattleId(null);
     setStatus('searching');
     setError(null);

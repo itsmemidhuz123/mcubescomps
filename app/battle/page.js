@@ -47,7 +47,10 @@ export default function BattlePage() {
   // Reset matchmaking state on page load to ensure fresh start
   useEffect(() => {
     if (user) {
-      leaveQueue();
+      // Small delay to ensure clean state
+      setTimeout(() => {
+        leaveQueue();
+      }, 100);
     }
   }, [user]);
 
