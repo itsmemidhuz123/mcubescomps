@@ -87,9 +87,10 @@ export default function BattleRoomPage() {
           });
         }
         
-        // Check if battle can be created (need at least 2 players for quick match, or 2+ for team)
-        const minPlayers = isTeamMatch ? 2 : 2;
-        const canStart = playersJoined.length >= minPlayers;
+        // Check if battle can be created - need FULL team for team battles
+        const teamSize = data.teamSize || 1;
+        const requiredPlayers = data.battleType === 'teamBattle' ? teamSize * 2 : 2;
+        const canStart = playersJoined.length >= requiredPlayers;
         
         // First check if battle already exists in match document (from another player)
         if (data.battleCreated && data.battleId) {
@@ -667,6 +668,18 @@ export default function BattleRoomPage() {
       const players = matchData.players || [];
       const teamA = matchData.teamA || [];
       const teamB = matchData.teamB || [];
+      const teamSize = matchData.teamSize || 1;
+      const event = matchData.event || '333';
+      const requiredPlayers = teamSize * 2;
+      const playersNeeded = requiredPlayers - playersJoined.length;
+      
+      const eventNames = {
+        '333': '3x3',
+        '444': '4x4',
+        '555': '5x5',
+        '666': '6x6',
+        '777': '7x7',
+      };
       
       return (
         <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
@@ -675,14 +688,19 @@ export default function BattleRoomPage() {
               <div className="text-center mb-6">
                 <Loader2 className="w-12 h-12 mx-auto mb-4 text-yellow-500 animate-spin" />
                 <h2 className="text-2xl font-bold text-white mb-2">
-                  {isTeamMatch ? 'Team Battle' : 'Quick Battle'}
+                  {isTeamMatch ? `Team Battle (${teamSize}v${teamSize})` : 'Quick Battle'}
                 </h2>
                 <p className="text-zinc-400">
-                  Waiting for players to join...
+                  Event: <span className="text-white font-medium">{eventNames[event] || event}</span>
                 </p>
+                {playersNeeded > 0 && (
+                  <p className="text-yellow-500 mt-2">
+                    Waiting for {playersNeeded} more player{playersNeeded > 1 ? 's' : ''}...
+                  </p>
+                )}
               </div>
 
-              {/* Live Team Display */}
+              {/* Team Battle Waiting Area */}
               {isTeamMatch && (
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
                   {/* Team A */}
@@ -690,17 +708,44 @@ export default function BattleRoomPage() {
                     <div className="text-lg font-bold text-green-400 mb-3 flex items-center gap-2">
                       <span className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">A</span>
                       Team A
+                      <span className="text-sm text-zinc-500 ml-auto">
+                        {teamA.filter(p => playersJoined.includes(p.userId)).length}/{teamSize}
+                      </span>
                     </div>
                     <div className="space-y-2">
-                      {teamA.map((playerId, idx) => {
-                        const hasJoined = playersJoined.includes(playerId);
+                      {Array.from({ length: teamSize }).map((_, idx) => {
+                        const player = teamA[idx];
+                        const hasJoined = player ? playersJoined.includes(player.userId) : false;
+                        const isCurrentUser = player?.userId === user?.uid;
+                        
                         return (
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${hasJoined ? 'bg-green-500' : 'bg-zinc-600'}`} />
-                            <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
-                              {playerId === user?.uid ? 'You' : `Player ${idx + 1}`}
-                              {hasJoined ? ' ✓' : ' (waiting...)'}
-                            </span>
+                          <div key={idx} className="flex items-center gap-3">
+                            {player ? (
+                              <>
+                                {player.photoURL ? (
+                                  <img 
+                                    src={player.photoURL} 
+                                    alt={player.username}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
+                                    {player.username?.charAt(0).toUpperCase() || '?'}
+                                  </div>
+                                )}
+                                <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
+                                  {isCurrentUser ? 'You' : player.username || 'Player'}
+                                  {hasJoined ? ' ✓' : ' (waiting...)'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-500">
+                                  ?
+                                </div>
+                                <span className="text-sm text-zinc-600">Waiting for player...</span>
+                              </>
+                            )}
                           </div>
                         );
                       })}
@@ -712,17 +757,44 @@ export default function BattleRoomPage() {
                     <div className="text-lg font-bold text-blue-400 mb-3 flex items-center gap-2">
                       <span className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">B</span>
                       Team B
+                      <span className="text-sm text-zinc-500 ml-auto">
+                        {teamB.filter(p => playersJoined.includes(p.userId)).length}/{teamSize}
+                      </span>
                     </div>
                     <div className="space-y-2">
-                      {teamB.map((playerId, idx) => {
-                        const hasJoined = playersJoined.includes(playerId);
+                      {Array.from({ length: teamSize }).map((_, idx) => {
+                        const player = teamB[idx];
+                        const hasJoined = player ? playersJoined.includes(player.userId) : false;
+                        const isCurrentUser = player?.userId === user?.uid;
+                        
                         return (
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${hasJoined ? 'bg-blue-500' : 'bg-zinc-600'}`} />
-                            <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
-                              {playerId === user?.uid ? 'You' : `Player ${idx + 1}`}
-                              {hasJoined ? ' ✓' : ' (waiting...)'}
-                            </span>
+                          <div key={idx} className="flex items-center gap-3">
+                            {player ? (
+                              <>
+                                {player.photoURL ? (
+                                  <img 
+                                    src={player.photoURL} 
+                                    alt={player.username}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
+                                    {player.username?.charAt(0).toUpperCase() || '?'}
+                                  </div>
+                                )}
+                                <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
+                                  {isCurrentUser ? 'You' : player.username || 'Player'}
+                                  {hasJoined ? ' ✓' : ' (waiting...)'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-500">
+                                  ?
+                                </div>
+                                <span className="text-sm text-zinc-600">Waiting for player...</span>
+                              </>
+                            )}
                           </div>
                         );
                       })}
@@ -756,7 +828,7 @@ export default function BattleRoomPage() {
 
               {/* Players joined count */}
               <div className="text-center text-zinc-400 text-sm">
-                {playersJoined.length} / {players.length} players joined
+                {playersJoined.length} / {requiredPlayers} players joined
               </div>
             </CardContent>
           </Card>

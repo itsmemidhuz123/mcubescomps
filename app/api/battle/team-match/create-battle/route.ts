@@ -63,12 +63,17 @@ export async function POST(request) {
       });
     }
 
+    // Get team info
+    const teamSize = matchData.teamSize || 2;
+    const event = matchData.event || '333';
+    const roundCount = teamSize * 3; // 2v2=6, 4v4=12, 8v8=24 rounds
+
     // Generate scrambles
     let scrambleData;
     try {
       scrambleData = await generateScrambleForBattle({
-        event: '333',
-        roundCount: 3,
+        event: event,
+        roundCount: roundCount,
       });
     } catch (scrambleError) {
       return NextResponse.json(
@@ -81,36 +86,40 @@ export async function POST(request) {
     
     const battleData = {
       battleId: '',
-      battleName: `Team Battle ${matchData.teamSize}v${matchData.teamSize}`,
+      battleName: `Team Battle ${teamSize}v${teamSize}`,
       battleType: 'teamBattle',
-      event: '333',
+      event: event,
       scrambleId: scrambleData.scrambleId,
       scrambles: scrambleData.scrambles,
       currentScrambleIndex: 0,
       currentRound: 1,
-      createdBy: matchData.player1,
-      player1: matchData.player1,
-      player2: matchData.teamB[0] || null,
+      createdBy: matchData.teamA[0]?.userId || matchData.player1,
+      // Team profiles
+      teamA: matchData.teamA || [],
+      teamB: matchData.teamB || [],
+      // Flat arrays for querying
+      players: matchData.players || [],
+      playerNames: matchData.playerNames || [],
       status: 'waiting',
       winner: null,
       visibility: 'public',
-      format: 'bo3',
-      winsRequired: 3,
+      format: 'team_ao5', // Team average format
+      winsRequired: teamSize, // Win by getting more rounds than opponent
       scores: { player1: 0, player2: 0 },
+      // Team scores tracking
+      teamASolves: [],
+      teamBSolves: [],
       allowSpectators: true,
       spectators: [],
       creatorJoined: true,
-      opponentJoined: matchData.teamB.length > 0,
+      opponentJoined: (matchData.teamB?.length || 0) > 0,
       startTime: null,
       createdAt: now,
       lastActivityAt: now,
       startedAt: null,
       completedAt: null,
-      roundCount: 3,
-      teamSize: matchData.teamSize,
-      teamA: matchData.teamA,
-      teamB: matchData.teamB,
-      players: matchData.players,
+      roundCount: roundCount,
+      teamSize: teamSize,
     };
 
     const battleRef = await db.collection('battles').add(battleData);
@@ -123,8 +132,7 @@ export async function POST(request) {
       battleId: battleId,
     });
 
-    // Delete the match document
-    await matchRef.delete();
+    // Don't delete match - keep for reference
 
     return NextResponse.json({
       success: true,

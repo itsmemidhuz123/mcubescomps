@@ -142,6 +142,14 @@ export async function POST(request) {
       lastUpdated: Date.now(),
     });
 
+    // Check if this is a team battle
+    const isTeamBattle = battleData.battleType === 'teamBattle';
+    
+    if (isTeamBattle) {
+      return handleTeamBattleScore(db, battleRef, battleData, uid, time, penalty, scrambleIndex, existingSolves, ao5);
+    }
+
+    // Original 1v1 scoring logic
     const player1SolvesData = await battleRef.collection('solves').doc(battleData.player1).get();
     const player2SolvesData = await battleRef.collection('solves').doc(battleData.player2).get();
 
@@ -257,4 +265,117 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+// Team battle scoring handler
+async function handleTeamBattleScore(db, battleRef, battleData, uid, time, penalty, scrambleIndex, existingSolves, ao5) {
+  const teamA = battleData.teamA || [];
+  const teamB = battleData.teamB || [];
+  const teamSize = teamA.length;
+  const winsRequired = battleData.winsRequired || teamSize;
+  
+  // Determine which team the player is on
+  const playerTeamA = teamA.some(p => p.userId === uid);
+  const playerTeamB = teamB.some(p => p.userId === uid);
+  
+  // Get all team member solves
+  const teamASolvesPromises = teamA.map(async (player) => {
+    const doc = await battleRef.collection('solves').doc(player.userId).get();
+    return doc.exists ? doc.data().solves || [] : [];
+  });
+  const teamBSolvesPromises = teamB.map(async (player) => {
+    const doc = await battleRef.collection('solves').doc(player.userId).get();
+    return doc.exists ? doc.data().solves || [] : [];
+  });
+  
+  const teamASolvesArrays = await Promise.all(teamASolvesPromises);
+  const teamBSolvesArrays = await Promise.all(teamBSolvesPromises);
+  
+  // Calculate team averages (only count non-DNF times)
+  const calculateTeamAverage = (solvesArrays) => {
+    let totalTime = 0;
+    let count = 0;
+    solvesArrays.forEach(solves => {
+      const lastSolve = solves[solves.length - 1];
+      if (lastSolve && lastSolve.time > 0 && lastSolve.penalty !== -1) {
+        totalTime += lastSolve.time + (lastSolve.penalty === 2 ? 2000 : 0);
+        count++;
+      }
+    });
+    return count > 0 ? Math.round(totalTime / count) : null;
+  };
+  
+  const teamAAverage = calculateTeamAverage(teamASolvesArrays);
+  const teamBAverage = calculateTeamAverage(teamBSolvesArrays);
+  
+  // Get current scores
+  const currentScores = battleData.teamScores || { teamA: 0, teamB: 0 };
+  let newScores = { ...currentScores };
+  let winner = null;
+  let battleUpdate: Record<string, unknown> = {};
+  
+  // Check if both teams have submitted this round
+  const teamAMembersWithSolves = teamASolvesArrays.filter(s => s.length >= scrambleIndex + 1).length;
+  const teamBMembersWithSolves = teamBSolvesArrays.filter(s => s.length >= scrambleIndex + 1).length;
+  
+  // If both teams have completed this round
+  if (teamAAverage !== null && teamBAverage !== null && teamAMembersWithSolves === teamA.length && teamBMembersWithSolves === teamB.length) {
+    // Compare team averages - lower is better
+    if (teamAAverage < teamBAverage) {
+      newScores.teamA++;
+    } else if (teamBAverage < teamAAverage) {
+      newScores.teamB++;
+    }
+    // If equal, no one gets a point (tie)
+    
+    battleUpdate.teamScores = newScores;
+    
+    // Check if battle is complete
+    if (newScores.teamA >= winsRequired || newScores.teamB >= winsRequired) {
+      winner = newScores.teamA >= winsRequired ? 'teamA' : 'teamB';
+      
+      battleUpdate.status = 'completed';
+      battleUpdate.winner = winner;
+      battleUpdate.completedAt = admin.firestore.FieldValue.serverTimestamp();
+      battleUpdate.teamAAverage = teamAAverage;
+      battleUpdate.teamBAverage = teamBAverage;
+    } else if (scrambleIndex + 1 >= (battleData.roundCount || 6)) {
+      // All rounds complete
+      if (newScores.teamA > newScores.teamB) {
+        winner = 'teamA';
+      } else if (newScores.teamB > newScores.teamA) {
+        winner = 'teamB';
+      } else {
+        winner = 'tie';
+      }
+      
+      battleUpdate.status = 'completed';
+      battleUpdate.winner = winner;
+      battleUpdate.completedAt = admin.firestore.FieldValue.serverTimestamp();
+      battleUpdate.teamAAverage = teamAAverage;
+      battleUpdate.teamBAverage = teamBAverage;
+    } else {
+      // Move to next round
+      battleUpdate.currentScrambleIndex = (battleData.currentScrambleIndex || 0) + 1;
+      battleUpdate.currentRound = (battleData.currentRound || 1) + 1;
+    }
+  }
+  
+  if (Object.keys(battleUpdate).length > 0) {
+    battleUpdate.lastActivityAt = admin.firestore.FieldValue.serverTimestamp();
+    await battleRef.update(battleUpdate);
+  }
+  
+  const currentStatus = battleUpdate.status || battleData.status || 'live';
+  
+  return NextResponse.json({
+    success: true,
+    solves: existingSolves,
+    ao5,
+    teamScores: newScores,
+    teamAAverage,
+    teamBAverage,
+    battleStatus: currentStatus,
+    winner,
+  });
 }
