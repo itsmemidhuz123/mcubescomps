@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Shield, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Copy, Check, Video } from 'lucide-react';
+import { RefreshCw, FileDown, Trophy, Users, DollarSign, Trash2, Ban, ShieldCheck, Shield, Clock, Timer, AlertTriangle, Eye, Gavel, CheckCircle, Plus, Tag, Percent, Layers, ChevronUp, ChevronDown, Settings2, Copy, Check, Video, Sword, Flag, XCircle } from 'lucide-react';
 import { WCA_EVENTS, getEventName } from '@/lib/wcaEvents';
 import {
     CompetitionMode,
@@ -67,12 +67,17 @@ export default function AdminPanel() {
     const [flaggedSolves, setFlaggedSolves] = useState([]);
     const [coupons, setCoupons] = useState([]);
     const [couponUsages, setCouponUsages] = useState([]);
+    const [battles, setBattles] = useState([]);
+    const [battleReports, setBattleReports] = useState([]);
+    const [bannedUsers, setBannedUsers] = useState([]);
     const [stats, setStats] = useState({
         totalUsers: 0,
         totalRevenue: 0,
         activeCompetitions: 0
     });
     const [loadingData, setLoadingData] = useState(true);
+    const [battleFilter, setBattleFilter] = useState('all');
+    const [reportFilter, setReportFilter] = useState('pending');
 
     // Form States
     const [editingComp, setEditingComp] = useState(null);
@@ -167,6 +172,29 @@ export default function AdminPanel() {
             });
             flaggedResults.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setFlaggedSolves(flaggedResults);
+
+            // Fetch Battles
+            const battlesQuery = query(collection(db, 'battles'), orderBy('createdAt', 'desc'), limit(50));
+            const battlesSnap = await getDocs(battlesQuery);
+            setBattles(battlesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+            // Fetch Battle Reports
+            try {
+                const reportsRes = await fetch('/api/battle/report?status=all');
+                const reportsData = await reportsRes.json();
+                if (reportsData.reports) setBattleReports(reportsData.reports);
+            } catch (e) {
+                console.error('Failed to fetch reports:', e);
+            }
+
+            // Fetch Banned Users
+            try {
+                const bansRes = await fetch('/api/admin/ban?active=true');
+                const bansData = await bansRes.json();
+                if (bansData.bans) setBannedUsers(bansData.bans);
+            } catch (e) {
+                console.error('Failed to fetch bans:', e);
+            }
 
             const couponsSnap = await getDocs(collection(db, 'coupons'));
             const couponsData = couponsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -811,6 +839,15 @@ export default function AdminPanel() {
                         {flaggedSolves.length > 0 && (
                             <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
                                 {flaggedSolves.length}
+                            </Badge>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger value="battles">
+                        <Sword className="w-4 h-4 mr-2" />
+                        Battles
+                        {(battleReports.filter(r => r.status === 'pending').length > 0) && (
+                            <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                                {battleReports.filter(r => r.status === 'pending').length}
                             </Badge>
                         )}
                     </TabsTrigger>
@@ -1906,6 +1943,301 @@ export default function AdminPanel() {
                             </Table>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                <TabsContent value="battles">
+                    <div className="space-y-6">
+                        {/* Battles Section */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Sword className="w-5 h-5" />
+                                    Battle Management
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex gap-2 mb-4">
+                                    <Button 
+                                        variant={battleFilter === 'all' ? 'default' : 'outline'} 
+                                        onClick={() => setBattleFilter('all')}
+                                    >
+                                        All
+                                    </Button>
+                                    <Button 
+                                        variant={battleFilter === 'waiting' ? 'default' : 'outline'} 
+                                        onClick={() => setBattleFilter('waiting')}
+                                    >
+                                        Waiting
+                                    </Button>
+                                    <Button 
+                                        variant={battleFilter === 'live' ? 'default' : 'outline'} 
+                                        onClick={() => setBattleFilter('live')}
+                                    >
+                                        Live
+                                    </Button>
+                                    <Button 
+                                        variant={battleFilter === 'completed' ? 'default' : 'outline'} 
+                                        onClick={() => setBattleFilter('completed')}
+                                    >
+                                        Completed
+                                    </Button>
+                                    <Button variant="outline" onClick={() => {
+                                        const q = query(collection(db, 'battles'), orderBy('createdAt', 'desc'), limit(50));
+                                        getDocs(q).then(snap => {
+                                            const data = [];
+                                            snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+                                            setBattles(data);
+                                        });
+                                    }}>
+                                        <RefreshCw className="w-4 h-4 mr-2" />
+                                        Refresh
+                                    </Button>
+                                </div>
+
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Battle ID</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Players</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Format</TableHead>
+                                            <TableHead>Created</TableHead>
+                                            <TableHead>Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {battles.filter(b => battleFilter === 'all' || b.status === battleFilter).slice(0, 20).map(battle => (
+                                            <TableRow key={battle.id}>
+                                                <TableCell className="font-mono text-xs">{battle.id.slice(0, 8)}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">
+                                                        {battle.battleType === 'matchmaking' ? 'Quick' : 
+                                                         battle.battleType === 'teamBattle' ? 'Team' : 'Custom'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>{battle.players?.length || 2}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={battle.status === 'live' ? 'default' : 
+                                                                   battle.status === 'completed' ? 'secondary' : 'outline'}>
+                                                        {battle.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>{battle.format}</TableCell>
+                                                <TableCell className="text-xs">
+                                                    {battle.createdAt?.toDate?.()?.toLocaleDateString() || '-'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm"
+                                                        onClick={() => window.open(`/battle/${battle.id}`, '_blank')}
+                                                    >
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm"
+                                                        className="text-red-500"
+                                                        onClick={async () => {
+                                                            if (confirm('Delete this battle?')) {
+                                                                await deleteDoc(doc(db, 'battles', battle.id));
+                                                                setBattles(battles.filter(b => b.id !== battle.id));
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+
+                        {/* Reports Section */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-red-600">
+                                    <Flag className="w-5 h-5" />
+                                    Battle Reports
+                                    {battleReports.filter(r => r.status === 'pending').length > 0 && (
+                                        <Badge variant="destructive">
+                                            {battleReports.filter(r => r.status === 'pending').length} Pending
+                                        </Badge>
+                                    )}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex gap-2 mb-4">
+                                    <Button 
+                                        variant={reportFilter === 'pending' ? 'default' : 'outline'} 
+                                        onClick={() => setReportFilter('pending')}
+                                    >
+                                        Pending
+                                    </Button>
+                                    <Button 
+                                        variant={reportFilter === 'reviewed' ? 'default' : 'outline'} 
+                                        onClick={() => setReportFilter('reviewed')}
+                                    >
+                                        Reviewed
+                                    </Button>
+                                    <Button 
+                                        variant={reportFilter === 'resolved' ? 'default' : 'outline'} 
+                                        onClick={() => setReportFilter('resolved')}
+                                    >
+                                        Resolved
+                                    </Button>
+                                    <Button variant="outline" onClick={() => {
+                                        fetch('/api/battle/report').then(r => r.json()).then(data => {
+                                            if (data.reports) setBattleReports(data.reports);
+                                        });
+                                    }}>
+                                        <RefreshCw className="w-4 h-4 mr-2" />
+                                        Refresh
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {battleReports.filter(r => reportFilter === 'all' || r.status === reportFilter).map(report => (
+                                        <div key={report.id} className="bg-zinc-800 rounded-lg p-4">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <Badge variant="outline">{report.reason}</Badge>
+                                                    <span className="text-xs text-zinc-500 ml-2">
+                                                        {report.createdAt?.toDate?.()?.toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <Badge variant={report.status === 'pending' ? 'destructive' : 'secondary'}>
+                                                    {report.status}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-zinc-400 mb-3">{report.description}</p>
+                                            <div className="flex gap-2">
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="outline"
+                                                    onClick={async () => {
+                                                        await fetch('/api/battle/report', {
+                                                            method: 'PUT',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ reportId: report.id, status: 'reviewed' })
+                                                        });
+                                                        setBattleReports(battleReports.map(r => 
+                                                            r.id === report.id ? { ...r, status: 'reviewed' } : r
+                                                        ));
+                                                    }}
+                                                >
+                                                    Mark Reviewed
+                                                </Button>
+                                                <Button 
+                                                    size="sm" 
+                                                    className="bg-red-600 hover:bg-red-500"
+                                                    onClick={() => {
+                                                        const banType = prompt('Ban type: 1=participate, 2=create, 3=all', '3');
+                                                        const duration = prompt('Duration: 1, 7, 30, permanent', '7');
+                                                        if (banType && duration) {
+                                                            fetch('/api/admin/ban', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({
+                                                                    userId: report.reportedUserId,
+                                                                    reason: `Battle Report: ${report.reason}`,
+                                                                    banType: banType === '1' ? 'participate' : banType === '2' ? 'create' : 'all',
+                                                                    banDuration: duration,
+                                                                    adminUserId: user.uid
+                                                                })
+                                                            }).then(() => {
+                                                                alert('User banned successfully');
+                                                                fetch('/api/battle/report', {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned' })
+                                                                });
+                                                            });
+                                                        }
+                                                    }}
+                                                >
+                                                    Ban User
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {battleReports.filter(r => reportFilter === 'all' || r.status === reportFilter).length === 0 && (
+                                        <p className="text-center text-zinc-500 py-4">No reports found</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Banned Users Section */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-red-600">
+                                    <Ban className="w-5 h-5" />
+                                    Banned Users
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Button variant="outline" onClick={() => {
+                                    fetch('/api/admin/ban').then(r => r.json()).then(data => {
+                                        if (data.bans) setBannedUsers(data.bans);
+                                    });
+                                }} className="mb-4">
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Refresh Bans
+                                </Button>
+
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>User ID</TableHead>
+                                            <TableHead>Reason</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Banned At</TableHead>
+                                            <TableHead>Expires</TableHead>
+                                            <TableHead>Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {bannedUsers.map(ban => (
+                                            <TableRow key={ban.id}>
+                                                <TableCell className="font-mono text-xs">{ban.userId?.slice(0, 8)}</TableCell>
+                                                <TableCell className="text-sm">{ban.reason}</TableCell>
+                                                <TableCell><Badge variant="outline">{ban.banType}</Badge></TableCell>
+                                                <TableCell className="text-xs">{ban.bannedAt?.toDate?.()?.toLocaleDateString()}</TableCell>
+                                                <TableCell className="text-xs">
+                                                    {ban.expiresAt ? ban.expiresAt.toDate()?.toLocaleDateString() : 'Permanent'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
+                                                        onClick={async () => {
+                                                            if (confirm('Lift this ban?')) {
+                                                                await fetch('/api/admin/ban', {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ banId: ban.id, action: 'lift', adminUserId: user.uid })
+                                                                });
+                                                                setBannedUsers(bannedUsers.filter(b => b.id !== ban.id));
+                                                            }
+                                                        }}
+                                                    >
+                                                        Lift Ban
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                {bannedUsers.length === 0 && (
+                                    <p className="text-center text-zinc-500 py-4">No banned users</p>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="payments">
