@@ -44,90 +44,102 @@ export default function BattleRoomPage() {
   const { playIntro, playCountdown, playBattleStart, playVictory, playDefeat } = useBattleSounds();
   const { shouldShowIntro, dismissIntro } = useBattleIntro();
 
-  // Handle match waiting - when battleId is actually a matchId (starts with "match_")
+  // Handle match waiting - when battleId is actually a matchId (starts with "match_" or "team_match_")
   useEffect(() => {
     if (authLoading || !user || !battleId) return;
     
     // Check if this is a match waiting (not a battle yet)
-    if (battleId.startsWith('match_')) {
-      setIsMatchWaiting(true);
-      setLoading(true);
-      
-      // Listen to the match document
-      const matchRef = doc(db, 'matches', battleId);
-      const unsubscribe = onSnapshot(matchRef, async (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setMatchData(data);
-          
-          // Determine if this user is player1 or player2
-          const isPlayer1 = data.player1 === user.uid;
-          const isPlayer2 = data.player2 === user.uid;
-          
-          if (!isPlayer1 && !isPlayer2) {
-            setError('You are not part of this match');
-            setLoading(false);
-            return;
-          }
-          
-          // Mark this player as joined
-          const joinedField = isPlayer1 ? 'player1Joined' : 'player2Joined';
-          if (!data[joinedField]) {
-            await updateDoc(matchRef, {
-              [joinedField]: true,
-              [`${joinedField}At`]: new Date(),
-            });
-          }
-          
-          // Check if both players have joined
-          if (data.player1Joined && data.player2Joined && !data.battleCreated) {
-            // Both players joined - create the battle
-            try {
-              const response = await fetch('/api/battle/quick-match/create-battle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  matchId: battleId,
+    const isQuickMatch = battleId.startsWith('match_');
+    const isTeamMatch = battleId.startsWith('team_match_');
+    
+    if (!isQuickMatch && !isTeamMatch) return;
+    
+    setIsMatchWaiting(true);
+    setLoading(true);
+    
+    // Listen to the match document
+    const matchRef = doc(db, 'matches', battleId);
+    const unsubscribe = onSnapshot(matchRef, async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setMatchData(data);
+        
+        // Check if this user is part of this match
+        const players = data.players || [];
+        const isParticipant = players.includes(user.uid);
+        
+        if (!isParticipant) {
+          setError('You are not part of this match');
+          setLoading(false);
+          return;
+        }
+        
+        // Mark this player as joined if not already
+        const playersJoined = data.playersJoined || [];
+        if (!playersJoined.includes(user.uid)) {
+          await updateDoc(matchRef, {
+            playersJoined: [...playersJoined, user.uid],
+            [`${user.uid}JoinedAt`]: new Date(),
+          });
+        }
+        
+        // Check if battle can be created (need at least 2 players for quick match, or 2+ for team)
+        const minPlayers = isTeamMatch ? 2 : 2;
+        const canStart = playersJoined.length >= minPlayers;
+        
+        if (canStart && !data.battleCreated) {
+          // Enough players joined - create the battle
+          try {
+            const apiEndpoint = isTeamMatch 
+              ? '/api/battle/team-match/create-battle'
+              : '/api/battle/quick-match/create-battle';
+            
+            const response = await fetch(apiEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                matchId: battleId,
+                ...(isTeamMatch ? {} : {
                   player1: data.player1,
                   player2: data.player2,
                   player1Name: data.player1Name,
                   player2Name: data.player2Name,
                 }),
+              }),
+            });
+            
+            const result = await response.json();
+            
+            if (result.success && result.battleId) {
+              // Update match to mark battle created
+              await updateDoc(matchRef, {
+                battleCreated: true,
+                battleId: result.battleId,
               });
               
-              const result = await response.json();
-              
-              if (result.success && result.battleId) {
-                // Update match to mark battle created
-                await updateDoc(matchRef, {
-                  battleCreated: true,
-                  battleId: result.battleId,
-                });
-                
-                // Redirect to actual battle
-                router.replace(`/battle/${result.battleId}`);
-              }
-            } catch (err) {
-              console.error('Failed to create battle:', err);
+              // Redirect to actual battle
+              router.replace(`/battle/${result.battleId}`);
             }
+          } catch (err) {
+            console.error('Failed to create battle:', err);
           }
-          
-          // If battle already created, redirect to it
-          if (data.battleCreated && data.battleId) {
-            router.replace(`/battle/${data.battleId}`);
-          }
-        } else {
-          setError('Match not found');
-          setLoading(false);
         }
-      }, (err) => {
-        console.error('Match listener error:', err);
-        setError('Failed to join match');
+        
+        // If battle already created, redirect to it
+        if (data.battleCreated && data.battleId) {
+          router.replace(`/battle/${data.battleId}`);
+        }
+      } else {
+        setError('Match not found');
         setLoading(false);
-      });
-      
-      return () => unsubscribe();
-    }
+      }
+    }, (err) => {
+      console.error('Match listener error:', err);
+      setError('Failed to join match');
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
   }, [battleId, user, authLoading, router]);
 
   // Check if rules should be shown for this battle type
@@ -598,6 +610,110 @@ export default function BattleRoomPage() {
   };
 
   if (authLoading || battleLoading || !battle) {
+    // Show match waiting screen if waiting for players to join
+    if (isMatchWaiting && matchData) {
+      const isTeamMatch = matchData.battleType === 'teamBattle';
+      const playersJoined = matchData.playersJoined || [];
+      const players = matchData.players || [];
+      const teamA = matchData.teamA || [];
+      const teamB = matchData.teamB || [];
+      
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+          <Card className="bg-zinc-900 border-zinc-800 w-full max-w-2xl">
+            <CardContent className="p-6">
+              <div className="text-center mb-6">
+                <Loader2 className="w-12 h-12 mx-auto mb-4 text-yellow-500 animate-spin" />
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {isTeamMatch ? 'Team Battle' : 'Quick Battle'}
+                </h2>
+                <p className="text-zinc-400">
+                  Waiting for players to join...
+                </p>
+              </div>
+
+              {/* Live Team Display */}
+              {isTeamMatch && (
+                <div className="grid md:grid-cols-2 gap-4 mb-6">
+                  {/* Team A */}
+                  <div className="bg-zinc-800 rounded-lg p-4">
+                    <div className="text-lg font-bold text-green-400 mb-3 flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">A</span>
+                      Team A
+                    </div>
+                    <div className="space-y-2">
+                      {teamA.map((playerId, idx) => {
+                        const hasJoined = playersJoined.includes(playerId);
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${hasJoined ? 'bg-green-500' : 'bg-zinc-600'}`} />
+                            <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
+                              {playerId === user?.uid ? 'You' : `Player ${idx + 1}`}
+                              {hasJoined ? ' ✓' : ' (waiting...)'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Team B */}
+                  <div className="bg-zinc-800 rounded-lg p-4">
+                    <div className="text-lg font-bold text-blue-400 mb-3 flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">B</span>
+                      Team B
+                    </div>
+                    <div className="space-y-2">
+                      {teamB.map((playerId, idx) => {
+                        const hasJoined = playersJoined.includes(playerId);
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${hasJoined ? 'bg-blue-500' : 'bg-zinc-600'}`} />
+                            <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
+                              {playerId === user?.uid ? 'You' : `Player ${idx + 1}`}
+                              {hasJoined ? ' ✓' : ' (waiting...)'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Match Waiting */}
+              {!isTeamMatch && (
+                <div className="bg-zinc-800 rounded-lg p-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${playersJoined.includes(matchData.player1) ? 'bg-green-500' : 'bg-zinc-600'}`} />
+                      <span className="text-white">
+                        {matchData.player1 === user?.uid ? 'You' : matchData.player1Name || 'Player 1'}
+                        {playersJoined.includes(matchData.player1) ? ' ✓' : ''}
+                      </span>
+                    </div>
+                    <span className="text-zinc-500">vs</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white">
+                        {matchData.player2 === user?.uid ? 'You' : matchData.player2Name || 'Player 2'}
+                        {playersJoined.includes(matchData.player2) ? ' ✓' : ''}
+                      </span>
+                      <div className={`w-3 h-3 rounded-full ${playersJoined.includes(matchData.player2) ? 'bg-green-500' : 'bg-zinc-600'}`} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Players joined count */}
+              <div className="text-center text-zinc-400 text-sm">
+                {playersJoined.length} / {players.length} players joined
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
@@ -687,7 +803,7 @@ export default function BattleRoomPage() {
                 onChange={(e) => setDontShowAgain(e.target.checked)}
                 className="w-4 h-4 rounded"
               />
-              <span className="text-zinc-400 text-sm">Don't show again for {battleType}</span>
+              <span className="text-zinc-400 text-sm">Don&apos;t show again for {battleType}</span>
             </label>
 
             <Button

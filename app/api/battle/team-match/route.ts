@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import admin from 'firebase-admin';
-import { generateScrambleForBattle, ScrambleError } from '@/services/scrambleService';
 
 function getAdminDb() {
   if (getApps().length === 0) {
@@ -41,6 +40,8 @@ export async function POST(request) {
     
     const snapshot = await queueRef
       .where('joinedAt', '>', admin.firestore.Timestamp.fromDate(oneMinuteAgo))
+      .where('teamBattle', '==', true)
+      .where('teamSize', '==', teamSize)
       .limit(20)
       .get();
 
@@ -56,105 +57,59 @@ export async function POST(request) {
     
     if (availablePlayers.length >= playersNeeded) {
       const selectedOpponents = availablePlayers.slice(0, playersNeeded);
-      const allPlayerIds = [userId, ...selectedOpponents.map(p => p.userId)];
       
-      for (const player of selectedOpponents) {
-        await queueRef.doc(player.userId).delete();
-      }
-      await queueRef.doc(userId).delete();
-
-      let scrambleData;
-      try {
-        scrambleData = await generateScrambleForBattle({
-          event: '333',
-          roundCount: 3,
-        });
-      } catch (scrambleError) {
-        return NextResponse.json(
-          { success: false, message: 'Failed to generate scrambles' },
-          { status: 500 }
-        );
-      }
-
+      // Generate a temporary match ID (battle will be created when players arrive)
+      const matchId = `team_match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const now = admin.firestore.FieldValue.serverTimestamp();
       
+      // Assign teams in alternating order: A, B, A, B...
       const teamA = [userId];
       const teamB = [];
       
       for (let i = 0; i < selectedOpponents.length; i++) {
-        if (i < teamSize) {
-          teamB.push(selectedOpponents[i].userId);
-        } else {
+        if (i % 2 === 0) {
           teamA.push(selectedOpponents[i].userId);
+        } else {
+          teamB.push(selectedOpponents[i].userId);
         }
       }
 
-      const battleData = {
-        battleId: '',
-        battleName: `Team Battle ${teamSize}v${teamSize}`,
-        battleType: 'teamMatchmaking',
-        event: '333',
-        scrambleId: scrambleData.scrambleId,
-        scrambles: scrambleData.scrambles,
-        currentScrambleIndex: 0,
-        currentRound: 1,
-        createdBy: userId,
+      // Write to matches collection - signals all players to join
+      await db.collection('matches').doc(matchId).set({
+        matchId: matchId,
+        createdAt: now,
+        battleType: 'teamBattle',
+        teamSize: teamSize,
         player1: userId,
-        player2: teamB[0] || null,
-        status: 'waiting',
-        winner: null,
-        visibility: 'public',
-        format: 'bo3',
-        winsRequired: 3,
-        scores: { player1: 0, player2: 0 },
-        allowSpectators: true,
-        spectators: [],
-        creatorJoined: true,
-        opponentJoined: false,
-        startTime: null,
-        createdAt: now,
-        lastActivityAt: now,
-        startedAt: null,
-        completedAt: null,
-        roundCount: 3,
-        teamSize: teamSize,
+        player2: selectedOpponents[0].userId,
+        players: [userId, ...selectedOpponents.map(p => p.userId)],
         teamA: teamA,
         teamB: teamB,
-        players: allPlayerIds,
-      };
-
-      const battleRef = await db.collection('battles').add(battleData);
-      const battleId = battleRef.id;
-      await battleRef.update({ battleId });
-
-      await db.collection('matchmakingQueue').doc(userId).collection('matches').doc(battleId).set({
-        battleId: battleId,
-        createdAt: now,
-        battleType: 'team',
-        teamSize: teamSize,
-        teamA: teamA,
-        teamB: teamB,
+        player1Name: username || 'Player',
+        player2Name: selectedOpponents[0].username || 'Player',
+        playersJoined: [userId], // Track who has joined
+        battleCreated: false,
       });
 
-      for (const opponent of selectedOpponents) {
-        const opponentTeam = teamB.includes(opponent.userId) ? 'teamB' : 'teamA';
-        await db.collection('matchmakingQueue').doc(opponent.userId).collection('matches').doc(battleId).set({
-          battleId: battleId,
-          createdAt: now,
-          battleType: 'team',
-          teamSize: teamSize,
-          teamA: teamA,
-          teamB: teamB,
-          yourTeam: opponentTeam,
-        });
+      // Update queue entries to mark as matched
+      await queueRef.doc(userId).update({
+        matched: true,
+        matchId: matchId,
+        matchedAt: now,
+      }).catch(() => {});
+
+      for (const player of selectedOpponents) {
+        await queueRef.doc(player.userId).update({
+          matched: true,
+          matchId: matchId,
+          matchedAt: now,
+        }).catch(() => {});
       }
 
       return NextResponse.json({
         success: true,
-        battleId,
+        matchId,
         teamSize,
-        teamA,
-        teamB,
         message: 'Team match found!',
       });
     }
