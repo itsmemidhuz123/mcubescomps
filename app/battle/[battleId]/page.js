@@ -345,10 +345,11 @@ export default function BattleRoomPage() {
     }
   }, [timerState, battle, user, battleId, getMySolves]);
 
+  // Show rules only once at the start of battle (when status becomes 'live')
   useEffect(() => {
     if (!battle || battle.status !== 'live') return;
+    if (battle.currentRound && battle.currentRound > 1) return; // Already started previous round
     
-    // Check if rules should be shown for this battle type
     const battleType = battle.battleType || 'custom';
     const rulesKey = `showRules_${battleType}`;
     const hasAcknowledged = localStorage.getItem(rulesKey);
@@ -356,7 +357,7 @@ export default function BattleRoomPage() {
     if (!hasAcknowledged) {
       setShowRules(true);
     }
-  }, [battle]);
+  }, [battle?.status]); // Only run when status changes, not after every solve
 
   // Start countdown only after rules acknowledged
   useEffect(() => {
@@ -771,6 +772,8 @@ export default function BattleRoomPage() {
   }
 
   if (showIntro) {
+    const battleType = battle?.battleType || 'custom';
+    
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <Card className="bg-zinc-900 border-zinc-800 w-full">
@@ -800,17 +803,20 @@ export default function BattleRoomPage() {
               <label className="flex items-center gap-2 text-sm text-zinc-400">
                 <input 
                   type="checkbox" 
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      dismissIntro();
-                    }
-                  }}
+                  checked={dontShowAgain}
+                  onChange={(e) => setDontShowAgain(e.target.checked)}
                   className="w-4 h-4 rounded"
                 />
-                Don&apos;t show again
+                Don&apos;t show again for {battleType}
               </label>
               <Button 
-                onClick={handleDismissIntro}
+                onClick={() => {
+                  if (dontShowAgain) {
+                    localStorage.setItem(`showRules_${battleType}`, 'true');
+                    dismissIntro();
+                  }
+                  handleDismissIntro();
+                }}
                 className="bg-red-600 hover:bg-red-500"
                 size="lg"
               >
@@ -823,8 +829,8 @@ export default function BattleRoomPage() {
     );
   }
 
-  // Show rules modal before countdown
-  if (showRules) {
+  // Show rules modal before countdown (only if intro is not shown)
+  if (showRules && !showIntro) {
     const battleType = battle?.battleType || 'custom';
     const rulesTitle = battleType === 'quickBattle' ? 'Quick Battle Rules' : 
                        battleType === 'teamBattle' ? 'Team Battle Rules' : 'Battle Rules';
