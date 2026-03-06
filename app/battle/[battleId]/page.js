@@ -1505,8 +1505,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
 
               {/* Clickable timer area - entire container is tappable */}
               <div 
-                onClick={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleAction : undefined}
-                onTouchStart={canSolve && !isSpectator ? handleTouchStart : undefined}
+                onClick={canSolve && !isSpectator ? handleAction : undefined}
                 onTouchEnd={canSolve && !isSpectator ? handleTouchEnd : undefined}
                 style={{ touchAction: 'manipulation' }}
                 className={`mt-6 p-8 rounded-xl cursor-pointer transition-all ${

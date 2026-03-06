@@ -130,26 +130,33 @@ export function useBattleTimer(settings = {}) {
     }
   }, [timerState, startInspection, stop, reset]);
 
-  // Simple touch handling - tap to start/stop like PC space bar
-  const handleTouchStart = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (timerState === TIMER_STATES.IDLE) {
-      startInspection();
-    }
-  }, [timerState, startInspection]);
-
+  // Touch handling - single tap does same action as PC space bar
   const handleTouchEnd = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (timerState === TIMER_STATES.INSPECTION || timerState === TIMER_STATES.RUNNING) {
-      stop();
-    } else if (timerState === TIMER_STATES.STOPPED) {
-      reset();
+    // Single tap action - same as PC space bar
+    switch (timerState) {
+      case TIMER_STATES.IDLE:
+        startInspection();
+        break;
+      case TIMER_STATES.INSPECTION:
+      case TIMER_STATES.RUNNING:
+        stop();
+        break;
+      case TIMER_STATES.STOPPED:
+        reset();
+        break;
+      default:
+        break;
     }
-  }, [timerState, stop, reset]);
+  }, [timerState, startInspection, stop, reset]);
+
+  // Keep handleTouchStart minimal to prevent browser defaults
+  const handleTouchStart = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   const getFinalTime = useCallback(() => {
     if (solvedTimeRef.current === null || solvedTimeRef.current === undefined) {
