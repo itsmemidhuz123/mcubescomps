@@ -75,6 +75,7 @@ export async function POST(request) {
 
     const db = getAdminDb();
     const now = admin.firestore.FieldValue.serverTimestamp();
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000));
 
     // For team battles (teamSize > 1), create a waiting room instead of actual battle
     if (teamSize > 1) {
@@ -127,7 +128,7 @@ export async function POST(request) {
         // Timing
         createdAt: now,
         lastActivityAt: now,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+        expiresAt: expiresAt,
         // For open battles display
         battleName: battleName || `${teamSize}v${teamSize} Team Battle`,
       };
@@ -211,8 +212,9 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Battle creation error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, message: 'Failed to create battle' },
+      { success: false, message: 'Failed to create battle: ' + errorMessage },
       { status: 500 }
     );
   }
