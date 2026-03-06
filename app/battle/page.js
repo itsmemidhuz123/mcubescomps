@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -45,7 +45,44 @@ export default function BattlePage() {
   }, [authLoading, user, router]);
 
   useEffect(() => {
-    loadWaitingBattles();
+    if (!user) return;
+    
+    const q = query(
+      collection(db, 'battles'),
+      where('status', '==', 'waiting'),
+      where('visibility', '==', 'public'),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const battles = [];
+      const oneHourMs = 60 * 60 * 1000;
+      const now = Date.now();
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.player1 !== user.uid) {
+          const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
+          const battleAge = now - createdAt.getTime();
+          
+          if (battleAge <= oneHourMs) {
+            battles.push({ id: doc.id, ...data });
+          }
+        }
+      });
+      
+      setWaitingBattles(battles);
+      setLoading(false);
+    }, (err) => {
+      console.error('Error loading battles:', err);
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
     loadMyBattles();
   }, []);
 

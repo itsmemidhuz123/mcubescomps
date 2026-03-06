@@ -25,18 +25,18 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { matchId, player1, player2, player1Name, player2Name } = body;
+    const { matchId } = body;
 
-    if (!matchId || !player1 || !player2) {
+    if (!matchId) {
       return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
+        { success: false, message: 'Match ID is required' },
         { status: 400 }
       );
     }
 
     const db = getAdminDb();
     
-    // Check if battle already created
+    // Fetch match document to get player data (more reliable than client-passed data)
     const matchRef = db.collection('matches').doc(matchId);
     const matchDoc = await matchRef.get();
     
@@ -48,7 +48,19 @@ export async function POST(request) {
     }
     
     const matchData = matchDoc.data();
-    if (matchData && matchData.battleCreated) {
+    const player1 = matchData.player1;
+    const player2 = matchData.player2;
+    const player1Name = matchData.player1Name || matchData.player1Username || 'Player 1';
+    const player2Name = matchData.player2Name || matchData.player2Username || 'Player 2';
+
+    if (!player1 || !player2) {
+      return NextResponse.json(
+        { success: false, message: 'Players not found in match' },
+        { status: 400 }
+      );
+    }
+    
+    if (matchData.battleCreated) {
       return NextResponse.json({
         success: true,
         battleId: matchData.battleId,

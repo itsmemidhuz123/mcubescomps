@@ -68,7 +68,9 @@ export default function BattleRoomPage() {
         
         // Check if this user is part of this match
         const players = data.players || [];
-        const isParticipant = players.includes(user.uid);
+        const isParticipant = players.includes(user.uid) || 
+                             data.player1 === user.uid || 
+                             data.player2 === user.uid;
         
         if (!isParticipant) {
           setError('You are not part of this match');
@@ -91,6 +93,10 @@ export default function BattleRoomPage() {
         
         if (canStart && !data.battleCreated) {
           // Enough players joined - create the battle
+          // Use consistent player data from the match document
+          const player1Name = data.player1Name || data.player1Username || 'Player 1';
+          const player2Name = data.player2Name || data.player2Username || 'Player 2';
+          
           try {
             const apiEndpoint = isTeamMatch 
               ? '/api/battle/team-match/create-battle'
@@ -104,8 +110,8 @@ export default function BattleRoomPage() {
                 ...(isTeamMatch ? {} : {
                   player1: data.player1,
                   player2: data.player2,
-                  player1Name: data.player1Name,
-                  player2Name: data.player2Name,
+                  player1Name: player1Name,
+                  player2Name: player2Name,
                 }),
               }),
             });

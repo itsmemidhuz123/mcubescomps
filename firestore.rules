@@ -124,11 +124,11 @@ service cloud.firestore {
       // Create: ADMIN+ with permission
       allow create: if isAdmin() && hasPermission('canCreateCompetition');
       
-      // Update: ADMIN+
-      allow update: if isAdmin();
+      // Update: ADMIN+ or isSuperAdmin
+      allow update: if isAdmin() || isSuperAdmin();
       
       // Delete: ADMIN+ only
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isSuperAdmin();
     }
     
     // Results collection
@@ -165,7 +165,7 @@ service cloud.firestore {
       // Public read
       allow read: if true;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isModerator();
+      allow update, delete: if isModerator() || isAdmin();
     }
 
     // Scramble reveal tracking
@@ -279,35 +279,40 @@ service cloud.firestore {
       // Allow reading waiting battles (for open battles list)
       // Allow reading public battles or battles where user is participant/creator/spectator
       allow read: if (
-        resource.data.status == 'waiting' ||
-        resource.data.status == 'expired' ||
-        resource.data.status == 'cancelled' ||
-        resource.data.status == 'completed' ||
-        resource.data.visibility == 'public' || 
-        resource.data.player1 == request.auth.uid ||
-        resource.data.player2 == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid ||
-        resource.data.allowSpectators == true
+        isSignedIn() && (
+          resource.data.status == 'waiting' ||
+          resource.data.status == 'expired' ||
+          resource.data.status == 'cancelled' ||
+          resource.data.status == 'completed' ||
+          resource.data.visibility == 'public' || 
+          resource.data.player1 == request.auth.uid ||
+          resource.data.player2 == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.allowSpectators == true ||
+          isAdmin()
+        )
       );
       
       // Only signed in users can create battles
       allow create: if isSignedIn();
       
-      // Only participants or creator can update (creator can discontinue, start countdown, etc.)
+      // Only participants, creator, or admin can update
       allow update: if isSignedIn() && (
         resource.data.player1 == request.auth.uid ||
         resource.data.player2 == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
       );
     }
     
-    // Battle solves subcollection - Only participants can write (spectators can read)
+    // Battle solves subcollection - Only participants can write (spectators can read, admin can read all)
     match /battles/{battleId}/solves/{uid} {
       allow read: if isSignedIn() && (
         get(/databases/$(database)/documents/battles/$(battleId)).data.player1 == request.auth.uid ||
         get(/databases/$(database)/documents/battles/$(battleId)).data.player2 == request.auth.uid ||
         get(/databases/$(database)/documents/battles/$(battleId)).data.createdBy == request.auth.uid ||
-        get(/databases/$(database)/documents/battles/$(battleId)).data.allowSpectators == true
+        get(/databases/$(database)/documents/battles/$(battleId)).data.allowSpectators == true ||
+        isAdmin()
       );
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
