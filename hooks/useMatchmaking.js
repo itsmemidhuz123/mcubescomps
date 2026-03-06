@@ -51,8 +51,13 @@ export function useMatchmaking(user) {
     
     // Reset all state
     setBattleId(null);
-    setStatus('searching');
+    setStatus('idle');
     setError(null);
+
+    // Small delay to ensure state is reset
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    setStatus('searching');
 
     try {
       const response = await fetch('/api/battle/quick-match', {
@@ -78,14 +83,25 @@ export function useMatchmaking(user) {
         // Listen to matches collection for this user
         const matchesRef = collection(db, 'matches');
         const q = query(matchesRef);
+        
+        // Only process matches created in the last 5 minutes
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
         unsubscribeRef.current = onSnapshot(q, (snapshot) => {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added' || change.type === 'modified') {
               const matchData = change.doc.data();
+              const matchCreatedAt = matchData.createdAt?.toDate?.()?.getTime() || 
+                                    matchData.createdAt?._seconds * 1000 || 0;
+              
+              // Only process recent matches (within last 5 minutes)
+              if (matchCreatedAt < fiveMinutesAgo) {
+                return;
+              }
+              
               // Check if this match involves this user and hasn't been acknowledged
               if (matchData.matchId && 
-                  !matchData.acknowledged &&
+                  !matchData.battleCreated &&
                   (matchData.player1 === user.uid || matchData.player2 === user.uid)) {
                 setBattleId(matchData.matchId);
                 setStatus('matched');
