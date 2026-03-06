@@ -137,8 +137,19 @@ export function useBattleTimer(settings = {}) {
     }
   }, [timerState, startInspection]);
 
+  const touchDebounceRef = useRef(null);
+  
   const handleTouchEnd = useCallback((e) => {
     e.preventDefault();
+    
+    // Debounce touch events to prevent accidental touches
+    if (touchDebounceRef.current) return;
+    touchDebounceRef.current = true;
+    
+    setTimeout(() => {
+      touchDebounceRef.current = null;
+    }, 300);
+    
     if (timerState === TIMER_STATES.INSPECTION || timerState === TIMER_STATES.RUNNING) {
       stop();
     } else if (timerState === TIMER_STATES.STOPPED) {

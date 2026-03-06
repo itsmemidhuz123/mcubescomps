@@ -23,6 +23,7 @@ export function useMatchmaking(user) {
       }
     }
     setStatus('idle');
+    setBattleId(null);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -34,6 +35,8 @@ export function useMatchmaking(user) {
   const startMatchmaking = useCallback(async () => {
     if (!user?.uid) return;
 
+    // Clear any previous battleId before starting new match
+    setBattleId(null);
     setStatus('searching');
     setError(null);
 

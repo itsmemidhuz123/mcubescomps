@@ -1536,7 +1536,9 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                   canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED
                     ? timerState === TIMER_STATES.IDLE
                       ? 'bg-green-900/30 border-2 border-green-500 hover:bg-green-800/40'
-                      : timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION
+                      : timerState === TIMER_STATES.INSPECTION
+                      ? 'bg-red-900/20 hover:bg-red-900/30'
+                      : timerState === TIMER_STATES.RUNNING
                       ? 'bg-red-900/30 border-2 border-red-500 hover:bg-red-800/40'
                     : 'bg-zinc-800'
                     : 'bg-zinc-800 cursor-not-allowed'

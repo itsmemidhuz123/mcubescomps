@@ -1994,12 +1994,13 @@ export default function AdminPanel() {
                                     </Button>
                                 </div>
 
-                                <Table>
+                                    <Table>
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Battle ID</TableHead>
                                             <TableHead>Type</TableHead>
                                             <TableHead>Players</TableHead>
+                                            <TableHead>Score</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Format</TableHead>
                                             <TableHead>Created</TableHead>
@@ -2012,11 +2013,28 @@ export default function AdminPanel() {
                                                 <TableCell className="font-mono text-xs">{battle.id.slice(0, 8)}</TableCell>
                                                 <TableCell>
                                                     <Badge variant="outline">
-                                                        {battle.battleType === 'matchmaking' ? 'Quick' : 
+                                                        {battle.battleType === 'quickBattle' || battle.battleType === 'matchmaking' ? 'Quick' : 
                                                          battle.battleType === 'teamBattle' ? 'Team' : 'Custom'}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell>{battle.players?.length || 2}</TableCell>
+                                                <TableCell>
+                                                    <div className="text-xs">
+                                                        <div>{battle.player1Name || battle.player1?.slice(0,8) || 'Unknown'}</div>
+                                                        <div className="text-zinc-500">vs</div>
+                                                        <div>{battle.player2Name || battle.player2?.slice(0,8) || 'Unknown'}</div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {battle.status === 'completed' ? (
+                                                        <span className="text-xs">
+                                                            {battle.scores?.player1 || 0} - {battle.scores?.player2 || 0}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-zinc-500">
+                                                            {battle.players?.length || 2} players
+                                                        </span>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell>
                                                     <Badge variant={battle.status === 'live' ? 'default' : 
                                                                    battle.status === 'completed' ? 'secondary' : 'outline'}>

@@ -303,6 +303,9 @@ service cloud.firestore {
         resource.data.createdBy == request.auth.uid ||
         isAdmin()
       );
+      
+      // Only admins can delete battles
+      allow delete: if isSignedIn() && isAdmin();
     }
     
     // Battle solves subcollection - Only participants can write (spectators can read, admin can read all)
@@ -315,6 +318,7 @@ service cloud.firestore {
         isAdmin()
       );
       allow write: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if isSignedIn() && isAdmin();
     }
     
     // Battle Reports - Authenticated users can create, admins can read/write
