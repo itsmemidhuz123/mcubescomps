@@ -123,8 +123,9 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Join team room error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, message: 'Failed to join room' },
+      { success: false, message: 'Failed to join room: ' + errorMessage },
       { status: 500 }
     );
   }
