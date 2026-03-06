@@ -130,35 +130,19 @@ export function useBattleTimer(settings = {}) {
     }
   }, [timerState, startInspection, stop, reset]);
 
+  // Simple touch handling - tap to start/stop like PC space bar
   const handleTouchStart = useCallback((e) => {
     e.preventDefault();
-    
-    // Store touch start time to verify minimum touch duration
-    touchStartTimeRef.current = Date.now();
+    e.stopPropagation();
     
     if (timerState === TIMER_STATES.IDLE) {
-      // Start a timer to detect long press - require at least 500ms hold
-      longPressTimerRef.current = setTimeout(() => {
-        startInspection();
-        longPressTimerRef.current = null;
-      }, 500);
+      startInspection();
     }
   }, [timerState, startInspection]);
 
   const handleTouchEnd = useCallback((e) => {
     e.preventDefault();
-    
-    // Clear the long press timer if user lifted finger early
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    
-    // Check if touch was long enough (at least 300ms)
-    const touchDuration = Date.now() - (touchStartTimeRef.current || 0);
-    if (touchDuration < 300) {
-      return; // Ignore accidental short touches
-    }
+    e.stopPropagation();
     
     if (timerState === TIMER_STATES.INSPECTION || timerState === TIMER_STATES.RUNNING) {
       stop();
@@ -166,10 +150,6 @@ export function useBattleTimer(settings = {}) {
       reset();
     }
   }, [timerState, stop, reset]);
-
-  const touchDebounceRef = useRef(null);
-  const touchStartTimeRef = useRef(null);
-  const longPressTimerRef = useRef(null);
 
   const getFinalTime = useCallback(() => {
     if (solvedTimeRef.current === null || solvedTimeRef.current === undefined) {
@@ -212,9 +192,6 @@ export function useBattleTimer(settings = {}) {
     return () => {
       clearInterval(timerIntervalRef.current);
       clearInterval(inspectionIntervalRef.current);
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
     };
   }, []);
 

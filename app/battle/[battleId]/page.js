@@ -1489,13 +1489,13 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                </div>
 
                {timerState === TIMER_STATES.ARMED && (
-                   <div className="text-yellow-400 mt-2 font-medium">Press Space to Start</div>
+                   <div className="text-yellow-400 mt-2 font-medium">Tap or Press Space to Start</div>
                 )}
-               {timerState === TIMER_STATES.INSPECTION && (
-                 <div className="text-red-400 mt-2 font-medium">
-                   {inspectionTimeLeft > 0 
-                     ? `Inspection: ${Math.ceil(inspectionTimeLeft / 1000)}s - Press Space to Stop`
-                     : 'Inspection over! Solving now - Press Space to Stop'}
+                {timerState === TIMER_STATES.INSPECTION && (
+                  <div className="text-red-400 mt-2 font-medium">
+                    {inspectionTimeLeft > 0 
+                      ? `Inspection: ${Math.ceil(inspectionTimeLeft / 1000)}s - Tap or Press Space to Stop`
+                     : 'Inspection over! Solving now - Tap or Press Space to Stop'}
                  </div>
                )}
                 {timerState === TIMER_STATES.RUNNING && (
@@ -1508,6 +1508,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                 onClick={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleAction : undefined}
                 onTouchStart={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchStart : undefined}
                 onTouchEnd={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchEnd : undefined}
+                style={{ touchAction: 'manipulation' }}
                 className={`mt-6 p-8 rounded-xl cursor-pointer transition-all ${
                   canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED
                     ? timerState === TIMER_STATES.IDLE
@@ -1522,13 +1523,13 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
               >
                 <div className="text-center">
                   {timerState === TIMER_STATES.IDLE && (
-                    <span className="text-green-400 font-medium">Press Space to Start</span>
+                    <span className="text-green-400 font-medium">Tap or Press Space to Start</span>
                   )}
                   {timerState === TIMER_STATES.INSPECTION && (
-                    <span className="text-red-400 font-medium">Press Space to Start Solving</span>
+                    <span className="text-red-400 font-medium">Tap or Press Space to Stop</span>
                   )}
                   {timerState === TIMER_STATES.RUNNING && (
-                    <span className="text-red-400 font-medium">Press Space to Stop</span>
+                    <span className="text-red-400 font-medium">Tap or Press Space to Stop</span>
                   )}
                   {timerState === TIMER_STATES.STOPPED && (
                     <span className="text-yellow-400 font-medium">Solve Complete!</span>
