@@ -72,6 +72,7 @@ export async function POST(request) {
     let updatedTeamA = [...teamA];
     let updatedTeamB = [...teamB];
     let addedToTeam = null;
+    const nowDate = new Date().toISOString();
 
     // Try to add to Team B first (since Team A has creator)
     const emptySlotInB = updatedTeamB.findIndex(slot => !slot.userId);
@@ -81,7 +82,7 @@ export async function POST(request) {
         username: username || 'Player',
         photoURL: photoURL || null,
         joined: true,
-        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        joinedAt: nowDate,
       };
       addedToTeam = 'B';
     } else {
@@ -93,7 +94,7 @@ export async function POST(request) {
           username: username || 'Player',
           photoURL: photoURL || null,
           joined: true,
-          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+          joinedAt: nowDate,
         };
         addedToTeam = 'A';
       }
