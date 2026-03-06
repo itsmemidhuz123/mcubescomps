@@ -312,6 +312,19 @@ service cloud.firestore {
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
     
+    // Battle Reports - Authenticated users can create, admins can read/write
+    match /battleReports/{reportId} {
+      allow read: if isSignedIn() && hasRoleLevel(2);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && hasRoleLevel(2);
+    }
+    
+    // Banned Users - Admins can manage
+    match /bannedUsers/{banId} {
+      allow read: if isSignedIn() && hasRoleLevel(2);
+      allow create, update, delete: if isSignedIn() && hasRoleLevel(2);
+    }
+    
     // Default deny
     match /{document=**} {
       allow read, write: if false;

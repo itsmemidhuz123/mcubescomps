@@ -1,21 +1,32 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot, collection, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Timer, Trophy, Users, Clock } from 'lucide-react';
+import { Timer, Trophy, Users, Clock, Flag, X } from 'lucide-react';
 import { formatBattleTime, BATTLE_STATES } from '@/lib/battleUtils';
 import { BATTLE_EVENTS } from '@/lib/battleUtils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBattleBan } from '@/hooks/useBattleBan';
 
 export default function BattleResultPage() {
   const { battleId } = useParams();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const { isBanned, banInfo, loading: banLoading } = useBattleBan(user?.uid);
+  
   const [battle, setBattle] = useState(null);
   const [solves, setSolves] = useState({});
   const [loading, setLoading] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   useEffect(() => {
     if (!battleId) return;
@@ -257,7 +268,116 @@ export default function BattleResultPage() {
             View Battle
           </Button>
         </div>
+
+        {/* Report Button */}
+        {user && battle && user.uid !== battle.createdBy && !reportSubmitted && (
+          <div className="mt-4">
+            <Button
+              onClick={() => setShowReportModal(true)}
+              variant="outline"
+              className="w-full text-red-400 border-red-800 hover:bg-red-900/20"
+            >
+              <Flag className="w-4 h-4 mr-2" />
+              Report this Battle
+            </Button>
+          </div>
+        )}
+
+        {reportSubmitted && (
+          <div className="mt-4 p-3 bg-green-900/20 border border-green-800 rounded-lg text-center text-green-400">
+            Report submitted. Thank you!
+          </div>
+        )}
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="bg-zinc-900 border-zinc-800 w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Flag className="w-5 h-5 text-red-500" />
+                Report Battle
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Reason</label>
+                  <select
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="cheating">Cheating</option>
+                    <option value="unsportsmanlike">Unsportsmanlike Conduct</option>
+                    <option value="invalid_solve">Invalid Solve</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Description (optional)</label>
+                  <textarea
+                    value={reportDescription}
+                    onChange={(e) => setReportDescription(e.target.value)}
+                    maxLength={500}
+                    className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white h-24 resize-none"
+                    placeholder="Provide additional details..."
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setShowReportModal(false)}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={reporting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!reportReason) {
+                        alert('Please select a reason');
+                        return;
+                      }
+                      
+                      setReporting(true);
+                      try {
+                        const opponentId = battle.player1 === user.uid ? battle.player2 : battle.player1;
+                        
+                        await fetch('/api/battle/report', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            battleId,
+                            reporterId: user.uid,
+                            reportedUserId: opponentId,
+                            reason: reportReason,
+                            description: reportDescription,
+                          }),
+                        });
+                        
+                        setReportSubmitted(true);
+                        setShowReportModal(false);
+                      } catch (error) {
+                        console.error('Report error:', error);
+                        alert('Failed to submit report');
+                      } finally {
+                        setReporting(false);
+                      }
+                    }}
+                    className="flex-1 bg-red-600 hover:bg-red-500"
+                    disabled={reporting}
+                  >
+                    {reporting ? 'Submitting...' : 'Submit Report'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

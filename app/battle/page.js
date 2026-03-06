@@ -12,10 +12,12 @@ import { Badge } from '../../components/ui/badge';
 import { Loader2, Sword, Users, Clock, ArrowLeft, Copy, Check, Zap, Eye, X } from 'lucide-react';
 import { BATTLE_EVENTS, TEAM_SIZES } from '../../lib/battleUtils';
 import { useMatchmaking } from '../../hooks/useMatchmaking';
+import { useBattleBan } from '../../hooks/useBattleBan';
 
 export default function BattlePage() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { isBanned, banInfo, loading: banLoading } = useBattleBan(user?.uid);
   
   const [selectedEvent, setSelectedEvent] = useState('333');
   const [selectedFormat, setSelectedFormat] = useState('ao5');
@@ -217,10 +219,43 @@ export default function BattlePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (authLoading || !user) {
+  if (authLoading || banLoading || !user) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  // Show ban message if user is banned
+  if (isBanned && banInfo) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-red-800 w-full max-w-lg">
+          <CardContent className="p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <X className="w-8 h-8 text-red-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-red-400 mb-4">Account Restricted</h2>
+            <p className="text-zinc-400 mb-4">
+              You are temporarily restricted from participating in battles.
+            </p>
+            <div className="bg-zinc-800 rounded-lg p-4 mb-4 text-left">
+              <p className="text-sm text-zinc-400 mb-2"><span className="text-zinc-500">Reason:</span> {banInfo.reason}</p>
+              {banInfo.expiresAt && (
+                <p className="text-sm text-zinc-400">
+                  <span className="text-zinc-500">Expires:</span> {banInfo.expiresAt.toLocaleDateString()}
+                </p>
+              )}
+            </div>
+            <Button
+              onClick={() => window.location.href = 'mailto:hellobugsentertainment@gmail.com?subject=Battle%20Ban%20Appeal'}
+              className="w-full bg-red-600 hover:bg-red-500"
+            >
+              Contact Admin for Clarification
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

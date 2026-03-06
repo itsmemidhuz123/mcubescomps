@@ -8,10 +8,11 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon, X } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds';
+import { useBattleBan } from '../../../hooks/useBattleBan';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
 
@@ -20,6 +21,7 @@ export default function BattleRoomPage() {
   const searchParams = useSearchParams();
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { isBanned, banInfo, loading: banLoading } = useBattleBan(user?.uid);
   
   const watchMode = searchParams.get('watch') === 'true';
   
@@ -609,6 +611,39 @@ export default function BattleRoomPage() {
     return allSolves.filter(solve => solve.uid === playerId);
   };
 
+  // Show ban message if user is banned
+  if (!banLoading && isBanned && banInfo) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-red-800 w-full max-w-lg">
+          <CardContent className="p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <X className="w-8 h-8 text-red-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-red-400 mb-4">Account Restricted</h2>
+            <p className="text-zinc-400 mb-4">
+              You are restricted from participating in battles.
+            </p>
+            <div className="bg-zinc-800 rounded-lg p-4 mb-4 text-left">
+              <p className="text-sm text-zinc-400 mb-2"><span className="text-zinc-500">Reason:</span> {banInfo.reason}</p>
+              {banInfo.expiresAt && (
+                <p className="text-sm text-zinc-400">
+                  <span className="text-zinc-500">Expires:</span> {banInfo.expiresAt.toLocaleDateString()}
+                </p>
+              )}
+            </div>
+            <Button
+              onClick={() => window.location.href = 'mailto:hellobugsentertainment@gmail.com?subject=Battle%20Ban%20Appeal'}
+              className="w-full bg-red-600 hover:bg-red-500"
+            >
+              Contact Admin for Clarification
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (authLoading || battleLoading || !battle) {
     // Show match waiting screen if waiting for players to join
     if (isMatchWaiting && matchData) {
@@ -620,7 +655,7 @@ export default function BattleRoomPage() {
       
       return (
         <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-          <Card className="bg-zinc-900 border-zinc-800 w-full max-w-2xl">
+          <Card className="bg-zinc-900 border-zinc-800 w-full max-w-4xl">
             <CardContent className="p-6">
               <div className="text-center mb-6">
                 <Loader2 className="w-12 h-12 mx-auto mb-4 text-yellow-500 animate-spin" />
@@ -782,7 +817,7 @@ export default function BattleRoomPage() {
     
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <Card className="bg-zinc-900 border-zinc-800 w-full max-w-lg">
+        <Card className="bg-zinc-900 border-zinc-800 w-full max-w-xl">
           <CardContent className="p-6">
             <h2 className="text-xl font-bold text-white mb-4">{rulesTitle}</h2>
             
@@ -1216,7 +1251,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
           </span>
         </div>
       )}
-      <div className="max-w-6xl mx-auto p-4">
+      <div className="max-w-full mx-auto p-4">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <Button
