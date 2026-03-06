@@ -99,7 +99,7 @@ export async function POST(request) {
       player2Name: player2Name || 'Player 2',
       status: 'waiting',
       winner: null,
-      visibility: 'public',
+      visibility: 'private',
       format: 'ao5',
       winsRequired: 3,
       scores: { player1: 0, player2: 0 },
@@ -123,8 +123,21 @@ export async function POST(request) {
     const battleId = battleRef.id;
     await battleRef.update({ battleId });
 
-    // Delete the match document
-    await matchRef.delete();
+    // Update match with battleId instead of deleting - prevents race condition
+    // Both players will see the battleId and can redirect
+    try {
+      await matchRef.update({
+        battleCreated: true,
+        battleId: battleId,
+        completedAt: now,
+      });
+    } catch (updateErr) {
+      // Match might have been updated by another request, that's OK
+      console.log('Match update skipped:', updateErr.message);
+    }
+
+    // Don't delete the match document - let it remain for a bit for both players to find it
+    // It will be cleaned up by a separate cleanup process
 
     return NextResponse.json({
       success: true,

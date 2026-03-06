@@ -91,6 +91,12 @@ export default function BattleRoomPage() {
         const minPlayers = isTeamMatch ? 2 : 2;
         const canStart = playersJoined.length >= minPlayers;
         
+        // First check if battle already exists in match document (from another player)
+        if (data.battleCreated && data.battleId) {
+          router.replace(`/battle/${data.battleId}`);
+          return;
+        }
+        
         if (canStart && !data.battleCreated) {
           // Enough players joined - create the battle
           // Use consistent player data from the match document
@@ -119,13 +125,15 @@ export default function BattleRoomPage() {
             const result = await response.json();
             
             if (result.success && result.battleId) {
-              // Update match to mark battle created
-              await updateDoc(matchRef, {
-                battleCreated: true,
-                battleId: result.battleId,
-              });
+              try {
+                await updateDoc(matchRef, {
+                  battleCreated: true,
+                  battleId: result.battleId,
+                });
+              } catch (e) {
+                console.log('Match already processed by another player');
+              }
               
-              // Redirect to actual battle
               router.replace(`/battle/${result.battleId}`);
             }
           } catch (err) {
