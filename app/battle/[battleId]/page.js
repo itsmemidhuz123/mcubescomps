@@ -31,6 +31,7 @@ export default function BattleRoomPage() {
   const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(0);
   const [countdownActive, setCountdownActive] = useState(false);
+  const [countdownCompleted, setCountdownCompleted] = useState(false);
   const [cheatFlags, setCheatFlags] = useState([]);
   const [showIntro, setShowIntro] = useState(false);
   const [introDismissed, setIntroDismissed] = useState(false);
@@ -471,9 +472,6 @@ export default function BattleRoomPage() {
     }
   }, [battle?.status, battle?.creatorJoined, battle?.opponentJoined, countdownActive, showRules, countdownCompleted]);
   
-  // Track if countdown was completed to prevent restart
-  const [countdownCompleted, setCountdownCompleted] = useState(false);
-
   useEffect(() => {
     if (countdown > 0) {
       playCountdown(countdown);
