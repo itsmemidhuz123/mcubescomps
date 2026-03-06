@@ -465,11 +465,14 @@ export default function BattleRoomPage() {
   // Start countdown only after rules acknowledged
   useEffect(() => {
     if (showRules) return; // Don't start countdown if rules showing
-    if (battle?.status === 'waiting' && battle?.creatorJoined && battle?.opponentJoined && !countdownActive) {
+    if (battle?.status === 'waiting' && battle?.creatorJoined && battle?.opponentJoined && !countdownActive && !countdownCompleted) {
       setCountdown(5);
       setCountdownActive(true);
     }
-  }, [battle?.status, battle?.creatorJoined, battle?.opponentJoined, countdownActive, showRules]);
+  }, [battle?.status, battle?.creatorJoined, battle?.opponentJoined, countdownActive, showRules, countdownCompleted]);
+  
+  // Track if countdown was completed to prevent restart
+  const [countdownCompleted, setCountdownCompleted] = useState(false);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -486,6 +489,7 @@ export default function BattleRoomPage() {
         body: JSON.stringify({ battleId, uid: user?.uid }),
       }).then(() => {
         setCountdownActive(false);
+        setCountdownCompleted(true);
       });
     }
   }, [countdown, countdownActive, battle, battleId, user, playCountdown, playBattleStart]);
