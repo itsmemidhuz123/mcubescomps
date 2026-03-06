@@ -24,7 +24,7 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { battleId, reporterId, reportedUserId, reason, description } = body;
+    const { battleId, reporterId, reportedUserId, reason, description, battleDetails } = body;
 
     if (!battleId || !reporterId || !reportedUserId || !reason) {
       return NextResponse.json(
@@ -44,6 +44,8 @@ export async function POST(request) {
       description: description || '',
       status: 'pending',
       adminAction: null,
+      adminNotes: null,
+      battleDetails: battleDetails || null,
       createdAt: now,
       updatedAt: now,
     };
@@ -90,6 +92,51 @@ export async function GET(request) {
     console.error('Get reports error:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch reports' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { reportId, status, adminAction, adminNotes } = body;
+
+    if (!reportId) {
+      return NextResponse.json(
+        { success: false, message: 'Report ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const db = getAdminDb();
+    const reportRef = db.collection('battleReports').doc(reportId);
+    const reportDoc = await reportRef.get();
+
+    if (!reportDoc.exists) {
+      return NextResponse.json(
+        { success: false, message: 'Report not found' },
+        { status: 404 }
+      );
+    }
+
+    const updateData = {
+      status: status || 'pending',
+      adminAction: adminAction || null,
+      adminNotes: adminNotes || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await reportRef.update(updateData);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Report updated successfully',
+    });
+  } catch (error) {
+    console.error('Update report error:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to update report' },
       { status: 500 }
     );
   }

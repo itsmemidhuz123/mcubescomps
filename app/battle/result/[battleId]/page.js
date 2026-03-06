@@ -297,11 +297,15 @@ export default function BattleResultPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Flag className="w-5 h-5 text-red-500" />
-                Report Battle
+                Report to Game Master!
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <p className="text-sm text-zinc-400 mb-4">
+                  If you feel that the score of the opponent is suspicious, please report this immediately with options.
+                </p>
+                
                 <div>
                   <label className="block text-sm font-medium mb-2">Reason</label>
                   <select
@@ -310,25 +314,49 @@ export default function BattleResultPage() {
                     className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                   >
                     <option value="">Select a reason</option>
-                    <option value="cheating">Cheating</option>
-                    <option value="unsportsmanlike">Unsportsmanlike Conduct</option>
-                    <option value="invalid_solve">Invalid Solve</option>
+                    <option value="suspicious_times">Suspicious solve times (too fast)</option>
+                    <option value="same_scramble">Same scramble results every time</option>
+                    <option value="suspected_cheating">Suspected cheating</option>
+                    <option value="timer_manipulation">Timer manipulation</option>
+                    <option value="unreal_performance">Unreal performance</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Description (optional)</label>
-                  <textarea
-                    value={reportDescription}
-                    onChange={(e) => setReportDescription(e.target.value)}
-                    maxLength={500}
-                    className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white h-24 resize-none"
-                    placeholder="Provide additional details..."
-                  />
-                </div>
+
+                {reportReason === 'other' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Please specify (max 200 characters)</label>
+                    <textarea
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value.slice(0, 200))}
+                      maxLength={200}
+                      className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white h-20 resize-none"
+                      placeholder="Describe the issue..."
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">{reportDescription.length}/200</p>
+                  </div>
+                )}
+
+                {reportReason !== 'other' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Additional details (optional)</label>
+                    <textarea
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      maxLength={500}
+                      className="w-full p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white h-20 resize-none"
+                      placeholder="Provide any additional context..."
+                    />
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => setShowReportModal(false)}
+                    onClick={() => {
+                      setShowReportModal(false);
+                      setReportReason('');
+                      setReportDescription('');
+                    }}
                     variant="outline"
                     className="flex-1"
                     disabled={reporting}
@@ -355,11 +383,23 @@ export default function BattleResultPage() {
                             reportedUserId: opponentId,
                             reason: reportReason,
                             description: reportDescription,
+                            battleDetails: {
+                              player1: battle.player1,
+                              player2: battle.player2,
+                              player1Name: battle.player1Name,
+                              player2Name: battle.player2Name,
+                              scores: battle.scores,
+                              event: battle.event,
+                              format: battle.format,
+                              createdAt: battle.createdAt,
+                            },
                           }),
                         });
                         
                         setReportSubmitted(true);
                         setShowReportModal(false);
+                        setReportReason('');
+                        setReportDescription('');
                       } catch (error) {
                         console.error('Report error:', error);
                         alert('Failed to submit report');

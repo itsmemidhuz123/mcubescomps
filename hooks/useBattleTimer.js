@@ -132,23 +132,33 @@ export function useBattleTimer(settings = {}) {
 
   const handleTouchStart = useCallback((e) => {
     e.preventDefault();
+    
+    // Store touch start time to verify minimum touch duration
+    touchStartTimeRef.current = Date.now();
+    
     if (timerState === TIMER_STATES.IDLE) {
-      startInspection();
+      // Start a timer to detect long press - require at least 500ms hold
+      longPressTimerRef.current = setTimeout(() => {
+        startInspection();
+        longPressTimerRef.current = null;
+      }, 500);
     }
   }, [timerState, startInspection]);
 
-  const touchDebounceRef = useRef(null);
-  
   const handleTouchEnd = useCallback((e) => {
     e.preventDefault();
     
-    // Debounce touch events to prevent accidental touches
-    if (touchDebounceRef.current) return;
-    touchDebounceRef.current = true;
+    // Clear the long press timer if user lifted finger early
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
     
-    setTimeout(() => {
-      touchDebounceRef.current = null;
-    }, 300);
+    // Check if touch was long enough (at least 300ms)
+    const touchDuration = Date.now() - (touchStartTimeRef.current || 0);
+    if (touchDuration < 300) {
+      return; // Ignore accidental short touches
+    }
     
     if (timerState === TIMER_STATES.INSPECTION || timerState === TIMER_STATES.RUNNING) {
       stop();
@@ -156,6 +166,10 @@ export function useBattleTimer(settings = {}) {
       reset();
     }
   }, [timerState, stop, reset]);
+
+  const touchDebounceRef = useRef(null);
+  const touchStartTimeRef = useRef(null);
+  const longPressTimerRef = useRef(null);
 
   const getFinalTime = useCallback(() => {
     if (solvedTimeRef.current === null || solvedTimeRef.current === undefined) {
@@ -198,6 +212,9 @@ export function useBattleTimer(settings = {}) {
     return () => {
       clearInterval(timerIntervalRef.current);
       clearInterval(inspectionIntervalRef.current);
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
     };
   }, []);
 

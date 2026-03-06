@@ -980,32 +980,8 @@ export default function BattleRoomPage() {
     const opponentScore = isPlayer1 ? scores.player2 : scores.player1;
 
     const handleRematch = async () => {
-      if (!isCreator) {
-        alert('Only the creator can start a rematch');
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/battle/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.uid,
-            event: battle.event,
-            roundCount: battle.roundCount,
-            format: battle.format,
-            winsRequired: battle.winsRequired,
-          }),
-        });
-        const data = await response.json();
-        if (data.success) {
-          router.push(`/battle/${data.battleId}`);
-        } else {
-          alert(data.message || 'Failed to create rematch');
-        }
-      } catch (e) {
-        alert('Failed to create rematch');
-      }
+      // Go to battle page and start a new quick match
+      router.push('/battle');
     };
 
     const handleShare = async () => {
@@ -1117,14 +1093,14 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
             </div>
 
             <div className="flex gap-3">
-              {isCreator && (
+              {battle.status === 'completed' && (
                 <Button
                   onClick={handleRematch}
                   className="flex-1 bg-green-600 hover:bg-green-500"
                   size="lg"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Rematch
+                  Find New Match
                 </Button>
               )}
               {isPlayer1 && (
@@ -1513,8 +1489,8 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                </div>
 
                {timerState === TIMER_STATES.ARMED && (
-                  <div className="text-yellow-400 mt-2 font-medium">Press Space or Tap to Start</div>
-               )}
+                   <div className="text-yellow-400 mt-2 font-medium">Press Space to Start</div>
+                )}
                {timerState === TIMER_STATES.INSPECTION && (
                  <div className="text-red-400 mt-2 font-medium">
                    {inspectionTimeLeft > 0 
@@ -1546,13 +1522,13 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
               >
                 <div className="text-center">
                   {timerState === TIMER_STATES.IDLE && (
-                    <span className="text-green-400 font-medium">Tap or Press Space to Start</span>
+                    <span className="text-green-400 font-medium">Press Space to Start</span>
                   )}
                   {timerState === TIMER_STATES.INSPECTION && (
-                    <span className="text-red-400 font-medium">Tap or Press Space to Start Solving</span>
+                    <span className="text-red-400 font-medium">Press Space to Start Solving</span>
                   )}
                   {timerState === TIMER_STATES.RUNNING && (
-                    <span className="text-red-400 font-medium">Tap or Press Space to Stop</span>
+                    <span className="text-red-400 font-medium">Press Space to Stop</span>
                   )}
                   {timerState === TIMER_STATES.STOPPED && (
                     <span className="text-yellow-400 font-medium">Solve Complete!</span>

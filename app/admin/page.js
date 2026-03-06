@@ -78,6 +78,8 @@ export default function AdminPanel() {
     const [loadingData, setLoadingData] = useState(true);
     const [battleFilter, setBattleFilter] = useState('all');
     const [reportFilter, setReportFilter] = useState('pending');
+    const [selectedReport, setSelectedReport] = useState(null);
+    const [reportActionLoading, setReportActionLoading] = useState(null);
 
     // Form States
     const [editingComp, setEditingComp] = useState(null);
@@ -2118,11 +2120,20 @@ export default function AdminPanel() {
                                 </div>
 
                                 <div className="space-y-4">
-                                    {battleReports.filter(r => reportFilter === 'all' || r.status === reportFilter).map(report => (
+                                    {battleReports.filter(r => reportFilter === 'all' || r.status === reportFilter).map(report => {
+                                        const reportReasonLabels = {
+                                            'suspicious_times': 'Suspicious solve times',
+                                            'same_scramble': 'Same scramble results',
+                                            'suspected_cheating': 'Suspected cheating',
+                                            'timer_manipulation': 'Timer manipulation',
+                                            'unreal_performance': 'Unreal performance',
+                                            'other': 'Other'
+                                        };
+                                        return (
                                         <div key={report.id} className="bg-zinc-800 rounded-lg p-4">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div>
-                                                    <Badge variant="outline">{report.reason}</Badge>
+                                                    <Badge variant="outline">{reportReasonLabels[report.reason] || report.reason}</Badge>
                                                     <span className="text-xs text-zinc-500 ml-2">
                                                         {report.createdAt?.toDate?.()?.toLocaleDateString()}
                                                     </span>
@@ -2131,57 +2142,302 @@ export default function AdminPanel() {
                                                     {report.status}
                                                 </Badge>
                                             </div>
+                                            
+                                            <div className="text-sm mb-2">
+                                                <span className="text-zinc-400">Reporter: </span>
+                                                <span className="text-white">{report.reporterId?.slice(0,8)}</span>
+                                                <span className="text-zinc-400"> → Reported: </span>
+                                                <span className="text-red-400">{report.reportedUserId?.slice(0,8)}</span>
+                                            </div>
+                                            
+                                            {report.battleDetails && (
+                                                <div className="text-xs text-zinc-500 mb-2">
+                                                    Battle: {report.battleDetails.player1Name} vs {report.battleDetails.player2Name} | 
+                                                    Score: {report.battleDetails.scores?.player1 || 0} - {report.battleDetails.scores?.player2 || 0}
+                                                </div>
+                                            )}
+                                            
                                             <p className="text-sm text-zinc-400 mb-3">{report.description}</p>
-                                            <div className="flex gap-2">
+                                            
+                                            <div className="flex flex-wrap gap-2">
                                                 <Button 
                                                     size="sm" 
                                                     variant="outline"
-                                                    onClick={async () => {
-                                                        await fetch('/api/battle/report', {
-                                                            method: 'PUT',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ reportId: report.id, status: 'reviewed' })
-                                                        });
-                                                        setBattleReports(battleReports.map(r => 
-                                                            r.id === report.id ? { ...r, status: 'reviewed' } : r
-                                                        ));
-                                                    }}
+                                                    onClick={() => window.open(`/battle/${report.battleId}`, '_blank')}
                                                 >
-                                                    Mark Reviewed
+                                                    View Battle
                                                 </Button>
-                                                <Button 
-                                                    size="sm" 
-                                                    className="bg-red-600 hover:bg-red-500"
-                                                    onClick={() => {
-                                                        const banType = prompt('Ban type: 1=participate, 2=create, 3=all', '3');
-                                                        const duration = prompt('Duration: 1, 7, 30, permanent', '7');
-                                                        if (banType && duration) {
-                                                            fetch('/api/admin/ban', {
-                                                                method: 'POST',
+                                                
+                                                {report.status === 'pending' && (
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
+                                                        onClick={async () => {
+                                                            setReportActionLoading(report.id);
+                                                            await fetch('/api/battle/report', {
+                                                                method: 'PUT',
                                                                 headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({
-                                                                    userId: report.reportedUserId,
-                                                                    reason: `Battle Report: ${report.reason}`,
-                                                                    banType: banType === '1' ? 'participate' : banType === '2' ? 'create' : 'all',
-                                                                    banDuration: duration,
-                                                                    adminUserId: user.uid
-                                                                })
-                                                            }).then(() => {
-                                                                alert('User banned successfully');
-                                                                fetch('/api/battle/report', {
-                                                                    method: 'PUT',
-                                                                    headers: { 'Content-Type': 'application/json' },
-                                                                    body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned' })
-                                                                });
+                                                                body: JSON.stringify({ reportId: report.id, status: 'reviewed' })
                                                             });
-                                                        }
-                                                    }}
-                                                >
-                                                    Ban User
-                                                </Button>
+                                                            setBattleReports(battleReports.map(r => 
+                                                                r.id === report.id ? { ...r, status: 'reviewed' } : r
+                                                            ));
+                                                            setReportActionLoading(null);
+                                                        }}
+                                                        disabled={reportActionLoading === report.id}
+                                                    >
+                                                        Mark Reviewed
+                                                    </Button>
+                                                )}
+                                                
+                                                {/* Switch Winner Dropdown */}
+                                                <div className="relative">
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
+                                                        className="bg-yellow-600 hover:bg-yellow-500"
+                                                        onClick={() => setSelectedReport(selectedReport === report.id ? null : report.id)}
+                                                    >
+                                                        Switch Winner
+                                                    </Button>
+                                                    
+                                                    {selectedReport === report.id && report.battleDetails && (
+                                                        <div className="absolute top-full left-0 mt-1 bg-zinc-700 rounded-lg shadow-lg z-10 py-1 min-w-[180px]">
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-white"
+                                                                onClick={async () => {
+                                                                    const reason = prompt('Reason for switching winner:', 'Cheating confirmed');
+                                                                    if (!reason) return;
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/battle/switch-winner', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            battleId: report.battleId,
+                                                                            newWinnerUid: report.battleDetails.player1,
+                                                                            adminUserId: user.uid,
+                                                                            reason: reason
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'winner_switched' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'winner_switched' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('Winner switched successfully');
+                                                                }}
+                                                            >
+                                                                Make {report.battleDetails.player1Name} Win
+                                                            </button>
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-white"
+                                                                onClick={async () => {
+                                                                    const reason = prompt('Reason for switching winner:', 'Cheating confirmed');
+                                                                    if (!reason) return;
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/battle/switch-winner', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            battleId: report.battleId,
+                                                                            newWinnerUid: report.battleDetails.player2,
+                                                                            adminUserId: user.uid,
+                                                                            reason: reason
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'winner_switched' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'winner_switched' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('Winner switched successfully');
+                                                                }}
+                                                            >
+                                                                Make {report.battleDetails.player2Name} Win
+                                                            </button>
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-red-400"
+                                                                onClick={async () => {
+                                                                    const reason = prompt('Reason for deleting battle:', 'Invalid battle');
+                                                                    if (!reason) return;
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/battle/invalidate', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            battleId: report.battleId,
+                                                                            adminUserId: user.uid,
+                                                                            reason: reason
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'battle_deleted' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'battle_deleted' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('Battle invalidated successfully');
+                                                                }}
+                                                            >
+                                                                Delete Battle
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Ban User Dropdown */}
+                                                <div className="relative">
+                                                    <Button 
+                                                        size="sm" 
+                                                        className="bg-red-600 hover:bg-red-500"
+                                                        onClick={() => setSelectedReport(selectedReport === `ban-${report.id}` ? null : `ban-${report.id}`)}
+                                                    >
+                                                        Ban User
+                                                    </Button>
+                                                    
+                                                    {selectedReport === `ban-${report.id}` && (
+                                                        <div className="absolute top-full left-0 mt-1 bg-zinc-700 rounded-lg shadow-lg z-10 py-1 min-w-[180px]">
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-white"
+                                                                onClick={async () => {
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/admin/ban', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            userId: report.reportedUserId,
+                                                                            reason: `Battle Report: ${report.reason}`,
+                                                                            banType: 'all',
+                                                                            banDuration: '1',
+                                                                            adminUserId: user.uid
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned_1day' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'banned_1day' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('User banned for 1 day');
+                                                                }}
+                                                            >
+                                                                Ban 1 Day
+                                                            </button>
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-white"
+                                                                onClick={async () => {
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/admin/ban', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            userId: report.reportedUserId,
+                                                                            reason: `Battle Report: ${report.reason}`,
+                                                                            banType: 'all',
+                                                                            banDuration: '7',
+                                                                            adminUserId: user.uid
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned_7days' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'banned_7days' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('User banned for 7 days');
+                                                                }}
+                                                            >
+                                                                Ban 7 Days
+                                                            </button>
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-white"
+                                                                onClick={async () => {
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/admin/ban', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            userId: report.reportedUserId,
+                                                                            reason: `Battle Report: ${report.reason}`,
+                                                                            banType: 'all',
+                                                                            banDuration: '30',
+                                                                            adminUserId: user.uid
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned_30days' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'banned_30days' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('User banned for 30 days');
+                                                                }}
+                                                            >
+                                                                Ban 30 Days
+                                                            </button>
+                                                            <button
+                                                                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 text-red-400"
+                                                                onClick={async () => {
+                                                                    setReportActionLoading(report.id);
+                                                                    await fetch('/api/admin/ban', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            userId: report.reportedUserId,
+                                                                            reason: `Battle Report: ${report.reason}`,
+                                                                            banType: 'all',
+                                                                            banDuration: 'permanent',
+                                                                            adminUserId: user.uid
+                                                                        })
+                                                                    });
+                                                                    await fetch('/api/battle/report', {
+                                                                        method: 'PUT',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ reportId: report.id, status: 'resolved', adminAction: 'banned_permanent' })
+                                                                    });
+                                                                    setBattleReports(battleReports.map(r => 
+                                                                        r.id === report.id ? { ...r, status: 'resolved', adminAction: 'banned_permanent' } : r
+                                                                    ));
+                                                                    setSelectedReport(null);
+                                                                    setReportActionLoading(null);
+                                                                    alert('User banned permanently');
+                                                                }}
+                                                            >
+                                                                Ban Permanently
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     {battleReports.filter(r => reportFilter === 'all' || r.status === reportFilter).length === 0 && (
                                         <p className="text-center text-zinc-500 py-4">No reports found</p>
                                     )}

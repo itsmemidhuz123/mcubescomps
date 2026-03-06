@@ -44,6 +44,13 @@ export default function BattlePage() {
     }
   }, [authLoading, user, router]);
 
+  // Reset matchmaking state on page load to ensure fresh start
+  useEffect(() => {
+    if (user) {
+      leaveQueue();
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     
@@ -344,7 +351,10 @@ export default function BattlePage() {
                 <p className="text-zinc-400 mb-4">Find an opponent instantly!</p>
                 <p className="text-sm text-zinc-500 mb-4">3x3 • Best of 3 • 1v1</p>
                 <Button
-                  onClick={startMatchmaking}
+                  onClick={async () => {
+                    await leaveQueue();
+                    setTimeout(() => startMatchmaking(), 50);
+                  }}
                   disabled={matchmakingStatus === 'timeout'}
                   className="bg-yellow-600 hover:bg-yellow-500"
                   size="lg"
