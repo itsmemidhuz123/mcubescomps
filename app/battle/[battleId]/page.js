@@ -1506,17 +1506,19 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
               {/* Clickable timer area - entire container is tappable */}
               <div 
                 onClick={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleAction : undefined}
-                onTouchStart={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchStart : undefined}
-                onTouchEnd={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchEnd : undefined}
+                onTouchStart={canSolve && !isSpectator ? handleTouchStart : undefined}
+                onTouchEnd={canSolve && !isSpectator ? handleTouchEnd : undefined}
                 style={{ touchAction: 'manipulation' }}
                 className={`mt-6 p-8 rounded-xl cursor-pointer transition-all ${
-                  canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED
+                  canSolve && !isSpectator
                     ? timerState === TIMER_STATES.IDLE
                       ? 'bg-green-900/30 border-2 border-green-500 hover:bg-green-800/40'
                       : timerState === TIMER_STATES.INSPECTION
                       ? 'bg-red-900/20 hover:bg-red-900/30'
                       : timerState === TIMER_STATES.RUNNING
                       ? 'bg-red-900/30 border-2 border-red-500 hover:bg-red-800/40'
+                      : timerState === TIMER_STATES.STOPPED
+                      ? 'bg-yellow-900/20 border-2 border-yellow-500 hover:bg-yellow-900/30'
                     : 'bg-zinc-800'
                     : 'bg-zinc-800 cursor-not-allowed'
                 }`}
@@ -1532,7 +1534,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                     <span className="text-red-400 font-medium">Tap or Press Space to Stop</span>
                   )}
                   {timerState === TIMER_STATES.STOPPED && (
-                    <span className="text-yellow-400 font-medium">Solve Complete!</span>
+                    <span className="text-yellow-400 font-medium">Tap to Start Next Solve</span>
                   )}
                 </div>
               </div>

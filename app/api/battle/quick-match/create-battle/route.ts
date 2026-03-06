@@ -72,7 +72,7 @@ export async function POST(request) {
     try {
       scrambleData = await generateScrambleForBattle({
         event: '333',
-        roundCount: 3,
+        roundCount: 5,
       });
     } catch (scrambleError) {
       return NextResponse.json(
@@ -101,7 +101,7 @@ export async function POST(request) {
       winner: null,
       visibility: 'private',
       format: 'ao5',
-      winsRequired: 3,
+      winsRequired: 5,
       scores: { player1: 0, player2: 0 },
       allowSpectators: true,
       spectators: [],
@@ -112,7 +112,7 @@ export async function POST(request) {
       lastActivityAt: now,
       startedAt: null,
       completedAt: null,
-      roundCount: 3,
+      roundCount: 5,
       teamSize: 1,
       teamA: [player1],
       teamB: [player2],

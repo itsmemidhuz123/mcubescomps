@@ -37,9 +37,14 @@ export function useBattleSounds() {
     const audio = audioRefs.current[soundName];
     if (audio) {
       audio.currentTime = 0;
-      audio.play().catch((err) => {
-        console.log('Audio play error:', err);
-      });
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.log('Audio play error:', err.message);
+        });
+      }
+    } else {
+      console.log('Sound not found:', soundName);
     }
   }, []);
 

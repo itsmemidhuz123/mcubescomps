@@ -270,7 +270,8 @@ export default function BattleResultPage() {
         </div>
 
         {/* Report Button - allow any battle participant to report opponent */}
-        {user && battle && (user.uid === battle.player1 || user.uid === battle.player2) && !reportSubmitted && battle.status === 'completed' && (
+        {user && battle && battle.status && (battle.status === 'completed' || battle.status === 'live') && 
+         (user.uid === battle.player1 || user.uid === battle.player2) && !reportSubmitted && (
           <div className="mt-4">
             <Button
               onClick={() => setShowReportModal(true)}
