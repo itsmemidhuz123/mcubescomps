@@ -32,9 +32,105 @@ export default function BattleRoomPage() {
   const [cheatFlags, setCheatFlags] = useState([]);
   const [showIntro, setShowIntro] = useState(false);
   const [introDismissed, setIntroDismissed] = useState(false);
+  
+  // Match waiting state - when waiting for opponent to join
+  const [isMatchWaiting, setIsMatchWaiting] = useState(false);
+  const [matchData, setMatchData] = useState(null);
+  
+  // Rules modal state
+  const [showRules, setShowRules] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   const { playIntro, playCountdown, playBattleStart, playVictory, playDefeat } = useBattleSounds();
   const { shouldShowIntro, dismissIntro } = useBattleIntro();
+
+  // Handle match waiting - when battleId is actually a matchId (starts with "match_")
+  useEffect(() => {
+    if (authLoading || !user || !battleId) return;
+    
+    // Check if this is a match waiting (not a battle yet)
+    if (battleId.startsWith('match_')) {
+      setIsMatchWaiting(true);
+      setLoading(true);
+      
+      // Listen to the match document
+      const matchRef = doc(db, 'matches', battleId);
+      const unsubscribe = onSnapshot(matchRef, async (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setMatchData(data);
+          
+          // Determine if this user is player1 or player2
+          const isPlayer1 = data.player1 === user.uid;
+          const isPlayer2 = data.player2 === user.uid;
+          
+          if (!isPlayer1 && !isPlayer2) {
+            setError('You are not part of this match');
+            setLoading(false);
+            return;
+          }
+          
+          // Mark this player as joined
+          const joinedField = isPlayer1 ? 'player1Joined' : 'player2Joined';
+          if (!data[joinedField]) {
+            await updateDoc(matchRef, {
+              [joinedField]: true,
+              [`${joinedField}At`]: new Date(),
+            });
+          }
+          
+          // Check if both players have joined
+          if (data.player1Joined && data.player2Joined && !data.battleCreated) {
+            // Both players joined - create the battle
+            try {
+              const response = await fetch('/api/battle/quick-match/create-battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  matchId: battleId,
+                  player1: data.player1,
+                  player2: data.player2,
+                  player1Name: data.player1Name,
+                  player2Name: data.player2Name,
+                }),
+              });
+              
+              const result = await response.json();
+              
+              if (result.success && result.battleId) {
+                // Update match to mark battle created
+                await updateDoc(matchRef, {
+                  battleCreated: true,
+                  battleId: result.battleId,
+                });
+                
+                // Redirect to actual battle
+                router.replace(`/battle/${result.battleId}`);
+              }
+            } catch (err) {
+              console.error('Failed to create battle:', err);
+            }
+          }
+          
+          // If battle already created, redirect to it
+          if (data.battleCreated && data.battleId) {
+            router.replace(`/battle/${data.battleId}`);
+          }
+        } else {
+          setError('Match not found');
+          setLoading(false);
+        }
+      }, (err) => {
+        console.error('Match listener error:', err);
+        setError('Failed to join match');
+        setLoading(false);
+      });
+      
+      return () => unsubscribe();
+    }
+  }, [battleId, user, authLoading, router]);
+
+  // Check if rules should be shown for this battle type
 
   const {
     battle,
@@ -222,11 +318,26 @@ export default function BattleRoomPage() {
   }, [timerState, battle, user, battleId, getMySolves]);
 
   useEffect(() => {
+    if (!battle || battle.status !== 'live') return;
+    
+    // Check if rules should be shown for this battle type
+    const battleType = battle.battleType || 'custom';
+    const rulesKey = `showRules_${battleType}`;
+    const hasAcknowledged = localStorage.getItem(rulesKey);
+    
+    if (!hasAcknowledged) {
+      setShowRules(true);
+    }
+  }, [battle]);
+
+  // Start countdown only after rules acknowledged
+  useEffect(() => {
+    if (showRules) return; // Don't start countdown if rules showing
     if (battle?.status === 'waiting' && battle?.creatorJoined && battle?.opponentJoined && !countdownActive) {
       setCountdown(5);
       setCountdownActive(true);
     }
-  }, [battle?.status, battle?.creatorJoined, battle?.opponentJoined, countdownActive]);
+  }, [battle?.status, battle?.creatorJoined, battle?.opponentJoined, countdownActive, showRules]);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -541,6 +652,56 @@ export default function BattleRoomPage() {
                 I&apos;m Ready! Let&apos;s Battle
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show rules modal before countdown
+  if (showRules) {
+    const battleType = battle?.battleType || 'custom';
+    const rulesTitle = battleType === 'quickBattle' ? 'Quick Battle Rules' : 
+                       battleType === 'teamBattle' ? 'Team Battle Rules' : 'Battle Rules';
+    
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="bg-zinc-900 border-zinc-800 w-full max-w-lg">
+          <CardContent className="p-6">
+            <h2 className="text-xl font-bold text-white mb-4">{rulesTitle}</h2>
+            
+            <div className="text-zinc-300 space-y-3 text-sm mb-6">
+              <p>• {battle?.format === 'ao5' ? 'Best of 5 (Ao5)' : battle?.format === 'bo3' ? 'Best of 3' : battle?.format} format</p>
+              <p>• 15-second inspection time per solve</p>
+              <p>• +2 second penalty for inspection over 15 seconds</p>
+              <p>• DNF if inspection exceeds 17 seconds</p>
+              <p>• Tap/press space to start inspection</p>
+              <p>• Tap/press again to start solve timer</p>
+              <p>• Tap/press again to stop and submit</p>
+            </div>
+
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                className="w-4 h-4 rounded"
+              />
+              <span className="text-zinc-400 text-sm">Don't show again for {battleType}</span>
+            </label>
+
+            <Button
+              onClick={() => {
+                if (dontShowAgain) {
+                  localStorage.setItem(`showRules_${battleType}`, 'true');
+                }
+                setShowRules(false);
+              }}
+              className="w-full bg-green-600 hover:bg-green-500"
+              size="lg"
+            >
+              I Understand - Start Battle
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -1196,104 +1357,101 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                      : 'Inspection over! Solving now - Press Space to Stop'}
                  </div>
                )}
-               {timerState === TIMER_STATES.RUNNING && (
-                 <div className="text-green-400 mt-2 font-medium">Press Space to Stop Timer</div>
-               )}
-             </div>
-
-            {canSolve ? (
-              <div className="flex flex-col items-center gap-4">
-                {isSpectator ? (
-                  <div className="text-center text-zinc-400 bg-zinc-800 rounded-lg p-4">
-                    <p className="mb-2">Visitor Mode - Cannot interact with timer</p>
-                    <Button variant="outline" onClick={() => router.push('/battle')}>
-                      Leave Battle
-                    </Button>
-                  </div>
-                  ) : (
-                  <>
-                     <Button
-                       onClick={handleAction}
-                       onTouchStart={handleTouchStart}
-                       onTouchEnd={handleTouchEnd}
-                       disabled={timerState === TIMER_STATES.STOPPED || submitting}
-                       className={`w-48 h-16 text-xl touch-manipulation ${
-                         timerState === TIMER_STATES.IDLE
-                           ? 'bg-green-600 hover:bg-green-500'
-                           : timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION
-                           ? 'bg-red-600 hover:bg-red-500'
-                           : 'bg-zinc-700'
-                       }`}
-                     >
-                       {timerState === TIMER_STATES.IDLE && 'Tap to Start'}
-                       {timerState === TIMER_STATES.INSPECTION && 'Tap to Solve'}
-                       {timerState === TIMER_STATES.RUNNING && 'Tap to Stop'}
-                       {timerState === TIMER_STATES.STOPPED && 'Solved!'}
-                     </Button>
-
-                    {timerState === TIMER_STATES.STOPPED && (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="flex gap-3">
-                          <Button
-                            variant={penalty === '+2' ? 'default' : 'outline'}
-                            onClick={() => setPenalty(penalty === '+2' ? 'none' : '+2')}
-                            className={penalty === '+2' ? 'bg-yellow-600 hover:bg-yellow-500' : ''}
-                            size="lg"
-                          >
-                            +2
-                          </Button>
-                          <Button
-                            variant={penalty === 'DNF' ? 'default' : 'outline'}
-                            onClick={() => setPenalty(penalty === 'DNF' ? 'none' : 'DNF')}
-                            className={penalty === 'DNF' ? 'bg-red-600 hover:bg-red-500' : ''}
-                            size="lg"
-                          >
-                            DNF
-                          </Button>
-                        </div>
-
-                        {penalty !== 'none' && (
-                          <div className="bg-zinc-800 rounded-lg p-4 flex gap-4">
-                            <div>
-                              <div className="text-sm text-zinc-400">Time</div>
-                              <div className="text-2xl font-mono font-bold">
-                                {formatBattleTime(getFinalTime())}
-                              </div>
-                            </div>
-                            <div className="w-px bg-zinc-700" />
-                            <div>
-                              <div className="text-sm text-zinc-400">Penalty</div>
-                              <div className={`text-2xl font-bold ${
-                                penalty === '+2' ? 'text-yellow-400' :
-                                penalty === 'DNF' ? 'text-red-400' : 'text-green-400'
-                              }`}>
-                                {penalty}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        <Button
-                          onClick={handleSubmitSolve}
-                          disabled={submitting}
-                          className="bg-green-600 hover:bg-green-500 w-full"
-                          size="lg"
-                        >
-                          {submitting ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Submitting...
-                            </>
-                          ) : (
-                            'Submit Solve'
-                          )}
-                        </Button>
-                      </div>
-                    )}
-                  </>
+                {timerState === TIMER_STATES.RUNNING && (
+                  <div className="text-green-400 mt-2 font-medium">Tap or Press Space to Stop</div>
                 )}
               </div>
-              ) : (
+
+              {/* Clickable timer area - entire container is tappable */}
+              <div 
+                onClick={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleAction : undefined}
+                onTouchStart={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchStart : undefined}
+                onTouchEnd={canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED ? handleTouchEnd : undefined}
+                className={`mt-6 p-8 rounded-xl cursor-pointer transition-all ${
+                  canSolve && !isSpectator && timerState !== TIMER_STATES.STOPPED
+                    ? timerState === TIMER_STATES.IDLE
+                      ? 'bg-green-900/30 border-2 border-green-500 hover:bg-green-800/40'
+                      : timerState === TIMER_STATES.RUNNING || timerState === TIMER_STATES.INSPECTION
+                      ? 'bg-red-900/30 border-2 border-red-500 hover:bg-red-800/40'
+                    : 'bg-zinc-800'
+                    : 'bg-zinc-800 cursor-not-allowed'
+                }`}
+              >
+                <div className="text-center">
+                  {timerState === TIMER_STATES.IDLE && (
+                    <span className="text-green-400 font-medium">Tap or Press Space to Start</span>
+                  )}
+                  {timerState === TIMER_STATES.INSPECTION && (
+                    <span className="text-red-400 font-medium">Tap or Press Space to Start Solving</span>
+                  )}
+                  {timerState === TIMER_STATES.RUNNING && (
+                    <span className="text-red-400 font-medium">Tap or Press Space to Stop</span>
+                  )}
+                  {timerState === TIMER_STATES.STOPPED && (
+                    <span className="text-yellow-400 font-medium">Solve Complete!</span>
+                  )}
+                </div>
+              </div>
+
+            {canSolve ? (
+              <div className="flex flex-col items-center gap-4 mt-4">
+                <div className="flex gap-3">
+                  <Button
+                    variant={penalty === '+2' ? 'default' : 'outline'}
+                    onClick={() => setPenalty(penalty === '+2' ? 'none' : '+2')}
+                    className={penalty === '+2' ? 'bg-yellow-600 hover:bg-yellow-500' : ''}
+                    size="lg"
+                  >
+                    +2
+                  </Button>
+                  <Button
+                    variant={penalty === 'DNF' ? 'default' : 'outline'}
+                    onClick={() => setPenalty(penalty === 'DNF' ? 'none' : 'DNF')}
+                    className={penalty === 'DNF' ? 'bg-red-600 hover:bg-red-500' : ''}
+                    size="lg"
+                  >
+                    DNF
+                  </Button>
+                </div>
+
+                {penalty !== 'none' && (
+                  <div className="bg-zinc-800 rounded-lg p-4 flex gap-4">
+                    <div>
+                      <div className="text-sm text-zinc-400">Time</div>
+                      <div className="text-2xl font-mono font-bold">
+                        {formatBattleTime(getFinalTime())}
+                      </div>
+                    </div>
+                    <div className="w-px bg-zinc-700" />
+                    <div>
+                      <div className="text-sm text-zinc-400">Penalty</div>
+                      <div className={`text-2xl font-bold ${
+                        penalty === '+2' ? 'text-yellow-400' :
+                        penalty === 'DNF' ? 'text-red-400' : 'text-green-400'
+                      }`}>
+                        {penalty}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleSubmitSolve}
+                  disabled={submitting}
+                  className="bg-green-600 hover:bg-green-500 w-full"
+                  size="lg"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Solve'
+                  )}
+                </Button>
+              </div>
+            ) : (
               <div className="text-center text-zinc-400">
                 {mySolves.length >= TOTAL_SCRAMBLES ? (
                   'All solves completed! Waiting for opponent...'

@@ -103,7 +103,7 @@ export async function POST(request) {
         player2: teamB[0] || null,
         status: 'waiting',
         winner: null,
-        visibility: 'private',
+        visibility: 'public',
         format: 'bo3',
         winsRequired: 3,
         scores: { player1: 0, player2: 0 },

@@ -66,21 +66,12 @@ export function useMatchmaking(user) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added' || change.type === 'modified') {
               const matchData = change.doc.data();
-              // Check if this match involves this user
-              if (matchData.battleId && 
+              // Check if this match involves this user and hasn't been acknowledged
+              if (matchData.matchId && 
+                  !matchData.acknowledged &&
                   (matchData.player1 === user.uid || matchData.player2 === user.uid)) {
-                setBattleId(matchData.battleId);
+                setBattleId(matchData.matchId);
                 setStatus('matched');
-                
-                // Clean up: delete the match doc and remove from queue
-                deleteDoc(change.doc.ref).catch(console.error);
-                
-                // Also delete from queue
-                fetch('/api/battle/queue', {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: user.uid }),
-                }).catch(console.error);
               }
             }
           });
@@ -95,8 +86,8 @@ export function useMatchmaking(user) {
             setStatus('timeout');
           }
         }, MATCHMAKING_TIMEOUT_MS);
-      } else if (data.battleId) {
-        setBattleId(data.battleId);
+      } else if (data.matchId) {
+        setBattleId(data.matchId);
         setStatus('matched');
       }
     } catch (err) {

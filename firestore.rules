@@ -269,6 +269,11 @@ service cloud.firestore {
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
     
+    // Quick Match - Matches collection for real-time matchmaking
+    match /matches/{matchId} {
+      allow read, write: if isSignedIn();
+    }
+    
     // Battles collection - Private battles (link-only access)
     match /battles/{battleId} {
       // Allow reading waiting battles (for open battles list)

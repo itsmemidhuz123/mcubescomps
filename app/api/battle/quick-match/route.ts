@@ -53,86 +53,41 @@ export async function POST(request) {
     });
 
     if (opponent) {
-      let scrambleData;
-      try {
-        scrambleData = await generateScrambleForBattle({
-          event: '333',
-          roundCount: 3,
-        });
-      } catch (scrambleError) {
-        return NextResponse.json(
-          { success: false, message: 'Failed to generate scrambles' },
-          { status: 500 }
-        );
-      }
-
       const now = admin.firestore.FieldValue.serverTimestamp();
       
-      const battleData = {
-        battleId: '',
-        battleName: 'Quick Battle',
-        battleType: 'matchmaking',
-        event: '333',
-        scrambleId: scrambleData.scrambleId,
-        scrambles: scrambleData.scrambles,
-        currentScrambleIndex: 0,
-        currentRound: 1,
-        createdBy: userId,
-        player1: userId,
-        player2: opponent.userId,
-        status: 'waiting',
-        winner: null,
-        visibility: 'private',
-        format: 'bo3',
-        winsRequired: 3,
-        scores: { player1: 0, player2: 0 },
-        allowSpectators: true,
-        spectators: [],
-        creatorJoined: true,
-        opponentJoined: false,
-        startTime: null,
-        createdAt: now,
-        lastActivityAt: now,
-        startedAt: null,
-        completedAt: null,
-        roundCount: 3,
-        teamSize: 1,
-        teamA: [userId],
-        teamB: [opponent.userId],
-        players: [userId, opponent.userId],
-      };
-
-      const battleRef = await db.collection('battles').add(battleData);
-      const battleId = battleRef.id;
-      await battleRef.update({ battleId });
-
-      // Write to matches collection for both users (separate from queue to avoid deletion issues)
-      // This is how clients discover their battle in real-time
-      await db.collection('matches').doc(battleId).set({
-        battleId: battleId,
+      // Generate a temporary match ID (battle will be created when both players arrive)
+      const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Write to matches collection - this signals both users to navigate to battle
+      // NO battle created yet - it will be created when both players arrive at battle page
+      await db.collection('matches').doc(matchId).set({
+        matchId: matchId,
         createdAt: now,
         player1: userId,
         player2: opponent.userId,
         player1Name: username || 'Player',
         player2Name: opponent.username,
+        battleCreated: false,
+        player1Joined: false,
+        player2Joined: false,
       });
 
-      // Also update the queue entries to mark them as matched (but don't delete yet)
+      // Update queue entries to mark them as matched
       await queueRef.doc(userId).update({
         matched: true,
-        battleId: battleId,
+        matchId: matchId,
         matchedAt: now,
       }).catch(() => {});
 
       await queueRef.doc(opponent.userId).update({
         matched: true,
-        battleId: battleId,
+        matchId: matchId,
         matchedAt: now,
       }).catch(() => {});
 
       return NextResponse.json({
         success: true,
-        battleId,
+        matchId,
         message: 'Match found!',
       });
     }
@@ -150,7 +105,7 @@ export async function POST(request) {
       userId,
       username: username || 'Player',
       event: '333',
-      format: 'bo3',
+      format: 'ao5',
       joinedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
