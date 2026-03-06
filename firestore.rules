@@ -328,6 +328,39 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && hasRoleLevel(2);
     }
     
+    // Team Rooms - Waiting rooms for team battles
+    match /teamRooms/{roomId} {
+      // Allow reading waiting team rooms (for open battles list)
+      // Allow reading rooms where user is participant/creator
+      allow read: if (
+        isSignedIn() && (
+          resource.data.status == 'waiting' ||
+          resource.data.status == 'cancelled' ||
+          resource.data.status == 'started' ||
+          resource.data.visibility == 'public' ||
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.players.hasAll([request.auth.uid]) ||
+          isAdmin()
+        )
+      );
+      
+      // Only signed in users can create team rooms
+      allow create: if isSignedIn();
+      
+      // Only creator or participants can update
+      allow update: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.players.hasAll([request.auth.uid]) ||
+        isAdmin()
+      );
+      
+      // Only creator or admin can delete
+      allow delete: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+    }
+    
     // Banned Users - Admins can manage
     match /bannedUsers/{banId} {
       allow read: if isSignedIn() && hasRoleLevel(2);

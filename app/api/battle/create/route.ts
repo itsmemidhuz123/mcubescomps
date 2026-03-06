@@ -73,6 +73,77 @@ export async function POST(request) {
     if (format === 'firstTo5') winsReq = 5;
     if (format === 'ao5' || format === 'single') winsReq = null;
 
+    const db = getAdminDb();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    // For team battles (teamSize > 1), create a waiting room instead of actual battle
+    if (teamSize > 1) {
+      // Create a waiting room document
+      const totalPlayers = teamSize * 2;
+      const roomId = `team_room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Get user details from request or use defaults
+      const creatorUsername = body.username || 'Player';
+      const creatorPhotoURL = body.photoURL || null;
+      
+      // Create empty team slots
+      const teamASlots = Array.from({ length: teamSize }, (_, i) => ({
+        userId: i === 0 ? userId : null,
+        username: i === 0 ? creatorUsername : null,
+        photoURL: i === 0 ? creatorPhotoURL : null,
+        joined: i === 0,
+        joinedAt: i === 0 ? now : null,
+      }));
+      
+      const teamBSlots = Array.from({ length: teamSize }, () => ({
+        userId: null,
+        username: null,
+        photoURL: null,
+        joined: false,
+        joinedAt: null,
+      }));
+
+      const roomData = {
+        roomId: roomId,
+        battleType: 'teamRoom',
+        teamSize: teamSize,
+        event: event,
+        format: format,
+        roundCount: roundCount,
+        winsRequired: winsReq,
+        // Team A (creator's team)
+        teamA: teamASlots,
+        teamB: teamBSlots,
+        // Flat arrays for querying
+        players: [userId],
+        playersJoined: [userId],
+        // Creator info
+        createdBy: userId,
+        creatorUsername: creatorUsername,
+        creatorPhotoURL: creatorPhotoURL,
+        // Status
+        status: 'waiting', // waiting, started, cancelled
+        visibility: visibility,
+        // Timing
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+        // For open battles display
+        battleName: battleName || `${teamSize}v${teamSize} Team Battle`,
+      };
+
+      await db.collection('teamRooms').doc(roomId).set(roomData);
+      
+      return NextResponse.json({
+        success: true,
+        roomId: roomId,
+        teamSize: teamSize,
+        event: event,
+        message: 'Team battle room created',
+      });
+    }
+
+    // For 1v1 battles, create the actual battle (original logic)
     let scrambleData;
     try {
       scrambleData = await generateScrambleForBattle({
@@ -91,9 +162,6 @@ export async function POST(request) {
         { status: 400 }
       );
     }
-
-    const db = getAdminDb();
-    const now = admin.firestore.FieldValue.serverTimestamp();
 
     const battleData = {
       battleId: '',

@@ -8,7 +8,7 @@ import { db } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon, X } from 'lucide-react';
+import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon, X, Share2 } from 'lucide-react';
 import { useBattle, submitSolve } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds';
@@ -46,13 +46,22 @@ export default function BattleRoomPage() {
   const { playIntro, playCountdown, playBattleStart, playVictory, playDefeat } = useBattleSounds();
   const { shouldShowIntro, dismissIntro } = useBattleIntro();
 
-  // Handle match waiting - when battleId is actually a matchId (starts with "match_" or "team_match_")
+  // Handle match waiting - when battleId is actually a matchId (starts with "match_", "team_match_", or "team_room_")
   useEffect(() => {
     if (authLoading || !user || !battleId) return;
+    
+    // Check if this is a team room (waiting for players)
+    const isTeamRoom = battleId.startsWith('team_room_');
     
     // Check if this is a match waiting (not a battle yet)
     const isQuickMatch = battleId.startsWith('match_');
     const isTeamMatch = battleId.startsWith('team_match_');
+    
+    // Handle team room
+    if (isTeamRoom) {
+      handleTeamRoom();
+      return;
+    }
     
     if (!isQuickMatch && !isTeamMatch) return;
     
@@ -259,6 +268,99 @@ export default function BattleRoomPage() {
       }
     }
   }, [battle, user, introDismissed, shouldShowIntro, playIntro]);
+
+  // Team Room handling
+  const [teamRoomData, setTeamRoomData] = useState(null);
+  const [teamRoomLoading, setTeamRoomLoading] = useState(true);
+  const [joinError, setJoinError] = useState(null);
+
+  const handleTeamRoom = async () => {
+    setIsMatchWaiting(true);
+    setTeamRoomLoading(true);
+    setJoinError(null);
+    
+    try {
+      // First try to join the room
+      const joinResponse = await fetch('/api/battle/team-room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: battleId,
+          userId: user.uid,
+          username: user.displayName || user.email?.split('@')[0] || 'Player',
+          photoURL: user.photoURL || null,
+        }),
+      });
+      
+      const joinData = await joinResponse.json();
+      
+      if (!joinData.success && joinData.message !== 'Already in room') {
+        setJoinError(joinData.message);
+      }
+      
+      // Listen to the team room document
+      const roomRef = doc(db, 'teamRooms', battleId);
+      const unsubscribe = onSnapshot(roomRef, async (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setTeamRoomData(data);
+          
+          // Check if battle started
+          if (data.status === 'started' && data.battleId) {
+            router.replace(`/battle/${data.battleId}`);
+            return;
+          }
+          
+          // Check if cancelled
+          if (data.status === 'cancelled') {
+            setJoinError('This room has been cancelled');
+            return;
+          }
+        } else {
+          setJoinError('Room not found');
+        }
+        setTeamRoomLoading(false);
+      });
+      
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Team room error:', error);
+      setJoinError('Failed to join room');
+      setTeamRoomLoading(false);
+    }
+  };
+
+  const handleRoomAction = async (action) => {
+    try {
+      const response = await fetch('/api/battle/team-room/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: battleId,
+          userId: user.uid,
+          action: action,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        alert(data.message);
+        return;
+      }
+      
+      if (action === 'cancel') {
+        router.push('/battle');
+      } else if (action === 'start' && data.battleId) {
+        router.replace(`/battle/${data.battleId}`);
+      } else if (action === 'extend') {
+        // Room extended - UI will update automatically
+      }
+    } catch (error) {
+      console.error('Room action error:', error);
+      alert('Failed to perform action');
+    }
+  };
 
   const handleDismissIntro = () => {
     dismissIntro();
@@ -661,6 +763,209 @@ export default function BattleRoomPage() {
   }
 
   if (authLoading || battleLoading || !battle) {
+    // Show loading while team room loads
+    if (isMatchWaiting && teamRoomLoading) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-zinc-400 mx-auto mb-4" />
+            <p className="text-zinc-400">Loading room...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Show team room waiting screen
+    if (isMatchWaiting && teamRoomData) {
+      const teamA = teamRoomData.teamA || [];
+      const teamB = teamRoomData.teamB || [];
+      const teamSize = teamRoomData.teamSize || 1;
+      const event = teamRoomData.event || '333';
+      const playersJoined = teamRoomData.playersJoined || [];
+      const totalRequired = teamSize * 2;
+      const playersNeeded = totalRequired - playersJoined.length;
+      const isCreator = teamRoomData.createdBy === user?.uid;
+      const isFull = playersNeeded <= 0;
+      
+      const eventNames = {
+        '333': '3x3', '444': '4x4', '555': '5x5', '666': '6x6', '777': '7x7',
+      };
+
+      const copyLink = () => {
+        const link = window.location.origin + '/battle/' + battleId;
+        navigator.clipboard.writeText(link);
+        alert('Link copied to clipboard!');
+      };
+
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+          <Card className="bg-zinc-900 border-zinc-800 w-full max-w-4xl">
+            <CardContent className="p-6">
+              {/* Header */}
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {teamRoomData.battleName || `Team Battle ${teamSize}v${teamSize}`}
+                </h2>
+                <p className="text-zinc-400">
+                  Event: <span className="text-white font-medium">{eventNames[event] || event}</span>
+                </p>
+                {joinError && (
+                  <p className="text-red-400 mt-2">{joinError}</p>
+                )}
+              </div>
+
+              {/* Team Display */}
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
+                {/* Team A */}
+                <div className="bg-zinc-800 rounded-lg p-4">
+                  <div className="text-lg font-bold text-green-400 mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">A</span>
+                      Team A
+                    </div>
+                    <span className="text-sm text-zinc-500">
+                      {teamA.filter(p => p.joined).length}/{teamSize}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {Array.from({ length: teamSize }).map((_, idx) => {
+                      const player = teamA[idx];
+                      return (
+                        <div key={idx} className="flex items-center gap-3">
+                          {player?.joined ? (
+                            <>
+                              {player.photoURL ? (
+                                <img src={player.photoURL} alt={player.username} className="w-8 h-8 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">
+                                  {player.username?.charAt(0).toUpperCase() || '?'}
+                                </div>
+                              )}
+                              <span className="text-white">{player.username}</span>
+                              {player.userId === user?.uid && <span className="text-xs text-yellow-400">(You)</span>}
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-500">?</div>
+                              <span className="text-zinc-500">Waiting for player...</span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Team B */}
+                <div className="bg-zinc-800 rounded-lg p-4">
+                  <div className="text-lg font-bold text-blue-400 mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">B</span>
+                      Team B
+                    </div>
+                    <span className="text-sm text-zinc-500">
+                      {teamB.filter(p => p.joined).length}/{teamSize}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {Array.from({ length: teamSize }).map((_, idx) => {
+                      const player = teamB[idx];
+                      return (
+                        <div key={idx} className="flex items-center gap-3">
+                          {player?.joined ? (
+                            <>
+                              {player.photoURL ? (
+                                <img src={player.photoURL} alt={player.username} className="w-8 h-8 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
+                                  {player.username?.charAt(0).toUpperCase() || '?'}
+                                </div>
+                              )}
+                              <span className="text-white">{player.username}</span>
+                              {player.userId === user?.uid && <span className="text-xs text-yellow-400">(You)</span>}
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-500">?</div>
+                              <span className="text-zinc-500">Waiting for player...</span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="text-center mb-6">
+                {isFull ? (
+                  <p className="text-green-400 font-medium text-lg">Room is full! Starting soon...</p>
+                ) : (
+                  <p className="text-yellow-400">Waiting for {playersNeeded} more player{playersNeeded > 1 ? 's' : ''}...</p>
+                )}
+                <p className="text-zinc-500 text-sm mt-2">
+                  {playersJoined.length}/{totalRequired} players joined
+                </p>
+              </div>
+
+              {/* Share Link */}
+              <div className="flex justify-center mb-6">
+                <Button onClick={copyLink} variant="outline" className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4" />
+                  Share Invite Link
+                </Button>
+              </div>
+
+              {/* Creator Controls */}
+              {isCreator && (
+                <div className="flex justify-center gap-3">
+                  <Button
+                    onClick={() => handleRoomAction('extend')}
+                    variant="outline"
+                  >
+                    Extend Time
+                  </Button>
+                  {isFull ? (
+                    <Button
+                      onClick={() => handleRoomAction('start')}
+                      className="bg-green-600 hover:bg-green-500"
+                    >
+                      Start Battle
+                    </Button>
+                  ) : playersJoined.length >= 2 ? (
+                    <Button
+                      onClick={() => handleRoomAction('start')}
+                      className="bg-yellow-600 hover:bg-yellow-500"
+                    >
+                      Start with {playersJoined.length} Players
+                    </Button>
+                  ) : null}
+                  <Button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to cancel this room?')) {
+                        handleRoomAction('cancel');
+                      }
+                    }}
+                    variant="destructive"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {/* Non-creator info */}
+              {!isCreator && (
+                <div className="text-center text-zinc-500 text-sm">
+                  Waiting for room creator to start the battle...
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     // Show match waiting screen if waiting for players to join
     if (isMatchWaiting && matchData) {
       const isTeamMatch = matchData.battleType === 'teamBattle';

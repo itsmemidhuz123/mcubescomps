@@ -26,7 +26,9 @@ export default function BattlePage() {
   const [battleName, setBattleName] = useState('');
   const [creating, setCreating] = useState(false);
   const [waitingBattles, setWaitingBattles] = useState([]);
+  const [teamRooms, setTeamRooms] = useState([]);
   const [myBattles, setMyBattles] = useState([]);
+  const [myTeamRooms, setMyTeamRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -92,8 +94,48 @@ export default function BattlePage() {
     return () => unsubscribe();
   }, [user]);
 
+  // Load team rooms for open battles section
+  useEffect(() => {
+    if (!user) return;
+    
+    const q = query(
+      collection(db, 'teamRooms'),
+      where('status', '==', 'waiting'),
+      where('visibility', '==', 'public'),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const rooms = [];
+      const oneHourMs = 60 * 60 * 1000;
+      const now = Date.now();
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.createdBy !== user.uid) {
+          const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
+          const battleAge = now - createdAt.getTime();
+          
+          if (battleAge <= oneHourMs) {
+            rooms.push({ id: doc.id, ...data, isTeamRoom: true });
+          }
+        }
+      });
+      
+      setTeamRooms(rooms);
+      setLoading(false);
+    }, (err) => {
+      console.error('Error loading team rooms:', err);
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
+
   useEffect(() => {
     loadMyBattles();
+    loadMyTeamRooms();
   }, []);
 
   const loadMyBattles = async () => {
@@ -129,6 +171,39 @@ export default function BattlePage() {
       setMyBattles(filteredBattles);
     } catch (error) {
       console.error('Error loading my battles:', error);
+    }
+  };
+
+  const loadMyTeamRooms = async () => {
+    if (!user) return;
+
+    try {
+      const q = query(
+        collection(db, 'teamRooms'),
+        where('createdBy', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+
+      const snapshot = await getDocs(q);
+      const rooms = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data(), isTeamRoom: true }));
+      
+      const oneHourMs = 60 * 60 * 1000;
+      const now = Date.now();
+      
+      const filteredRooms = rooms.filter((room) => {
+        if (room.status === 'cancelled' || room.status === 'started') {
+          return false;
+        }
+        const lastActivity = room.lastActivityAt || room.createdAt;
+        const lastActivityTime = lastActivity?.toDate?.() || new Date(lastActivity?._seconds * 1000);
+        const roomAge = now - lastActivityTime.getTime();
+        return roomAge <= oneHourMs;
+      });
+      
+      setMyTeamRooms(filteredRooms);
+    } catch (error) {
+      console.error('Error loading my team rooms:', error);
     }
   };
 
@@ -178,6 +253,8 @@ export default function BattlePage() {
         body: JSON.stringify({
           event: selectedEvent,
           userId: user.uid,
+          username: user.displayName || user.email?.split('@')[0] || 'Player',
+          photoURL: user.photoURL || null,
           roundCount: 5,
           visibility: selectedVisibility,
           allowSpectators: true,
@@ -191,7 +268,12 @@ export default function BattlePage() {
       const data = await response.json();
 
       if (data.success) {
-        router.push(`/battle/${data.battleId}`);
+        // For team battles (teamSize > 1), redirect to team room
+        if (data.roomId) {
+          router.push(`/battle/${data.roomId}`);
+        } else {
+          router.push(`/battle/${data.battleId}`);
+        }
       } else {
         alert(data.message || 'Failed to create battle');
       }
@@ -226,6 +308,34 @@ export default function BattlePage() {
     } catch (error) {
       console.error('Join battle error:', error);
       alert('Failed to join battle');
+    }
+  };
+
+  const joinTeamRoom = async (roomId) => {
+    if (!user) return;
+    
+    try {
+      const response = await fetch('/api/battle/team-room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          userId: user.uid,
+          username: user.displayName || user.email?.split('@')[0] || 'Player',
+          photoURL: user.photoURL || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        router.push(`/battle/${roomId}`);
+      } else {
+        alert(data.message || 'Failed to join team room');
+      }
+    } catch (error) {
+      console.error('Join team room error:', error);
+      alert('Failed to join team room');
     }
   };
 
@@ -485,7 +595,7 @@ export default function BattlePage() {
                  <div className="flex justify-center py-8">
                    <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
                  </div>
-               ) : waitingBattles.length === 0 ? (
+               ) : (waitingBattles.length === 0 && teamRooms.length === 0) ? (
                  <div className="text-center py-8 text-zinc-500">
                    <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
                    <p>No open battles</p>
@@ -493,81 +603,118 @@ export default function BattlePage() {
                  </div>
                ) : (
                  <div className="space-y-3">
-                   {waitingBattles.map((battle) => {
-                     const event = BATTLE_EVENTS.find(e => e.id === battle.event) || BATTLE_EVENTS[0];
-                     const isTeamBattle = battle.teamSize && battle.teamSize > 1;
-                     const eventIcon = event?.icon || '⚔️';
-                     
-                     return (
-                       <div
-                         key={battle.id}
-                         className="flex flex-col sm:flex-row sm:items-center justify-between bg-zinc-800 rounded-lg p-3 gap-2 sm:gap-0"
-                       >
-                         <div className="flex-1 min-w-0">
-                           <div className="font-medium flex items-center gap-2 flex-wrap">
-                             {battle.battleName || 'Battle'}
-                             {isTeamBattle && (
-                               <Badge variant="secondary" className="text-xs">
-                                 {battle.teamSize}v{battle.teamSize}
-                               </Badge>
-                             )}
-                           </div>
-                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                             <span className="text-xs text-zinc-400">
-                               {eventIcon} {event?.name || '3x3'}
-                             </span>
-                             {battle.format && (
-                               <span className="text-xs text-zinc-500">
-                                 • {battle.format === 'ao5' ? 'Ao5' : battle.format === 'firstTo3' ? 'First to 3' : battle.format === 'firstTo5' ? 'First to 5' : battle.format === 'single' ? 'Single' : battle.format}
+                   {/* Combine battles and team rooms, sort by creation time */}
+                   {[...waitingBattles, ...teamRooms]
+                     .sort((a, b) => {
+                       const aTime = a.createdAt?.seconds || 0;
+                       const bTime = b.createdAt?.seconds || 0;
+                       return bTime - aTime;
+                     })
+                     .map((battle) => {
+                       const isTeamRoom = battle.isTeamRoom;
+                       const event = BATTLE_EVENTS.find(e => e.id === battle.event) || BATTLE_EVENTS[0];
+                       const eventIcon = event?.icon || '⚔️';
+                       
+                       // Calculate player count for team rooms
+                       const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
+                       const totalPlayers = isTeamRoom ? (battle.teamSize * 2) : 2;
+                       
+                       return (
+                         <div
+                           key={battle.id}
+                           className="flex flex-col sm:flex-row sm:items-center justify-between bg-zinc-800 rounded-lg p-3 gap-2 sm:gap-0"
+                         >
+                           <div className="flex-1 min-w-0">
+                             <div className="font-medium flex items-center gap-2 flex-wrap">
+                               {battle.battleName || 'Battle'}
+                               {isTeamRoom && (
+                                 <Badge variant="secondary" className="text-xs bg-purple-600">
+                                   {battle.teamSize}v{battle.teamSize} Team
+                                 </Badge>
+                               )}
+                             </div>
+                             <div className="flex flex-wrap items-center gap-2 mt-1">
+                               <span className="text-xs text-zinc-400">
+                                 {eventIcon} {event?.name || '3x3'}
                                </span>
+                               {battle.format && (
+                                 <span className="text-xs text-zinc-500">
+                                   • {battle.format === 'ao5' ? 'Ao5' : battle.format === 'firstTo3' ? 'First to 3' : battle.format === 'firstTo5' ? 'First to 5' : battle.format === 'single' ? 'Single' : battle.format}
+                                 </span>
+                               )}
+                               {isTeamRoom && (
+                                 <span className="text-xs text-yellow-500">
+                                   • {playersJoined}/{totalPlayers} joined
+                                 </span>
+                               )}
+                               <span className="text-xs text-zinc-500">
+                                 • {new Date((battle.createdAt?.seconds || 0) * 1000).toLocaleTimeString()}
+                               </span>
+                             </div>
+                           </div>
+                           <div className="flex gap-2 w-full sm:w-auto justify-end">
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               onClick={() => copyBattleLink(battle.id)}
+                               className="flex-1 sm:flex-none"
+                             >
+                               {copied ? (
+                                 <Check className="w-4 h-4 text-green-500" />
+                               ) : (
+                                 <Copy className="w-4 h-4" />
+                               )}
+                             </Button>
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               onClick={() => router.push(`/battle/${battle.id}`)}
+                               className="flex-1 sm:flex-none"
+                             >
+                               <Eye className="w-4 h-4" />
+                             </Button>
+                             {isTeamRoom ? (
+                               user?.uid === battle.createdBy ? (
+                                 <Button
+                                   onClick={() => router.push(`/battle/${battle.id}`)}
+                                   className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
+                                   size="sm"
+                                 >
+                                   Open
+                                 </Button>
+                               ) : (
+                                 <Button
+                                   onClick={() => joinTeamRoom(battle.id)}
+                                   className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
+                                   size="sm"
+                                   disabled={playersJoined >= totalPlayers}
+                                 >
+                                   Join
+                                 </Button>
+                               )
+                             ) : (
+                               user?.uid === battle.createdBy ? (
+                                 <Button
+                                   onClick={() => openBattle(battle.id)}
+                                   className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
+                                   size="sm"
+                                 >
+                                   Open
+                                 </Button>
+                               ) : (
+                                 <Button
+                                   onClick={() => joinBattle(battle.id)}
+                                   className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
+                                   size="sm"
+                                 >
+                                   Join
+                                 </Button>
+                               )
                              )}
-                             <span className="text-xs text-zinc-500">
-                               • {new Date(battle.createdAt.seconds * 1000).toLocaleTimeString()}
-                             </span>
                            </div>
                          </div>
-                         <div className="flex gap-2 w-full sm:w-auto justify-end">
-                           <Button
-                             variant="ghost"
-                             size="icon"
-                             onClick={() => copyBattleLink(battle.id)}
-                             className="flex-1 sm:flex-none"
-                           >
-                             {copied ? (
-                               <Check className="w-4 h-4 text-green-500" />
-                             ) : (
-                               <Copy className="w-4 h-4" />
-                             )}
-                           </Button>
-                           <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={() => watchBattle(battle.id)}
-                             className="flex-1 sm:flex-none"
-                           >
-                             <Eye className="w-4 h-4" />
-                           </Button>
-                           {user?.uid === battle.createdBy ? (
-                             <Button
-                               onClick={() => openBattle(battle.id)}
-                               className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
-                               size="sm"
-                             >
-                               Open
-                             </Button>
-                           ) : (
-                             <Button
-                               onClick={() => joinBattle(battle.id)}
-                               className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
-                               size="sm"
-                             >
-                               Join
-                             </Button>
-                           )}
-                         </div>
-                       </div>
-                     );
-                   })}
+                       );
+                     })}
                  </div>
                )}
              </CardContent>
@@ -587,7 +734,7 @@ export default function BattlePage() {
               <div className="text-center py-4 text-zinc-500">
                 <p>Sign in to see your battles</p>
               </div>
-            ) : myBattles.length === 0 ? (
+            ) : (myBattles.length === 0 && myTeamRooms.length === 0) ? (
               <div className="text-center py-8 text-zinc-500">
                 <Sword className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>No battles created</p>
@@ -595,61 +742,96 @@ export default function BattlePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {myBattles.map((battle) => (
-                  <div
-                    key={battle.id}
-                    className="flex items-center justify-between bg-zinc-800 rounded-lg p-3"
-                  >
-                    <div>
-                      <div className="font-medium">
-                        {battle.battleName || 'Battle'} • {battle.teamSize || 1}v{battle.teamSize || 1}
-                      </div>
-                      <div className="text-xs text-zinc-400 flex items-center gap-2">
-                        <Badge variant={battle.status === 'live' ? 'default' : 'secondary'}>
-                          {battle.status}
-                        </Badge>
-                        <span>{battle.event}</span>
-                        <span>{battle.format}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyBattleLink(battle.id)}
+                {/* Combine myBattles and myTeamRooms */}
+                {[...myBattles, ...myTeamRooms]
+                  .sort((a, b) => {
+                    const aTime = a.createdAt?.seconds || 0;
+                    const bTime = b.createdAt?.seconds || 0;
+                    return bTime - aTime;
+                  })
+                  .map((battle) => {
+                    const isTeamRoom = battle.isTeamRoom;
+                    const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
+                    const totalPlayers = isTeamRoom ? (battle.teamSize * 2) : 2;
+                    
+                    return (
+                      <div
+                        key={battle.id}
+                        className="flex items-center justify-between bg-zinc-800 rounded-lg p-3"
                       >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                      {battle.status === 'waiting' && (
-                        <>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {battle.battleName || 'Battle'}
+                            {isTeamRoom && (
+                              <Badge variant="secondary" className="text-xs bg-purple-600">
+                                {battle.teamSize}v{battle.teamSize} Team
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-zinc-400 flex items-center gap-2">
+                            <Badge variant={battle.status === 'live' ? 'default' : 'secondary'}>
+                              {battle.status}
+                            </Badge>
+                            <span>{battle.event}</span>
+                            <span>{battle.format}</span>
+                            {isTeamRoom && (
+                              <span className="text-yellow-500">
+                                • {playersJoined}/{totalPlayers} joined
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
                           <Button
-                            onClick={() => router.push(`/battle/${battle.id}`)}
-                            className="bg-green-600 hover:bg-green-500"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => copyBattleLink(battle.id)}
                           >
-                            Rejoin
+                            <Copy className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openBattle(battle.id)}
-                          >
-                            Open
-                          </Button>
-                        </>
-                      )}
-                      {battle.status === 'completed' && (
-                        <Button
-                          onClick={() => router.push(`/battle/result/${battle.id}`)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Results
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                          {isTeamRoom ? (
+                            battle.status === 'waiting' && (
+                              <Button
+                                onClick={() => router.push(`/battle/${battle.id}`)}
+                                className="bg-green-600 hover:bg-green-500"
+                                size="sm"
+                              >
+                                Open
+                              </Button>
+                            )
+                          ) : (
+                            battle.status === 'waiting' && (
+                              <>
+                                <Button
+                                  onClick={() => router.push(`/battle/${battle.id}`)}
+                                  className="bg-green-600 hover:bg-green-500"
+                                  size="sm"
+                                >
+                                  Rejoin
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openBattle(battle.id)}
+                                >
+                                  Open
+                                </Button>
+                              </>
+                            )
+                          )}
+                          {battle.status === 'completed' && (
+                            <Button
+                              onClick={() => router.push(`/battle/result/${battle.id}`)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Results
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </CardContent>
