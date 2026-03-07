@@ -210,16 +210,16 @@ export default function BattleRoomPage() {
 
   // Mark player as joined when they visit the battle
   useEffect(() => {
-    if (!battle || !user || battle.status !== 'waiting') return;
+    if (!battle || !user || battle?.status !== 'waiting') return;
     
     // Skip for team battles - they handle joining differently
-    if (battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1)) return;
+    if (battle?.battleType === 'teamBattle' || (battle?.teamSize && battle?.teamSize > 1)) return;
     
     // Skip if player1/player2 not set (team battles use teamA/teamB arrays)
-    if (!battle.player1) return;
+    if (!battle?.player1) return;
     
-    const isPlayer1 = battle.player1 === user.uid;
-    const isPlayer2 = battle.player2 === user.uid;
+    const isPlayer1 = battle?.player1 === user?.uid;
+    const isPlayer2 = battle?.player2 === user?.uid;
     
     if (!isPlayer1 && !isPlayer2) return;
     
@@ -1330,7 +1330,7 @@ export default function BattleRoomPage() {
             <p className="text-zinc-400 mb-4">
               You are watching this battle
             </p>
-            {battle.player1 && battle.player2 === null && (
+            {battle?.player1 && battle?.player2 === null && (
               <div className="flex flex-col gap-3">
                 <Button 
                   onClick={handleJoinAsOpponent}
