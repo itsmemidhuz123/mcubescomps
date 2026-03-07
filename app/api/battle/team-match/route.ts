@@ -6,17 +6,31 @@ function getAdminDb() {
   if (getApps().length === 0) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
-    }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
+    console.log('Firebase Admin init:', { 
+      projectId: projectId ? 'set' : 'MISSING',
+      clientEmail: clientEmail ? 'set' : 'MISSING',
+      privateKey: privateKey ? `set (${privateKey.length} chars)` : 'MISSING'
     });
+
+    // If no private key provided, try using Application Default Credentials
+    // This works on Vercel when service account is attached
+    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
+      console.log('Using Application Default Credentials');
+      initializeApp();
+    } else {
+      // Handle different key formats - convert literal \n to actual newlines
+      privateKey = privateKey
+        .replace(/\\n/g, '\n')
+        .replace(/\\\\n/g, '\n')
+        .replace(/"\s*"/g, '')
+        .trim();
+
+      initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey })
+      });
+    }
   }
   return admin.firestore();
 }
