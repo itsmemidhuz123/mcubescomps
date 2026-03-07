@@ -274,17 +274,19 @@ async function handleTeamBattleScore(db, battleRef, battleData, uid, time, penal
   const teamSize = teamA.length;
   const winsRequired = battleData.winsRequired || teamSize;
   
-  // Determine which team the player is on
-  const playerTeamA = teamA.some(p => p.userId === uid);
-  const playerTeamB = teamB.some(p => p.userId === uid);
+  // Determine which team the player is on - handle both old format (strings) and new format (objects with userId)
+  const playerTeamA = teamA.some(p => (typeof p === 'object' ? p.userId : p) === uid);
+  const playerTeamB = teamB.some(p => (typeof p === 'object' ? p.userId : p) === uid);
   
-  // Get all team member solves
+  // Get all team member solves - handle both old and new formats
   const teamASolvesPromises = teamA.map(async (player) => {
-    const doc = await battleRef.collection('solves').doc(player.userId).get();
+    const playerId = typeof player === 'object' ? player.userId : player;
+    const doc = await battleRef.collection('solves').doc(playerId).get();
     return doc.exists ? doc.data().solves || [] : [];
   });
   const teamBSolvesPromises = teamB.map(async (player) => {
-    const doc = await battleRef.collection('solves').doc(player.userId).get();
+    const playerId = typeof player === 'object' ? player.userId : player;
+    const doc = await battleRef.collection('solves').doc(playerId).get();
     return doc.exists ? doc.data().solves || [] : [];
   });
   

@@ -389,7 +389,7 @@ export default function BattleRoomPage() {
       if (isTeamBattle) {
         const teamA = battle?.teamA || [];
         const teamB = battle?.teamB || [];
-        const myTeam = teamA.some(p => p.userId === user.uid) ? 'teamA' : (teamB.some(p => p.userId === user.uid) ? 'teamB' : null);
+        const myTeam = teamA.some(p => (typeof p === 'object' ? p.userId : p) === user.uid) ? 'teamA' : (teamB.some(p => (typeof p === 'object' ? p.userId : p) === user.uid) ? 'teamB' : null);
         iWon = battle.winner === myTeam;
       } else {
         iWon = battle.winner === user.uid;
@@ -683,7 +683,9 @@ export default function BattleRoomPage() {
   // Check team battle participants
   const teamA = battle?.teamA || [];
   const teamB = battle?.teamB || [];
-  const isTeamPlayer = teamA.some(p => p.userId === user?.uid) || teamB.some(p => p.userId === user?.uid);
+  // Handle both old format (strings) and new format (objects with userId)
+  const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === user?.uid) || 
+                       teamB.some(p => (typeof p === 'object' ? p.userId : p) === user?.uid);
   const isTeamBattle = battle?.battleType === 'teamBattle' || (battle?.teamSize && battle?.teamSize > 1);
   
   const isCreator = battle?.createdBy === user?.uid;
@@ -703,8 +705,13 @@ export default function BattleRoomPage() {
     if (playerId === user?.uid) return userProfile?.displayName || 'You';
     if (battle?.player1 === playerId) return battle?.player1Name || 'Player 1';
     if (battle?.player2 === playerId) return battle?.player2Name || 'Player 2';
-    if (battle?.teamA?.includes(playerId)) return battle?.teamA?.find(p => p === playerId)?.name || `Team A ${battle?.teamA?.indexOf(playerId) + 1}`;
-    if (battle?.teamB?.includes(playerId)) return battle?.teamB?.find(p => p === playerId)?.name || `Team B ${battle?.teamB?.indexOf(playerId) + 1}`;
+    // Handle both old format (strings) and new format (objects with userId)
+    const teamA = battle?.teamA || [];
+    const teamB = battle?.teamB || [];
+    const teamAMember = teamA.find(p => (typeof p === 'object' ? p.userId : p) === playerId);
+    if (teamAMember) return typeof teamAMember === 'object' ? teamAMember.username : `Team A ${teamA.indexOf(playerId) + 1}`;
+    const teamBMember = teamB.find(p => (typeof p === 'object' ? p.userId : p) === playerId);
+    if (teamBMember) return typeof teamBMember === 'object' ? teamBMember.username : `Team B ${teamB.indexOf(playerId) + 1}`;
     return 'Player ?';
   };
 
@@ -1389,7 +1396,7 @@ export default function BattleRoomPage() {
     // For team battles, winner is 'teamA' or 'teamB'; for regular battles, it's user ID
     let iWon = false;
     if (isTeamBattle) {
-      const myTeam = isTeamPlayer ? (teamA.some(p => p.userId === user?.uid) ? 'teamA' : 'teamB') : null;
+      const myTeam = isTeamPlayer ? (teamA.some(p => (typeof p === 'object' ? p.userId : p) === user?.uid) ? 'teamA' : 'teamB') : null;
       iWon = battle.winner === myTeam;
     } else {
       iWon = battle.winner === user?.uid;

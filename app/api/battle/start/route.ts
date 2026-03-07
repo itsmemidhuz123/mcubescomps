@@ -59,7 +59,9 @@ export async function POST(request) {
     // Check if user is in teamA or teamB (for team battles)
     const teamA = battleData.teamA || [];
     const teamB = battleData.teamB || [];
-    const isTeamPlayer = teamA.some(p => p.userId === uid) || teamB.some(p => p.userId === uid);
+    // Handle both old format (strings) and new format (objects with userId)
+    const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === uid) || 
+                         teamB.some(p => (typeof p === 'object' ? p.userId : p) === uid);
     const isTeamBattle = battleData.battleType === 'teamBattle';
     
     // For team battles, check team membership; for regular battles, check player1/player2

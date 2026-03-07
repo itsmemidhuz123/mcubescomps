@@ -67,7 +67,10 @@ export function useBattle(battleId, currentUserUid) {
     const isTeamBattle = battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1);
     const teamA = battle.teamA || [];
     const teamB = battle.teamB || [];
-    const isTeamPlayer = teamA.some(p => p.userId === currentUserUid) || teamB.some(p => p.userId === currentUserUid);
+    
+    // Handle both old format (strings) and new format (objects with userId)
+    const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
+                         teamB.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid);
     
     if (isTeamBattle && isTeamPlayer) {
       return Array.isArray(player1Solves) ? player1Solves : [];
@@ -86,7 +89,10 @@ export function useBattle(battleId, currentUserUid) {
     const isTeamBattle = battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1);
     const teamA = battle.teamA || [];
     const teamB = battle.teamB || [];
-    const isTeamPlayer = teamA.some(p => p.userId === currentUserUid) || teamB.some(p => p.userId === currentUserUid);
+    
+    // Handle both old format (strings) and new format (objects with userId)
+    const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
+                         teamB.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid);
     
     if (isTeamBattle && isTeamPlayer) {
       return Array.isArray(player2Solves) ? player2Solves : [];
