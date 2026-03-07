@@ -7,16 +7,22 @@ function getAdminDb() {
   if (getApps().length === 0) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+    let privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
     if (!projectId || !clientEmail || !privateKeyRaw) {
       throw new Error('Firebase Admin env vars not configured');
     }
 
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+    // Handle both escaped newlines and regular newlines
+    privateKeyRaw = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+
+    // Ensure the key has proper PEM formatting
+    if (!privateKeyRaw.includes('-----BEGIN PRIVATE KEY-----')) {
+      privateKeyRaw = privateKeyRaw.replace(/(.{64})/g, '$1');
+    }
 
     initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
+      credential: cert({ projectId, clientEmail, privateKey: privateKeyRaw })
     });
   }
   return admin.firestore();

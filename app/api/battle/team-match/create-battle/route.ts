@@ -13,7 +13,7 @@ function getAdminDb() {
       throw new Error('Firebase Admin env vars not configured');
     }
 
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
 
     initializeApp({
       credential: cert({ projectId, clientEmail, privateKey })
