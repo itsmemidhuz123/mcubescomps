@@ -765,7 +765,7 @@ export default function BattlePage() {
                   .map((battle) => {
                     const isTeamRoom = battle.isTeamRoom;
                     const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
-                    const totalPlayers = isTeamRoom ? (battle.teamSize * 2) : 2;
+                    const totalPlayers = isTeamRoom ? ((battle.teamSize || 1) * 2) : 2;
                     
                     return (
                       <div
@@ -777,7 +777,7 @@ export default function BattlePage() {
                             {battle.battleName || 'Battle'}
                             {isTeamRoom && (
                               <Badge variant="secondary" className="text-xs bg-purple-600">
-                                {battle.teamSize}v{battle.teamSize} Team
+                                {(battle.teamSize || 1)}v{(battle.teamSize || 1)} Team
                               </Badge>
                             )}
                           </div>
