@@ -1,53 +1,22 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
+import { db } from '@/lib/firebase';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, orderBy, limit, Timestamp, serverTimestamp, arrayUnion } from 'firebase/firestore';
 
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
+function generateScramble(event = '333', roundCount = 5) {
+  const scrambles = [];
+  for (let i = 0; i < roundCount; i++) {
+    const chars = 'RURURFRFRFURURF';
+    let scramble = '';
+    for (let j = 0; j < 20; j++) {
+      scramble += chars[Math.floor(Math.random() * chars.length)] + ' ';
     }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
-    });
+    scrambles.push(scramble.trim());
   }
-  return admin.firestore();
-}
-
-// Cleanup function to delete stale matches (older than 1 hour)
-async function cleanupStaleMatches(db) {
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const matchesRef = db.collection('matches');
-  
-  try {
-    const staleMatches = await matchesRef
-      .where('battleType', '==', 'teamBattle')
-      .where('createdAt', '<', admin.firestore.Timestamp.fromDate(oneHourAgo))
-      .get();
-    
-    const deletePromises = [];
-    staleMatches.forEach((doc) => {
-      const data = doc.data();
-      // Only delete if battle not created and not full
-      if (!data.battleCreated) {
-        deletePromises.push(doc.ref.delete());
-        console.log('Deleted stale match:', doc.id);
-      }
-    });
-    
-    if (deletePromises.length > 0) {
-      await Promise.all(deletePromises);
-    }
-  } catch (err) {
-    console.log('Cleanup error (non-fatal):', err.message);
-  }
+  return {
+    scrambleId: `scramble_${Date.now()}`,
+    scrambles: scrambles,
+    event: event
+  };
 }
 
 export async function POST(request) {
@@ -62,54 +31,38 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
-    const queueRef = db.collection('matchmakingQueue');
-    const matchesRef = db.collection('matches');
+    const queueRef = collection(db, 'matchmakingQueue');
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
-    // Run cleanup of stale matches first
-    await cleanupStaleMatches(db);
+    const q = query(
+      queueRef,
+      where('joinedAt', '>', Timestamp.fromMillis(fiveMinutesAgo)),
+      where('teamBattle', '==', true),
+      where('teamSize', '==', teamSize),
+      where('event', '==', event),
+      limit(30)
+    );
 
-    // Search for players in queue - look at last 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    
-    const snapshot = await queueRef
-      .where('joinedAt', '>', admin.firestore.Timestamp.fromDate(fiveMinutesAgo))
-      .where('teamBattle', '==', true)
-      .where('teamSize', '==', teamSize)
-      .where('event', '==', event)
-      .limit(30)
-      .get();
+    const snapshot = await getDocs(q);
 
     const availablePlayers = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.userId !== userId) {
-        availablePlayers.push({ id: doc.id, ...data });
+    snapshot.forEach((docSnap) => {
+      const docData = docSnap.data();
+      if (docData.userId !== userId) {
+        availablePlayers.push({ id: docSnap.id, ...docData });
       }
     });
 
-    // FULL team requirement: 2v2 = 4, 4v4 = 8, 8v8 = 16
     const playersNeeded = teamSize * 2;
-    
+
     if (availablePlayers.length >= playersNeeded - 1) {
       const selectedOpponents = availablePlayers.slice(0, playersNeeded - 1);
-      
-      // Generate match ID
       const matchId = `team_match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const now = admin.firestore.FieldValue.serverTimestamp();
-      
-      // Build team arrays with player profiles
-      const teamA = [];
+      const now = serverTimestamp();
+
+      const teamA = [{ userId, username: username || 'Player', photoURL: photoURL || null }];
       const teamB = [];
-      
-      // Add creator to Team A first
-      teamA.push({
-        userId: userId,
-        username: username || 'Player',
-        photoURL: photoURL || null,
-      });
-      
-      // Assign remaining players alternately to teams
+
       for (let i = 0; i < selectedOpponents.length; i++) {
         const player = selectedOpponents[i];
         const playerProfile = {
@@ -117,95 +70,54 @@ export async function POST(request) {
           username: player.username || 'Player',
           photoURL: player.photoURL || null,
         };
-        
-        if (i % 2 === 0) {
-          teamA.push(playerProfile);
-        } else {
-          teamB.push(playerProfile);
-        }
+        if (i % 2 === 0) teamA.push(playerProfile);
+        else teamB.push(playerProfile);
       }
 
-      // Get all player userIds for tracking
       const allPlayerIds = [userId, ...selectedOpponents.map(p => p.userId)];
-      const playerNames = [username || 'Player', ...selectedOpponents.map(p => p.username || 'Player')];
 
-      // Write to matches collection
-      await matchesRef.doc(matchId).set({
+      await setDoc(doc(db, 'matches', matchId), {
         matchId: matchId,
         createdAt: now,
         battleType: 'teamBattle',
         teamSize: teamSize,
         event: event,
-        // Team arrays with full profiles
         teamA: teamA,
         teamB: teamB,
-        // Flat arrays for easier querying
         players: allPlayerIds,
-        playerNames: playerNames,
-        // Track who has joined
         playersJoined: [userId],
-        playersJoinedProfiles: [{
-          userId: userId,
-          username: username || 'Player',
-          photoURL: photoURL || null,
-        }],
         battleCreated: false,
-        // For backwards compatibility
         player1: userId,
         player1Name: username || 'Player',
         player2: selectedOpponents[0]?.userId || null,
         player2Name: selectedOpponents[0]?.username || 'Player',
       });
 
-      // Update queue entries to mark as matched
       const updateQueuePromises = [];
-      
-      // Update creator
-      updateQueuePromises.push(
-        queueRef.doc(userId).update({
-          matched: true,
-          matchId: matchId,
-          matchedAt: now,
-        }).catch(() => {})
-      );
+      updateQueuePromises.push(updateDoc(doc(db, 'matchmakingQueue', userId), {
+        matched: true, matchId: matchId, matchedAt: now
+      }).catch(() => {}));
 
-      // Update opponents
       for (const player of selectedOpponents) {
-        updateQueuePromises.push(
-          queueRef.doc(player.userId).update({
-            matched: true,
-            matchId: matchId,
-            matchedAt: now,
-          }).catch(() => {})
-        );
+        updateQueuePromises.push(updateDoc(doc(db, 'matchmakingQueue', player.userId), {
+          matched: true, matchId: matchId, matchedAt: now
+        }).catch(() => {}));
       }
 
       await Promise.all(updateQueuePromises);
 
-      return NextResponse.json({
-        success: true,
-        matchId,
-        teamSize,
-        event,
-        message: 'Team match found!',
-      });
+      return NextResponse.json({ success: true, matchId, teamSize, event, message: 'Team match found!' });
     }
 
-    // Check if user already in queue
-    const existingEntry = await queueRef.doc(userId).get();
-    if (existingEntry.exists) {
+    const existingEntry = await getDoc(doc(db, 'matchmakingQueue', userId));
+    if (existingEntry.exists()) {
       const existingData = existingEntry.data();
       if (existingData.teamBattle && existingData.teamSize === teamSize && existingData.event === event) {
-        return NextResponse.json({
-          success: true,
-          status: 'waiting',
-          message: 'Already in team queue',
-        });
+        return NextResponse.json({ success: true, status: 'waiting', message: 'Already in team queue' });
       }
     }
 
-    // Add user to queue
-    await queueRef.doc(userId).set({
+    await setDoc(doc(db, 'matchmakingQueue', userId), {
       userId,
       username: username || 'Player',
       photoURL: photoURL || null,
@@ -213,36 +125,19 @@ export async function POST(request) {
       format: 'bo3',
       teamBattle: true,
       teamSize: teamSize,
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+      joinedAt: serverTimestamp(),
     });
 
-    return NextResponse.json({
-      success: true,
-      status: 'waiting',
-      teamSize,
-      event,
-      message: 'Added to team matchmaking queue',
-    });
+    return NextResponse.json({ success: true, status: 'waiting', teamSize, event, message: 'Added to team matchmaking queue' });
   } catch (error) {
     console.error('Team match error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to join team matchmaking' },
+      { success: false, message: 'Failed to join team matchmaking: ' + error.message },
       { status: 500 }
     );
   }
 }
 
-// GET method to cleanup stale matches (can be called by cron)
 export async function GET(request) {
-  try {
-    const db = getAdminDb();
-    await cleanupStaleMatches(db);
-    return NextResponse.json({ success: true, message: 'Cleanup completed' });
-  } catch (error) {
-    console.error('Cleanup error:', error);
-    return NextResponse.json(
-      { success: false, message: 'Cleanup failed' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ success: true, message: 'Use Firebase console for cleanup' });
 }

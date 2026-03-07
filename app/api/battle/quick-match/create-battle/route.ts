@@ -1,25 +1,22 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-import { generateScrambleForBattle } from '@/services/scrambleService';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, updateDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
 
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
+function generateScramble(event = '333', roundCount = 5) {
+  const scrambles = [];
+  for (let i = 0; i < roundCount; i++) {
+    const chars = 'RURURFRFRFURURF';
+    let scramble = '';
+    for (let j = 0; j < 20; j++) {
+      scramble += chars[Math.floor(Math.random() * chars.length)] + ' ';
     }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
-    });
+    scrambles.push(scramble.trim());
   }
-  return admin.firestore();
+  return {
+    scrambleId: `scramble_${Date.now()}`,
+    scrambles: scrambles,
+    event: event
+  };
 }
 
 export async function POST(request) {
@@ -34,13 +31,10 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
+    const matchRef = doc(db, 'matches', matchId);
+    const matchDoc = await getDoc(matchRef);
     
-    // Fetch match document to get player data (more reliable than client-passed data)
-    const matchRef = db.collection('matches').doc(matchId);
-    const matchDoc = await matchRef.get();
-    
-    if (!matchDoc.exists) {
+    if (!matchDoc.exists()) {
       return NextResponse.json(
         { success: false, message: 'Match not found' },
         { status: 404 }
@@ -67,13 +61,9 @@ export async function POST(request) {
       });
     }
 
-    // Generate scrambles
     let scrambleData;
     try {
-      scrambleData = await generateScrambleForBattle({
-        event: '333',
-        roundCount: 5,
-      });
+      scrambleData = generateScramble('333', 5);
     } catch (scrambleError) {
       return NextResponse.json(
         { success: false, message: 'Failed to generate scrambles' },
@@ -81,7 +71,7 @@ export async function POST(request) {
       );
     }
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = serverTimestamp();
     
     const battleData = {
       battleId: '',
@@ -119,25 +109,19 @@ export async function POST(request) {
       players: [player1, player2],
     };
 
-    const battleRef = await db.collection('battles').add(battleData);
+    const battleRef = doc(collection(db, 'battles'), matchId + '_battle');
     const battleId = battleRef.id;
-    await battleRef.update({ battleId });
+    await setDoc(battleRef, { ...battleData, battleId });
 
-    // Update match with battleId instead of deleting - prevents race condition
-    // Both players will see the battleId and can redirect
     try {
-      await matchRef.update({
+      await updateDoc(matchRef, {
         battleCreated: true,
         battleId: battleId,
         completedAt: now,
       });
     } catch (updateErr) {
-      // Match might have been updated by another request, that's OK
       console.log('Match update skipped:', updateErr.message);
     }
-
-    // Don't delete the match document - let it remain for a bit for both players to find it
-    // It will be cleaned up by a separate cleanup process
 
     return NextResponse.json({
       success: true,
@@ -147,7 +131,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('Create battle error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to create battle' },
+      { success: false, message: 'Failed to create battle: ' + error.message },
       { status: 500 }
     );
   }

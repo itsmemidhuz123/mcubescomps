@@ -1,25 +1,6 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
-    }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
-    });
-  }
-  return admin.firestore();
-}
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, serverTimestamp, arrayUnion, setDoc } from 'firebase/firestore';
 
 export async function POST(request) {
   try {
@@ -33,100 +14,77 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
-    const roomRef = db.collection('teamRooms').doc(roomId);
-    const roomDoc = await roomRef.get();
+    const roomRef = doc(db, 'teamRooms', roomId);
+    const roomDoc = await getDoc(roomRef);
 
-    if (!roomDoc.exists) {
-      return NextResponse.json(
-        { success: false, message: 'Room not found' },
-        { status: 404 }
-      );
+    if (!roomDoc.exists()) {
+      return NextResponse.json({ success: false, message: 'Room not found' });
     }
 
     const roomData = roomDoc.data();
 
     if (roomData.status !== 'waiting') {
-      return NextResponse.json(
-        { success: false, message: 'Room is no longer available' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: 'Room already started or cancelled' });
     }
 
-    // Check if user already in room
-    if (roomData.players?.includes(userId)) {
-      return NextResponse.json({
-        success: true,
-        message: 'Already in room',
-        roomId: roomId,
-      });
-    }
-
-    const teamSize = roomData.teamSize || 1;
     const teamA = roomData.teamA || [];
     const teamB = roomData.teamB || [];
-    const players = roomData.players || [];
-    const playersJoined = roomData.playersJoined || [];
+    const teamSize = roomData.teamSize || 2;
 
-    // Add user to first available slot in Team B (alternatively)
-    let updatedTeamA = [...teamA];
-    let updatedTeamB = [...teamB];
-    let addedToTeam = null;
-    const nowDate = new Date().toISOString();
+    const alreadyInTeamA = teamA.some(p => p.userId === userId);
+    const alreadyInTeamB = teamB.some(p => p.userId === userId);
 
-    // Try to add to Team B first (since Team A has creator)
-    const emptySlotInB = updatedTeamB.findIndex(slot => !slot.userId);
-    if (emptySlotInB !== -1) {
-      updatedTeamB[emptySlotInB] = {
-        userId: userId,
+    if (alreadyInTeamA || alreadyInTeamB) {
+      return NextResponse.json({ success: true, message: 'Already in room' });
+    }
+
+    const teamASlots = teamA.filter(p => !p.userId);
+    const teamBSlots = teamB.filter(p => !p.userId);
+
+    if (teamASlots.length > 0) {
+      const slotIndex = teamA.findIndex(p => !p.userId);
+      teamA[slotIndex] = {
+        userId,
         username: username || 'Player',
         photoURL: photoURL || null,
         joined: true,
-        joinedAt: nowDate,
+        joinedAt: new Date().toISOString(),
       };
-      addedToTeam = 'B';
+      await updateDoc(roomRef, {
+        teamA: teamA,
+        players: arrayUnion(userId),
+        lastActivityAt: serverTimestamp(),
+      });
+    } else if (teamBSlots.length > 0) {
+      const slotIndex = teamB.findIndex(p => !p.userId);
+      teamB[slotIndex] = {
+        userId,
+        username: username || 'Player',
+        photoURL: photoURL || null,
+        joined: true,
+        joinedAt: new Date().toISOString(),
+      };
+      await updateDoc(roomRef, {
+        teamB: teamB,
+        players: arrayUnion(userId),
+        lastActivityAt: serverTimestamp(),
+      });
     } else {
-      // If Team B is full, try Team A
-      const emptySlotInA = updatedTeamA.findIndex(slot => !slot.userId);
-      if (emptySlotInA !== -1) {
-        updatedTeamA[emptySlotInA] = {
-          userId: userId,
-          username: username || 'Player',
-          photoURL: photoURL || null,
-          joined: true,
-          joinedAt: nowDate,
-        };
-        addedToTeam = 'A';
-      }
+      return NextResponse.json({ success: false, message: 'Room is full' });
     }
 
-    if (!addedToTeam) {
-      return NextResponse.json(
-        { success: false, message: 'Room is full' },
-        { status: 400 }
-      );
+    const fullTeamA = teamA.filter(p => p.userId).length >= teamSize;
+    const fullTeamB = teamB.filter(p => p.userId).length >= teamSize;
+
+    if (fullTeamA && fullTeamB) {
+      await updateDoc(roomRef, { status: 'ready' });
     }
 
-    // Update room
-    await roomRef.update({
-      teamA: updatedTeamA,
-      teamB: updatedTeamB,
-      players: [...players, userId],
-      playersJoined: [...playersJoined, userId],
-      lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return NextResponse.json({
-      success: true,
-      roomId: roomId,
-      team: addedToTeam,
-      message: `Joined Team ${addedToTeam}`,
-    });
+    return NextResponse.json({ success: true, message: 'Joined room successfully' });
   } catch (error) {
     console.error('Join team room error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, message: 'Failed to join room: ' + errorMessage },
+      { success: false, message: 'Failed to join team room: ' + error.message },
       { status: 500 }
     );
   }

@@ -1,25 +1,22 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-import { generateScrambleForBattle } from '@/services/scrambleService';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, collection, serverTimestamp, updateDoc } from 'firebase/firestore';
 
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
+function generateScramble(event = '333', roundCount = 5) {
+  const scrambles = [];
+  for (let i = 0; i < roundCount; i++) {
+    const chars = 'RURURFRFRFURURF';
+    let scramble = '';
+    for (let j = 0; j < 20; j++) {
+      scramble += chars[Math.floor(Math.random() * chars.length)] + ' ';
     }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
-    });
+    scrambles.push(scramble.trim());
   }
-  return admin.firestore();
+  return {
+    scrambleId: `scramble_${Date.now()}`,
+    scrambles: scrambles,
+    event: event
+  };
 }
 
 export async function POST(request) {
@@ -34,115 +31,80 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
-    
-    // Get the match document
-    const matchRef = db.collection('matches').doc(matchId);
-    const matchDoc = await matchRef.get();
-    
-    if (!matchDoc.exists) {
+    const matchRef = doc(db, 'matches', matchId);
+    const matchDoc = await getDoc(matchRef);
+
+    if (!matchDoc.exists()) {
       return NextResponse.json(
         { success: false, message: 'Match not found' },
         { status: 404 }
       );
     }
-    
+
     const matchData = matchDoc.data();
-    if (!matchData) {
-      return NextResponse.json(
-        { success: false, message: 'Match data not found' },
-        { status: 404 }
-      );
-    }
-    
-    // Check if battle already created
-    if (matchData.battleCreated && matchData.battleId) {
-      return NextResponse.json({
-        success: true,
-        battleId: matchData.battleId,
-      });
+
+    if (matchData.battleCreated) {
+      return NextResponse.json({ success: true, battleId: matchData.battleId });
     }
 
-    // Get team info
-    const teamSize = matchData.teamSize || 2;
-    const event = matchData.event || '333';
-    const roundCount = teamSize * 3; // 2v2=6, 4v4=12, 8v8=24 rounds
-
-    // Generate scrambles
     let scrambleData;
     try {
-      scrambleData = await generateScrambleForBattle({
-        event: event,
-        roundCount: roundCount,
-      });
-    } catch (scrambleError) {
+      scrambleData = generateScramble(matchData.event || '333', 5);
+    } catch (error) {
       return NextResponse.json(
         { success: false, message: 'Failed to generate scrambles' },
         { status: 500 }
       );
     }
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    
+    const now = serverTimestamp();
+    const teamSize = matchData.teamSize || 2;
+
     const battleData = {
       battleId: '',
       battleName: `Team Battle ${teamSize}v${teamSize}`,
       battleType: 'teamBattle',
-      event: event,
+      event: matchData.event || '333',
       scrambleId: scrambleData.scrambleId,
       scrambles: scrambleData.scrambles,
       currentScrambleIndex: 0,
       currentRound: 1,
-      createdBy: matchData.teamA[0]?.userId || matchData.player1,
-      // Team profiles
-      teamA: matchData.teamA || [],
-      teamB: matchData.teamB || [],
-      // Flat arrays for querying
-      players: matchData.players || [],
-      playerNames: matchData.playerNames || [],
+      createdBy: matchData.players?.[0],
       status: 'waiting',
       winner: null,
       visibility: 'public',
-      format: 'team_ao5', // Team average format
-      winsRequired: teamSize, // Win by getting more rounds than opponent
+      format: 'firstTo3',
+      winsRequired: 3,
       scores: { player1: 0, player2: 0 },
-      // Team scores tracking
-      teamASolves: [],
-      teamBSolves: [],
       allowSpectators: true,
       spectators: [],
-      creatorJoined: true,
-      opponentJoined: (matchData.teamB?.length || 0) > 0,
       startTime: null,
       createdAt: now,
       lastActivityAt: now,
       startedAt: null,
       completedAt: null,
-      roundCount: roundCount,
+      roundCount: 5,
       teamSize: teamSize,
+      teamA: matchData.teamA || [],
+      teamB: matchData.teamB || [],
+      players: matchData.players || [],
+      playersJoined: matchData.playersJoined || [],
     };
 
-    const battleRef = await db.collection('battles').add(battleData);
+    const battleRef = doc(collection(db, 'battles'), matchId + '_team_battle');
     const battleId = battleRef.id;
-    await battleRef.update({ battleId });
+    await setDoc(battleRef, { ...battleData, battleId });
 
-    // Update match to mark battle created
-    await matchRef.update({
+    await updateDoc(matchRef, {
       battleCreated: true,
       battleId: battleId,
     });
 
-    // Don't delete match - keep for reference
-
-    return NextResponse.json({
-      success: true,
-      battleId,
-      message: 'Battle created!',
-    });
+    return NextResponse.json({ success: true, battleId, message: 'Team battle created!' });
   } catch (error) {
     console.error('Create team battle error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to create battle' },
+      { success: false, message: 'Failed to create team battle: ' + error.message },
       { status: 500 }
     );
   }

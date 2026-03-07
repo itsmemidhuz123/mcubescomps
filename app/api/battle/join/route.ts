@@ -1,30 +1,11 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!projectId || !clientEmail || !privateKeyRaw) {
-      throw new Error('Firebase Admin env vars not configured');
-    }
-
-    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-
-    initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey })
-    });
-  }
-  return admin.firestore();
-}
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { battleId, userId } = body;
+    const { battleId, userId, username, photoURL } = body;
 
     if (!battleId || !userId) {
       return NextResponse.json(
@@ -33,57 +14,41 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
-    const battleRef = db.collection('battles').doc(battleId);
-    const battleDoc = await battleRef.get();
+    const battleRef = doc(db, 'battles', battleId);
+    const battleDoc = await getDoc(battleRef);
 
-    if (!battleDoc.exists) {
-      return NextResponse.json(
-        { success: false, message: 'Battle not found' },
-        { status: 404 }
-      );
+    if (!battleDoc.exists()) {
+      return NextResponse.json({ success: false, message: 'Battle not found' }, { status: 404 });
     }
 
     const battleData = battleDoc.data();
 
-    if (battleData.player2 !== null) {
-      return NextResponse.json(
-        { success: false, message: 'Battle is already full' },
-        { status: 400 }
-      );
+    if (battleData.status !== 'waiting') {
+      return NextResponse.json({ success: false, message: 'Battle already started' }, { status: 400 });
     }
 
-    if (battleData.player1 === userId) {
-      return NextResponse.json(
-        { success: false, message: 'You cannot join your own battle' },
-        { status: 400 }
-      );
+    if (battleData.player1 === userId || battleData.player2 === userId) {
+      return NextResponse.json({ success: true, battleId, message: 'Already joined' });
     }
 
-    if (battleData.status !== 'waiting' && battleData.status !== 'countdown') {
-      return NextResponse.json(
-        { success: false, message: 'Battle is not accepting players' },
-        { status: 400 }
-      );
+    if (battleData.player2) {
+      return NextResponse.json({ success: false, message: 'Battle is full' });
     }
 
-    await battleRef.update({
+    await updateDoc(battleRef, {
       player2: userId,
-      status: 'waiting',
-      startTime: admin.firestore.FieldValue.serverTimestamp(),
+      player2Name: username || 'Player 2',
       opponentJoined: true,
-      lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastActivityAt: serverTimestamp(),
+      teamB: [{ userId, username: username || 'Player 2', photoURL: photoURL || null }],
+      players: arrayUnion(userId),
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Joined battle successfully',
-      status: 'countdown',
-    });
+    return NextResponse.json({ success: true, battleId, message: 'Joined battle successfully!' });
   } catch (error) {
     console.error('Join battle error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to join battle' },
+      { success: false, message: 'Failed to join battle: ' + error.message },
       { status: 500 }
     );
   }
