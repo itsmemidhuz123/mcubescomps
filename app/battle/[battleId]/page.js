@@ -212,6 +212,12 @@ export default function BattleRoomPage() {
   useEffect(() => {
     if (!battle || !user || battle.status !== 'waiting') return;
     
+    // Skip for team battles - they handle joining differently
+    if (battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1)) return;
+    
+    // Skip if player1/player2 not set (team battles use teamA/teamB arrays)
+    if (!battle.player1) return;
+    
     const isPlayer1 = battle.player1 === user.uid;
     const isPlayer2 = battle.player2 === user.uid;
     
@@ -297,37 +303,43 @@ export default function BattleRoomPage() {
       
       if (!joinData.success && joinData.message !== 'Already in room') {
         setJoinError(joinData.message);
+        setTeamRoomLoading(false);
+        return;
       }
       
       // Listen to the team room document
       const roomRef = doc(db, 'teamRooms', battleId);
       
-      const unsubscribe = onSnapshot(roomRef, async (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setTeamRoomData(data);
-          
-          // Check if battle started
-          if (data.status === 'started' && data.battleId) {
-            router.replace(`/battle/${data.battleId}`);
-            return;
+      const unsubscribe = onSnapshot(roomRef, (docSnap) => {
+        try {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTeamRoomData(data);
+            
+            // Check if battle started
+            if (data.status === 'started' && data.battleId) {
+              router.replace(`/battle/${data.battleId}`);
+              return;
+            }
+            
+            // Check if cancelled
+            if (data.status === 'cancelled') {
+              setJoinError('This room has been cancelled');
+            }
+          } else {
+            setJoinError('Room not found');
           }
-          
-          // Check if cancelled
-          if (data.status === 'cancelled') {
-            setJoinError('This room has been cancelled');
-            return;
-          }
-        } else {
-          setJoinError('Room not found');
+        } catch (err) {
+          console.error('Error in team room snapshot:', err);
+        } finally {
+          setTeamRoomLoading(false);
         }
-        setTeamRoomLoading(false);
       });
       
       return () => unsubscribe();
     } catch (error) {
       console.error('Team room error:', error);
-      setJoinError('Failed to join room');
+      setJoinError('Failed to join room: ' + (error.message || 'Unknown error'));
       setTeamRoomLoading(false);
     }
   };
