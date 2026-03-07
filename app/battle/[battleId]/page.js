@@ -16,7 +16,7 @@ import { useBattleBan } from '../../../hooks/useBattleBan';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
 
-export default function BattleRoomPage() {
+function BattleContent() {
   const { battleId } = useParams();
   const searchParams = useSearchParams();
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -2113,4 +2113,32 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
       </div>
     </div>
   );
+}
+
+export default function BattleRoomPage() {
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    const handleError = (event) => {
+      console.error('Battle page error:', event.error);
+      setError(event.error?.message || 'An error occurred');
+    };
+    
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+  
+  if (error) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center p-4">
+          <h2 className="text-xl font-bold text-red-400 mb-2">Something went wrong</h2>
+          <p className="text-zinc-400 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Reload Page</Button>
+        </div>
+      </div>
+    );
+  }
+  
+  return <BattleContent />;
 }
