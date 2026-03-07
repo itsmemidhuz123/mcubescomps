@@ -9,7 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Loader2, Sword, Trophy, Crown, ArrowLeft, RefreshCw, Eye, Clock, Volume2, Image as ImageIcon, X, Share2 } from 'lucide-react';
-import { useBattle, submitSolve } from '../../../hooks/useBattle';
+import { useBattle } from '../../../hooks/useBattle';
 import { useBattleTimer } from '../../../hooks/useBattleTimer';
 import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds';
 import { useBattleBan } from '../../../hooks/useBattleBan';
@@ -683,9 +683,15 @@ export default function BattleRoomPage() {
   // Check team battle participants
   const teamA = battle?.teamA || [];
   const teamB = battle?.teamB || [];
-  // Handle both old format (strings) and new format (objects with userId)
-  const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === user?.uid) || 
-                       teamB.some(p => (typeof p === 'object' ? p.userId : p) === user?.uid);
+  // Handle both old format (strings) and new format (objects with userId) - with defensive checks
+  let isTeamPlayer = false;
+  try {
+    isTeamPlayer = teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid) || 
+                   teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid);
+  } catch (e) {
+    console.error('Error checking team membership:', e);
+    isTeamPlayer = false;
+  }
   const isTeamBattle = battle?.battleType === 'teamBattle' || (battle?.teamSize && battle?.teamSize > 1);
   
   const isCreator = battle?.createdBy === user?.uid;
@@ -694,10 +700,11 @@ export default function BattleRoomPage() {
 
   const spectatorCount = battle?.spectators?.length || 0;
 
-  const mySolves = getMySolves();
-  const opponentSolves = getOpponentSolves();
+  // Defensive check - ensure battle is loaded before accessing solves
+  const mySolves = battle && user && typeof getMySolves === 'function' ? getMySolves() : [];
+  const opponentSolves = battle && user && typeof getOpponentSolves === 'function' ? getOpponentSolves() : [];
 
-  const currentScramble = getCurrentScramble();
+  const currentScramble = typeof getCurrentScramble === 'function' ? getCurrentScramble() : '';
   const currentScrambleIndex = battle?.currentScrambleIndex || 0;
 
   const getTeamMemberName = (playerId) => {

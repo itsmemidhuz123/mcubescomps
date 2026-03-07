@@ -68,9 +68,15 @@ export function useBattle(battleId, currentUserUid) {
     const teamA = battle.teamA || [];
     const teamB = battle.teamB || [];
     
-    // Handle both old format (strings) and new format (objects with userId)
-    const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
-                         teamB.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid);
+    // Handle both old format (strings) and new format (objects with userId) with defensive check
+    let isTeamPlayer = false;
+    try {
+      isTeamPlayer = teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
+                     teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === currentUserUid);
+    } catch (e) {
+      console.error('Error checking team membership:', e);
+      isTeamPlayer = false;
+    }
     
     if (isTeamBattle && isTeamPlayer) {
       return Array.isArray(player1Solves) ? player1Solves : [];
@@ -90,9 +96,15 @@ export function useBattle(battleId, currentUserUid) {
     const teamA = battle.teamA || [];
     const teamB = battle.teamB || [];
     
-    // Handle both old format (strings) and new format (objects with userId)
-    const isTeamPlayer = teamA.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
-                         teamB.some(p => (typeof p === 'object' ? p.userId : p) === currentUserUid);
+    // Handle both old format (strings) and new format (objects with userId) with defensive check
+    let isTeamPlayer = false;
+    try {
+      isTeamPlayer = teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === currentUserUid) || 
+                     teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === currentUserUid);
+    } catch (e) {
+      console.error('Error checking team membership:', e);
+      isTeamPlayer = false;
+    }
     
     if (isTeamBattle && isTeamPlayer) {
       return Array.isArray(player2Solves) ? player2Solves : [];
