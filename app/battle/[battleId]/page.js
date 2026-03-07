@@ -896,7 +896,7 @@ function BattleContent() {
                                 <img src={player.photoURL} alt={player.username} className="w-8 h-8 rounded-full object-cover" />
                               ) : (
                                 <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">
-                                  {player.username?.charAt(0).toUpperCase() || '?'}
+                                  {(player.username?.charAt(0) || '?').toUpperCase()}
                                 </div>
                               )}
                               <span className="text-white">{player.username}</span>
@@ -936,7 +936,7 @@ function BattleContent() {
                                 <img src={player.photoURL} alt={player.username} className="w-8 h-8 rounded-full object-cover" />
                               ) : (
                                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
-                                  {player.username?.charAt(0).toUpperCase() || '?'}
+                                  {(player.username?.charAt(0) || '?').toUpperCase()}
                                 </div>
                               )}
                               <span className="text-white">{player.username}</span>
@@ -1093,7 +1093,7 @@ function BattleContent() {
                                   />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
-                                    {player.username?.charAt(0).toUpperCase() || '?'}
+                                    {(player.username?.charAt(0) || '?').toUpperCase()}
                                   </div>
                                 )}
                                 <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
@@ -1142,7 +1142,7 @@ function BattleContent() {
                                   />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
-                                    {player.username?.charAt(0).toUpperCase() || '?'}
+                                    {(player.username?.charAt(0) || '?').toUpperCase()}
                                   </div>
                                 )}
                                 <span className={`text-sm ${hasJoined ? 'text-white' : 'text-zinc-500'}`}>
