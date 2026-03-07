@@ -62,6 +62,17 @@ export function useBattle(battleId, currentUserUid) {
 
   const getMySolves = useCallback(() => {
     if (!battle || !currentUserUid) return [];
+    
+    // Check for team battle
+    const isTeamBattle = battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1);
+    const teamA = battle.teamA || [];
+    const teamB = battle.teamB || [];
+    const isTeamPlayer = teamA.some(p => p.userId === currentUserUid) || teamB.some(p => p.userId === currentUserUid);
+    
+    if (isTeamBattle && isTeamPlayer) {
+      return Array.isArray(player1Solves) ? player1Solves : [];
+    }
+    
     if (!battle.player1 || !battle.player2) return [];
     if (battle.player1 === currentUserUid) return Array.isArray(player1Solves) ? player1Solves : [];
     if (battle.player2 === currentUserUid) return Array.isArray(player2Solves) ? player2Solves : [];
@@ -70,6 +81,17 @@ export function useBattle(battleId, currentUserUid) {
 
   const getOpponentSolves = useCallback(() => {
     if (!battle || !currentUserUid) return [];
+    
+    // Check for team battle
+    const isTeamBattle = battle.battleType === 'teamBattle' || (battle.teamSize && battle.teamSize > 1);
+    const teamA = battle.teamA || [];
+    const teamB = battle.teamB || [];
+    const isTeamPlayer = teamA.some(p => p.userId === currentUserUid) || teamB.some(p => p.userId === currentUserUid);
+    
+    if (isTeamBattle && isTeamPlayer) {
+      return Array.isArray(player2Solves) ? player2Solves : [];
+    }
+    
     if (!battle.player1 || !battle.player2) return [];
     if (battle.player1 === currentUserUid) return Array.isArray(player2Solves) ? player2Solves : [];
     if (battle.player2 === currentUserUid) return Array.isArray(player1Solves) ? player1Solves : [];

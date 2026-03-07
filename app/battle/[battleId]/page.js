@@ -658,10 +658,16 @@ export default function BattleRoomPage() {
 
   const isPlayer1 = battle?.player1 === user?.uid;
   const isPlayer2 = battle?.player2 === user?.uid;
+  
+  // Check team battle participants
+  const teamA = battle?.teamA || [];
+  const teamB = battle?.teamB || [];
+  const isTeamPlayer = teamA.some(p => p.userId === user?.uid) || teamB.some(p => p.userId === user?.uid);
+  const isTeamBattle = battle?.battleType === 'teamBattle' || (battle?.teamSize && battle?.teamSize > 1);
+  
   const isCreator = battle?.createdBy === user?.uid;
-  const isParticipant = isPlayer1 || isPlayer2;
+  const isParticipant = isTeamBattle ? isTeamPlayer : (isPlayer1 || isPlayer2);
   const isSpectator = watchMode || (!isParticipant && battle?.allowSpectators === true);
-  const isTeamBattle = battle?.teamSize && battle?.teamSize > 1;
 
   const spectatorCount = battle?.spectators?.length || 0;
 
