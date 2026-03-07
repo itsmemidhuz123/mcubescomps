@@ -119,7 +119,10 @@ export default function BattleRoomPage() {
     
     // Handle team room
     if (isTeamRoom) {
-      handleTeamRoom();
+      // Call handleTeamRoom directly
+      if (typeof handleTeamRoom === 'function') {
+        handleTeamRoom();
+      }
       return;
     }
     
