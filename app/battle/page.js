@@ -328,7 +328,8 @@ export default function BattlePage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      // Always navigate to room - it will handle redirect if battle already started
+      if (data.success || data.message === 'Already in room') {
         router.push(`/battle/${roomId}`);
       } else {
         alert(data.message || 'Failed to join team room');
@@ -673,26 +674,34 @@ export default function BattlePage() {
                              >
                                <Eye className="w-4 h-4" />
                              </Button>
-                             {isTeamRoom ? (
-                               user?.uid === battle.createdBy ? (
-                                 <Button
-                                   onClick={() => router.push(`/battle/${battle.id}`)}
-                                   className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
-                                   size="sm"
-                                 >
-                                   Open
-                                 </Button>
-                               ) : (
-                                 <Button
-                                   onClick={() => joinTeamRoom(battle.id)}
-                                   className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
-                                   size="sm"
-                                   disabled={playersJoined >= totalPlayers}
-                                 >
-                                   Join
-                                 </Button>
-                               )
-                             ) : (
+                              {isTeamRoom ? (
+                                user?.uid === battle.createdBy ? (
+                                  <Button
+                                    onClick={() => router.push(`/battle/${battle.id}`)}
+                                    className="bg-blue-600 hover:bg-blue-500 flex-1 sm:flex-none"
+                                    size="sm"
+                                  >
+                                    Open
+                                  </Button>
+                                ) : battle.playersJoined?.includes(user?.uid) ? (
+                                  <Button
+                                    onClick={() => router.push(`/battle/${battle.id}`)}
+                                    className="bg-yellow-600 hover:bg-yellow-500 flex-1 sm:flex-none"
+                                    size="sm"
+                                  >
+                                    Rejoin
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => joinTeamRoom(battle.id)}
+                                    className="bg-green-600 hover:bg-green-500 flex-1 sm:flex-none"
+                                    size="sm"
+                                    disabled={playersJoined >= totalPlayers}
+                                  >
+                                    Join
+                                  </Button>
+                                )
+                              ) : (
                                user?.uid === battle.createdBy ? (
                                  <Button
                                    onClick={() => openBattle(battle.id)}

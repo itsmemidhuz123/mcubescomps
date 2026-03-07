@@ -301,6 +301,32 @@ export default function BattleRoomPage() {
       
       // Listen to the team room document
       const roomRef = doc(db, 'teamRooms', battleId);
+      
+      // First, check the current status before setting up listener
+      const roomDoc = await roomRef.get();
+      if (roomDoc.exists()) {
+        const initialData = roomDoc.data();
+        
+        // If already started, redirect immediately
+        if (initialData.status === 'started' && initialData.battleId) {
+          router.replace(`/battle/${initialData.battleId}`);
+          return;
+        }
+        
+        // If cancelled
+        if (initialData.status === 'cancelled') {
+          setJoinError('This room has been cancelled');
+          setTeamRoomLoading(false);
+          return;
+        }
+        
+        setTeamRoomData(initialData);
+      } else {
+        setJoinError('Room not found');
+        setTeamRoomLoading(false);
+        return;
+      }
+      
       const unsubscribe = onSnapshot(roomRef, async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
