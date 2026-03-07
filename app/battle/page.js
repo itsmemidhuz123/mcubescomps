@@ -247,11 +247,26 @@ export default function BattlePage() {
   };
 
   const createBattle = async () => {
-    if (!user) return;
+    if (!user) {
+      alert('Please sign in to create a battle');
+      return;
+    }
+
+    if (!selectedEvent) {
+      alert('Please select an event');
+      return;
+    }
+
+    if (!selectedFormat) {
+      alert('Please select a format');
+      return;
+    }
+    
+    if (creating) return;
     
     setCreating(true);
     try {
-       const response = await fetch('/api/battle/create', {
+      const response = await fetch('/api/battle/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,10 +284,16 @@ export default function BattlePage() {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        alert('Failed to create battle: Invalid server response');
+        return;
+      }
 
       if (data.success) {
-        // For team battles (teamSize > 1), redirect to team room
         if (data.roomId) {
           router.push(`/battle/${data.roomId}`);
         } else {
@@ -283,7 +304,7 @@ export default function BattlePage() {
       }
     } catch (error) {
       console.error('Create battle error:', error);
-      alert('Failed to create battle');
+      alert(error.message || 'Failed to create battle. Please try again.');
     } finally {
       setCreating(false);
     }

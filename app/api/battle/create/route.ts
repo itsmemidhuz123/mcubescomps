@@ -21,7 +21,16 @@ function generateScramble(event = '333', roundCount = 5) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const {
       event = '333',
       userId,
@@ -37,9 +46,16 @@ export async function POST(request) {
       photoURL = null
     } = body;
 
-    if (!userId) {
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
       return NextResponse.json(
         { success: false, message: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!event || typeof event !== 'string') {
+      return NextResponse.json(
+        { success: false, message: 'Event is required' },
         { status: 400 }
       );
     }
@@ -52,8 +68,9 @@ export async function POST(request) {
     try {
       scrambleData = generateScramble(event, roundCount);
     } catch (error) {
+      console.error('Scramble generation error:', error);
       return NextResponse.json(
-        { success: false, message: 'Failed to generate scrambles' },
+        { success: false, message: 'Failed to generate scrambles. Please try again.' },
         { status: 500 }
       );
     }
@@ -110,7 +127,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('Battle creation error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to create battle: ' + error.message },
+      { success: false, message: error.message || 'Failed to create battle. Please try again.' },
       { status: 500 }
     );
   }
