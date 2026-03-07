@@ -15,9 +15,8 @@ import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds'
 import { useBattleBan } from '../../../hooks/useBattleBan';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
-import { ErrorBoundary } from '../../../components/ErrorBoundary';
 
-function BattleRoomContent() {
+export default function BattleRoomPage() {
   const { battleId } = useParams();
   const searchParams = useSearchParams();
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -2114,12 +2113,4 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
       </div>
     );
   }
-}
-
-export default function BattleRoomPage() {
-  return (
-    <ErrorBoundary>
-      <BattleRoomContent />
-    </ErrorBoundary>
-  );
 }
