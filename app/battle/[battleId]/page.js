@@ -694,18 +694,20 @@ function BattleContent() {
   const isPlayer2 = battle?.player2 === user?.uid;
   
   // Check team battle participants
-  const teamA = battle?.teamA || [];
-  const teamB = battle?.teamB || [];
+  // Ensure battle is loaded before accessing team data
+  const teamA = (battle && battle.teamA) ? battle.teamA : [];
+  const teamB = (battle && battle.teamB) ? battle.teamB : [];
+  
   // Handle both old format (strings) and new format (objects with userId) - with defensive checks
   let isTeamPlayer = false;
   try {
-    isTeamPlayer = teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid) || 
-                   teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid);
+    isTeamPlayer = (Array.isArray(teamA) && teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid)) || 
+                   (Array.isArray(teamB) && teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid));
   } catch (e) {
     console.error('Error checking team membership:', e);
     isTeamPlayer = false;
   }
-  const isTeamBattle = battle?.battleType === 'teamBattle' || (battle?.teamSize && battle?.teamSize > 1);
+  const isTeamBattle = (battle && battle.battleType === 'teamBattle') || (battle && battle.teamSize && battle.teamSize > 1);
   
   const isCreator = battle?.createdBy === user?.uid;
   const isParticipant = isTeamBattle ? isTeamPlayer : (isPlayer1 || isPlayer2);
