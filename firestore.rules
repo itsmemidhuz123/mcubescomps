@@ -267,11 +267,17 @@ service cloud.firestore {
     match /matchmakingQueue/{uid} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == uid;
+      // Allow server-side writes without auth (for Next.js API routes)
+      allow create, update: if !isSignedIn() && request.resource.data.keys().hasAll(['userId', 'username', 'event']);
     }
     
     // Quick Match - Matches collection for real-time matchmaking
     match /matches/{matchId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+      // Allow server-side writes without auth (for Next.js API routes)
+      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['matchId', 'player1', 'player2']);
+      allow update: if !isSignedIn();
     }
     
     // Battles collection - Private battles (link-only access)
@@ -280,6 +286,7 @@ service cloud.firestore {
       // Allow reading public battles or battles where user is participant/creator/spectator
       allow read: if (
         isSignedIn() && (
+          resource == null ||
           resource.data.status == 'waiting' ||
           resource.data.status == 'expired' ||
           resource.data.status == 'cancelled' ||
@@ -293,7 +300,11 @@ service cloud.firestore {
         )
       );
       
-      // Only signed in users can create battles
+      // Allow server-side writes without auth (for Next.js API routes)
+      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['battleId', 'player1', 'event']);
+      allow update: if !isSignedIn();
+      
+      // Only signed in users can create battles (when authenticated)
       allow create: if isSignedIn();
       
       // Only participants, creator, or admin can update
@@ -334,6 +345,7 @@ service cloud.firestore {
       // Allow reading rooms where user is participant/creator
       allow read: if (
         isSignedIn() && (
+          resource == null ||
           resource.data.status == 'waiting' ||
           resource.data.status == 'cancelled' ||
           resource.data.status == 'started' ||
@@ -343,6 +355,10 @@ service cloud.firestore {
           isAdmin()
         )
       );
+      
+      // Allow server-side writes without auth (for Next.js API routes)
+      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['battleName', 'teamSize', 'event']);
+      allow update: if !isSignedIn();
       
       // Only signed in users can create team rooms
       allow create: if isSignedIn();
