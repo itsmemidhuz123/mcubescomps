@@ -385,7 +385,16 @@ export default function BattleRoomPage() {
   // Play victory/defeat sounds when battle completes
   useEffect(() => {
     if (battle?.status === 'completed' && battle.winner && user) {
-      const iWon = battle.winner === user.uid;
+      // For team battles, winner is 'teamA' or 'teamB'; for regular battles, it's user ID
+      let iWon = false;
+      if (isTeamBattle) {
+        const teamA = battle?.teamA || [];
+        const teamB = battle?.teamB || [];
+        const myTeam = teamA.some(p => p.userId === user.uid) ? 'teamA' : (teamB.some(p => p.userId === user.uid) ? 'teamB' : null);
+        iWon = battle.winner === myTeam;
+      } else {
+        iWon = battle.winner === user.uid;
+      }
       const isTie = battle.winner === 'tie';
       
       if (iWon && !isTie) {
@@ -394,7 +403,7 @@ export default function BattleRoomPage() {
         playDefeat();
       }
     }
-  }, [battle?.status, battle?.winner, user, playVictory, playDefeat]);
+  }, [battle?.status, battle?.winner, user, playVictory, playDefeat, isTeamBattle]);
 
   useEffect(() => {
     if (battle && user) {
@@ -1377,7 +1386,15 @@ export default function BattleRoomPage() {
     const opponentAo5Value = opponentAo5();
     const myBestValue = myBestSingle();
     const opponentBestValue = opponentBestSingle();
-    const iWon = battle.winner === user?.uid;
+    
+    // For team battles, winner is 'teamA' or 'teamB'; for regular battles, it's user ID
+    let iWon = false;
+    if (isTeamBattle) {
+      const myTeam = isTeamPlayer ? (teamA.some(p => p.userId === user?.uid) ? 'teamA' : 'teamB') : null;
+      iWon = battle.winner === myTeam;
+    } else {
+      iWon = battle.winner === user?.uid;
+    }
     const isTie = battle.winner === 'tie';
     const scores = battle.scores || { player1: 0, player2: 0 };
     const myScore = isPlayer1 ? scores.player1 : scores.player2;
@@ -1564,7 +1581,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
     );
   }
 
-  if (battle.status === BATTLE_STATES.WAITING && isCreator) {
+  if (battle.status === BATTLE_STATES.WAITING && isCreator && !isTeamBattle) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <Card className="bg-zinc-900 border-zinc-800 w-full">
@@ -1602,7 +1619,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
     );
   }
 
-  if (battle.status === BATTLE_STATES.WAITING && isPlayer2) {
+  if (battle.status === BATTLE_STATES.WAITING && isPlayer2 && !isTeamBattle) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <Card className="bg-zinc-900 border-zinc-800 w-full">
