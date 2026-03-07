@@ -233,11 +233,18 @@ function BattleContent() {
 
   // Check if rules should be shown for this battle type
 
+  // Defensive: Ensure battleId and user are valid before calling hooks
+  const safeBattleId = battleId && typeof battleId === 'string' ? battleId : null;
+  const safeUserUid = user?.uid || null;
+
+  // Initialize with safe defaults
+  const battleHookResult = useBattle(safeBattleId, safeUserUid);
+  const battle = battleHookResult?.battle || null;
+  const battleLoading = battleHookResult?.loading !== false;
+  
   const {
-    battle,
-    player1Solves,
-    player2Solves,
-    loading: battleLoading,
+    player1Solves = [],
+    player2Solves = [],
     getMySolves,
     getOpponentSolves,
     getCurrentScramble,
@@ -248,7 +255,7 @@ function BattleContent() {
     opponentAo5,
     myBestSingle,
     opponentBestSingle,
-  } = useBattle(battleId, user?.uid);
+  } = battleHookResult || {};
 
   const {
     timerState,
@@ -262,7 +269,13 @@ function BattleContent() {
     reset,
     submitCurrentSolve,
     getFinalTime,
-  } = useBattleTimer({ inspectionEnabled: true });
+  } = useBattleTimer({ inspectionEnabled: true }) || {};
+
+  // Ensure all timer values have safe defaults
+  const safeTimerState = timerState || 'idle';
+  const safeTime = typeof time === 'number' ? time : 0;
+  const safeInspectionTimeLeft = typeof inspectionTimeLeft === 'number' ? inspectionTimeLeft : 15000;
+  const safePenalty = penalty || 'none';
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -592,15 +605,15 @@ function BattleContent() {
     if (!user || !battle) return;
     if (timerState !== TIMER_STATES.STOPPED) return;
     
-    const mySolves = getMySolves();
+    const mySolves = typeof getMySolves === 'function' ? getMySolves() : [];
     const expectedIndex = mySolves.length;
     
-    if (!canSubmitSolve(expectedIndex)) {
+    if (typeof canSubmitSolve !== 'function' || !canSubmitSolve(expectedIndex)) {
       alert('Cannot submit solve at this time');
       return;
     }
 
-    const solveData = submitCurrentSolve();
+    const solveData = typeof submitCurrentSolve === 'function' ? submitCurrentSolve() : null;
     
     if (!solveData.valid || solveData.time === null || solveData.time === undefined) {
       alert('Please complete a valid solve before submitting');
@@ -1663,7 +1676,8 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
     );
   }
 
-  const canSolve = isMyTurn() && mySolves.length < TOTAL_SCRAMBLES;
+  // Safe function calls with fallbacks
+  const canSolve = (typeof isMyTurn === 'function' ? isMyTurn() : false) && (Array.isArray(mySolves) ? mySolves.length : 0) < TOTAL_SCRAMBLES;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
