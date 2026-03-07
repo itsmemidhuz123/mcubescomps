@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, orderBy, limit, Timestamp, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  if (getApps().length === 0) {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (!projectId || !clientEmail || !privateKeyRaw) {
+      throw new Error('Firebase Admin env vars not configured');
+    }
+
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+
+    initializeApp({
+      credential: cert({ projectId, clientEmail, privateKey })
+    });
+  }
+  return admin.firestore();
+}
 
 // Helper function to generate scrambles
 function generateScramble(event = '333', roundCount = 5) {
@@ -22,7 +41,16 @@ function generateScramble(event = '333', roundCount = 5) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+    
     const { userId, username, photoURL } = body;
 
     if (!userId) {
@@ -32,16 +60,13 @@ export async function POST(request) {
       );
     }
 
-    const queueRef = collection(db, 'matchmakingQueue');
+    const queueRef = getAdminDb().collection('matchmakingQueue');
     const oneMinuteAgo = Date.now() - 60000;
     
-    const q = query(
-      queueRef,
-      where('joinedAt', '>', Timestamp.fromMillis(oneMinuteAgo)),
-      limit(10)
-    );
-    
-    const snapshot = await getDocs(q);
+    const snapshot = await queueRef
+      .where('joinedAt', '>', admin.firestore.Timestamp.fromMillis(oneMinuteAgo))
+      .limit(10)
+      .get();
 
     let opponent = null;
     snapshot.forEach((doc) => {
@@ -52,10 +77,10 @@ export async function POST(request) {
     });
 
     if (opponent) {
-      const now = serverTimestamp();
+      const now = admin.firestore.FieldValue.serverTimestamp();
       const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      await setDoc(doc(db, 'matches', matchId), {
+      await getAdminDb().collection('matches').doc(matchId).set({
         matchId: matchId,
         createdAt: now,
         player1: userId,
@@ -69,17 +94,21 @@ export async function POST(request) {
         player2Joined: false,
       });
 
-      await updateDoc(doc(db, 'matchmakingQueue', userId), {
-        matched: true,
-        matchId: matchId,
-        matchedAt: now,
-      }).catch(() => {});
+      try {
+        await getAdminDb().collection('matchmakingQueue').doc(userId).update({
+          matched: true,
+          matchId: matchId,
+          matchedAt: now,
+        });
+      } catch {}
 
-      await updateDoc(doc(db, 'matchmakingQueue', opponent.userId), {
-        matched: true,
-        matchId: matchId,
-        matchedAt: now,
-      }).catch(() => {});
+      try {
+        await getAdminDb().collection('matchmakingQueue').doc(opponent.userId).update({
+          matched: true,
+          matchId: matchId,
+          matchedAt: now,
+        });
+      } catch {}
 
       return NextResponse.json({
         success: true,
@@ -88,8 +117,8 @@ export async function POST(request) {
       });
     }
 
-    const existingEntry = await getDoc(doc(db, 'matchmakingQueue', userId));
-    if (existingEntry.exists()) {
+    const existingEntry = await getAdminDb().collection('matchmakingQueue').doc(userId).get();
+    if (existingEntry.exists) {
       return NextResponse.json({
         success: true,
         status: 'waiting',
@@ -97,13 +126,13 @@ export async function POST(request) {
       });
     }
 
-    await setDoc(doc(db, 'matchmakingQueue', userId), {
+    await getAdminDb().collection('matchmakingQueue').doc(userId).set({
       userId,
       username: username || 'Player',
       photoURL: photoURL || null,
       event: '333',
       format: 'ao5',
-      joinedAt: serverTimestamp(),
+      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({
