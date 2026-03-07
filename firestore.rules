@@ -339,7 +339,7 @@ service cloud.firestore {
           resource.data.status == 'started' ||
           resource.data.visibility == 'public' ||
           resource.data.createdBy == request.auth.uid ||
-          resource.data.players.hasAll([request.auth.uid]) ||
+          (resource.data.players != null && resource.data.players.hasAll([request.auth.uid])) ||
           isAdmin()
         )
       );
@@ -350,7 +350,7 @@ service cloud.firestore {
       // Only creator or participants can update
       allow update: if isSignedIn() && (
         resource.data.createdBy == request.auth.uid ||
-        resource.data.players.hasAll([request.auth.uid]) ||
+        (resource.data.players != null && resource.data.players.hasAll([request.auth.uid])) ||
         isAdmin()
       );
       

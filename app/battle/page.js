@@ -111,17 +111,21 @@ export default function BattlePage() {
       const oneHourMs = 60 * 60 * 1000;
       const now = Date.now();
       
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.createdBy !== user.uid) {
-          const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
-          const battleAge = now - createdAt.getTime();
-          
-          if (battleAge <= oneHourMs) {
-            rooms.push({ id: doc.id, ...data, isTeamRoom: true });
+      try {
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data && data.createdBy && data.createdBy !== user.uid) {
+            const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt?._seconds * 1000);
+            const battleAge = now - createdAt.getTime();
+            
+            if (battleAge <= oneHourMs) {
+              rooms.push({ id: doc.id, ...data, isTeamRoom: true });
+            }
           }
-        }
-      });
+        });
+      } catch (err) {
+        console.error('Error processing team rooms:', err);
+      }
       
       setTeamRooms(rooms);
       setLoading(false);
@@ -611,14 +615,14 @@ export default function BattlePage() {
                        const bTime = b.createdAt?.seconds || 0;
                        return bTime - aTime;
                      })
-                     .map((battle) => {
-                       const isTeamRoom = battle.isTeamRoom;
-                       const event = BATTLE_EVENTS.find(e => e.id === battle.event) || BATTLE_EVENTS[0];
-                       const eventIcon = event?.icon || '⚔️';
-                       
-                       // Calculate player count for team rooms
-                       const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
-                       const totalPlayers = isTeamRoom ? (battle.teamSize * 2) : 2;
+                      .map((battle) => {
+                        const isTeamRoom = battle.isTeamRoom;
+                        const event = battle.event ? BATTLE_EVENTS.find(e => e.id === battle.event) : BATTLE_EVENTS[0];
+                        const eventIcon = event?.icon || '⚔️';
+                        
+                        // Calculate player count for team rooms
+                        const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
+                        const totalPlayers = isTeamRoom ? ((battle.teamSize || 1) * 2) : 2;
                        
                        return (
                          <div
