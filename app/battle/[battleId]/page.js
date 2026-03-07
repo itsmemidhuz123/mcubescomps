@@ -2111,6 +2111,6 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
           </Card>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }
