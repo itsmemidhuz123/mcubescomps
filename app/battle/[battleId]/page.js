@@ -15,8 +15,9 @@ import { useBattleSounds, useBattleIntro } from '../../../hooks/useBattleSounds'
 import { useBattleBan } from '../../../hooks/useBattleBan';
 import { BATTLE_STATES, formatBattleTime, PENALTY, TOTAL_SCRAMBLES, MAX_SOLVE_TIME_MS } from '../../../lib/battleUtils';
 import { TIMER_STATES } from '../../../hooks/useTimerEngine';
+import { ErrorBoundary } from '../../../components/ErrorBoundary';
 
-export default function BattleRoomPage() {
+function BattleRoomContent() {
   const { battleId } = useParams();
   const searchParams = useSearchParams();
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -2100,7 +2101,7 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
                     </div>
                   );
                 })}
-                                {[...(Array.isArray(opponentSolves) && opponentSolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - opponentSolves.length) : [])].map((_, i) => (
+                {[...(Array.isArray(opponentSolves) && opponentSolves.length < TOTAL_SCRAMBLES ? Array(TOTAL_SCRAMBLES - opponentSolves.length) : [])].map((_, i) => (
                   <div key={`empty-${i}`} className="flex justify-between">
                     <span className="text-zinc-500">#{opponentSolves.length + i + 1}</span>
                     <span className="text-zinc-600">--</span>
@@ -2111,6 +2112,14 @@ Play at: ${typeof window !== 'undefined' ? window.location.origin : 'mcubesarena
           </Card>
         </div>
       </div>
-    </div>
+    );
+  }
+}
+
+export default function BattleRoomPage() {
+  return (
+    <ErrorBoundary>
+      <BattleRoomContent />
+    </ErrorBoundary>
   );
 }
