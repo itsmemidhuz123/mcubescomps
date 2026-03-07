@@ -899,7 +899,7 @@ function BattleContent() {
                                   {(player.username?.charAt(0) || '?').toUpperCase()}
                                 </div>
                               )}
-                              <span className="text-white">{player.username}</span>
+                              <span className="text-white">{player.username || 'Player'}</span>
                               {player.userId === user?.uid && <span className="text-xs text-yellow-400">(You)</span>}
                             </>
                           ) : (
@@ -939,7 +939,7 @@ function BattleContent() {
                                   {(player.username?.charAt(0) || '?').toUpperCase()}
                                 </div>
                               )}
-                              <span className="text-white">{player.username}</span>
+                              <span className="text-white">{player.username || 'Player'}</span>
                               {player.userId === user?.uid && <span className="text-xs text-yellow-400">(You)</span>}
                             </>
                           ) : (
