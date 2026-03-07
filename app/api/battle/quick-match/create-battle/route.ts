@@ -114,8 +114,8 @@ export async function POST(request) {
       completedAt: null,
       roundCount: 5,
       teamSize: 1,
-      teamA: [player1],
-      teamB: [player2],
+      teamA: [{ userId: player1, username: player1Name, photoURL: matchData.player1PhotoURL || null }],
+      teamB: [{ userId: player2, username: player2Name, photoURL: matchData.player2PhotoURL || null }],
       players: [player1, player2],
     };
 

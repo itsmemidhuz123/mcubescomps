@@ -25,7 +25,7 @@ function getAdminDb() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { userId, username } = body;
+    const { userId, username, photoURL } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -67,6 +67,8 @@ export async function POST(request) {
         player2: opponent.userId,
         player1Name: username || 'Player',
         player2Name: opponent.username,
+        player1PhotoURL: photoURL || null,
+        player2PhotoURL: opponent.photoURL || null,
         battleCreated: false,
         player1Joined: false,
         player2Joined: false,
@@ -104,6 +106,7 @@ export async function POST(request) {
     await queueRef.doc(userId).set({
       userId,
       username: username || 'Player',
+      photoURL: photoURL || null,
       event: '333',
       format: 'ao5',
       joinedAt: admin.firestore.FieldValue.serverTimestamp(),

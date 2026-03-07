@@ -35,8 +35,13 @@ export async function POST(request) {
       allowSpectators = true,
       battleName = '',
       battleType = 'room',
-      teamSize = 1
+      teamSize = 1,
+      username = 'Player',
+      photoURL = null
     } = body;
+
+    const creatorUsername = username || 'Player';
+    const creatorPhotoURL = photoURL || null;
 
     if (!userId) {
       return NextResponse.json(
@@ -194,7 +199,7 @@ export async function POST(request) {
       completedAt: null,
       roundCount: roundCount,
       teamSize: teamSize,
-      teamA: teamSize > 1 ? [userId] : [userId],
+      teamA: [{ userId: userId, username: creatorUsername, photoURL: creatorPhotoURL }],
       teamB: [],
       players: [userId],
     };
