@@ -47,6 +47,65 @@ export default function BattleRoomPage() {
   const { playIntro, playCountdown, playBattleStart, playVictory, playDefeat } = useBattleSounds();
   const { shouldShowIntro, dismissIntro } = useBattleIntro();
 
+  const handleTeamRoom = async () => {
+    setIsMatchWaiting(true);
+    setTeamRoomLoading(true);
+    setJoinError(null);
+    
+    try {
+      const joinResponse = await fetch('/api/battle/team-room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: battleId,
+          userId: user.uid,
+          username: user.displayName || user.email?.split('@')[0] || 'Player',
+          photoURL: user.photoURL || null,
+        }),
+      });
+      
+      const joinData = await joinResponse.json();
+      
+      if (!joinData.success && joinData.message !== 'Already in room') {
+        setJoinError(joinData.message);
+        setTeamRoomLoading(false);
+        return;
+      }
+      
+      const roomRef = doc(db, 'teamRooms', battleId);
+      
+      const unsubscribe = onSnapshot(roomRef, (docSnap) => {
+        try {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTeamRoomData(data);
+            
+            if (data.status === 'started' && data.battleId) {
+              router.replace(`/battle/${data.battleId}`);
+              return;
+            }
+            
+            if (data.status === 'cancelled') {
+              setJoinError('This room has been cancelled');
+            }
+          } else {
+            setJoinError('Room not found');
+          }
+        } catch (err) {
+          console.error('Error in team room snapshot:', err);
+        } finally {
+          setTeamRoomLoading(false);
+        }
+      });
+      
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Team room error:', error);
+      setJoinError('Failed to join room: ' + (error.message || 'Unknown error'));
+      setTeamRoomLoading(false);
+    }
+  };
+
   // Handle match waiting - when battleId is actually a matchId (starts with "match_", "team_match_", or "team_room_")
   useEffect(() => {
     if (authLoading || !user || !battleId) return;
@@ -280,69 +339,6 @@ export default function BattleRoomPage() {
   const [teamRoomData, setTeamRoomData] = useState(null);
   const [teamRoomLoading, setTeamRoomLoading] = useState(true);
   const [joinError, setJoinError] = useState(null);
-
-  const handleTeamRoom = async () => {
-    setIsMatchWaiting(true);
-    setTeamRoomLoading(true);
-    setJoinError(null);
-    
-    try {
-      // First try to join the room
-      const joinResponse = await fetch('/api/battle/team-room/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: battleId,
-          userId: user.uid,
-          username: user.displayName || user.email?.split('@')[0] || 'Player',
-          photoURL: user.photoURL || null,
-        }),
-      });
-      
-      const joinData = await joinResponse.json();
-      
-      if (!joinData.success && joinData.message !== 'Already in room') {
-        setJoinError(joinData.message);
-        setTeamRoomLoading(false);
-        return;
-      }
-      
-      // Listen to the team room document
-      const roomRef = doc(db, 'teamRooms', battleId);
-      
-      const unsubscribe = onSnapshot(roomRef, (docSnap) => {
-        try {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setTeamRoomData(data);
-            
-            // Check if battle started
-            if (data.status === 'started' && data.battleId) {
-              router.replace(`/battle/${data.battleId}`);
-              return;
-            }
-            
-            // Check if cancelled
-            if (data.status === 'cancelled') {
-              setJoinError('This room has been cancelled');
-            }
-          } else {
-            setJoinError('Room not found');
-          }
-        } catch (err) {
-          console.error('Error in team room snapshot:', err);
-        } finally {
-          setTeamRoomLoading(false);
-        }
-      });
-      
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('Team room error:', error);
-      setJoinError('Failed to join room: ' + (error.message || 'Unknown error'));
-      setTeamRoomLoading(false);
-    }
-  };
 
   const handleRoomAction = async (action) => {
     try {
