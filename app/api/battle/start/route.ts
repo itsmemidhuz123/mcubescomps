@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  if (getApps().length === 0) {
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
+      initializeApp();
+    } else {
+      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey
+        })
+      });
+    }
+  }
+  return admin.firestore();
+}
 
 export async function POST(request) {
   try {
@@ -14,15 +33,16 @@ export async function POST(request) {
       );
     }
 
-    const battleRef = doc(db, 'battles', battleId);
-    const battleDoc = await getDoc(battleRef);
+    const db = getAdminDb();
+    const battleRef = db.collection('battles').doc(battleId);
+    const battleDoc = await battleRef.get();
 
-    if (!battleDoc.exists()) {
+    if (!battleDoc.exists) {
       return NextResponse.json({ success: false, message: 'Battle not found' }, { status: 404 });
     }
 
     const battleData = battleDoc.data();
-    const now = serverTimestamp();
+    const now = admin.firestore.FieldValue.serverTimestamp();
 
     const isPlayer1 = battleData.player1 === userId;
     const isPlayer2 = battleData.player2 === userId;
@@ -54,7 +74,7 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: 'Battle already started' }, { status: 400 });
     }
 
-    await updateDoc(battleRef, {
+    await battleRef.update({
       status: 'countdown',
       startTime: now,
       startedAt: now,

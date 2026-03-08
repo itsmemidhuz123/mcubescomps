@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  if (getApps().length === 0) {
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
+      initializeApp();
+    } else {
+      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey
+        })
+      });
+    }
+  }
+  return admin.firestore();
+}
 
 function generateScramble(event = '333', roundCount = 5) {
   const scrambles = [];
@@ -31,10 +50,11 @@ export async function POST(request) {
       );
     }
 
-    const matchRef = doc(db, 'matches', matchId);
-    const matchDoc = await getDoc(matchRef);
+    const db = getAdminDb();
+    const matchRef = db.collection('matches').doc(matchId);
+    const matchDoc = await matchRef.get();
     
-    if (!matchDoc.exists()) {
+    if (!matchDoc.exists) {
       return NextResponse.json(
         { success: false, message: 'Match not found' },
         { status: 404 }
@@ -71,7 +91,7 @@ export async function POST(request) {
       );
     }
 
-    const now = serverTimestamp();
+    const now = admin.firestore.FieldValue.serverTimestamp();
     
     const battleData = {
       battleId: '',
@@ -109,12 +129,12 @@ export async function POST(request) {
       players: [player1, player2],
     };
 
-    const battleRef = doc(collection(db, 'battles'), matchId + '_battle');
+    const battleRef = db.collection('battles').doc(matchId + '_battle');
     const battleId = battleRef.id;
-    await setDoc(battleRef, { ...battleData, battleId });
+    await battleRef.set({ ...battleData, battleId });
 
     try {
-      await updateDoc(matchRef, {
+      await matchRef.update({
         battleCreated: true,
         battleId: battleId,
         completedAt: now,

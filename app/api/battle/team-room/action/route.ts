@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, setDoc, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  if (getApps().length === 0) {
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
+      initializeApp();
+    } else {
+      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey
+        })
+      });
+    }
+  }
+  return admin.firestore();
+}
 
 function generateScramble(event = '333', roundCount = 5) {
   const scrambles = [];
@@ -31,10 +50,11 @@ export async function POST(request) {
       );
     }
 
-    const roomRef = doc(db, 'teamRooms', roomId);
-    const roomDoc = await getDoc(roomRef);
+    const db = getAdminDb();
+    const roomRef = db.collection('teamRooms').doc(roomId);
+    const roomDoc = await roomRef.get();
 
-    if (!roomDoc.exists()) {
+    if (!roomDoc.exists) {
       return NextResponse.json({ success: false, message: 'Room not found' });
     }
 
@@ -44,7 +64,7 @@ export async function POST(request) {
       if (roomData.createdBy !== userId) {
         return NextResponse.json({ success: false, message: 'Only creator can cancel' });
       }
-      await updateDoc(roomRef, { status: 'cancelled' });
+      await roomRef.update({ status: 'cancelled' });
       return NextResponse.json({ success: true, message: 'Room cancelled' });
     }
 
@@ -68,7 +88,7 @@ export async function POST(request) {
         return NextResponse.json({ success: false, message: 'Failed to generate scrambles' });
       }
 
-      const now = serverTimestamp();
+      const now = admin.firestore.FieldValue.serverTimestamp();
       const allPlayers = [...teamA.filter(p => p.userId), ...teamB.filter(p => p.userId)].map(p => p.userId);
 
       const battleData = {
@@ -102,11 +122,11 @@ export async function POST(request) {
         playersJoined: allPlayers,
       };
 
-      const battleRef = doc(collection(db, 'battles'), roomId + '_battle');
+      const battleRef = db.collection('battles').doc(roomId + '_battle');
       const battleId = battleRef.id;
-      await setDoc(battleRef, { ...battleData, battleId });
+      await battleRef.set({ ...battleData, battleId });
 
-      await updateDoc(roomRef, {
+      await roomRef.update({
         status: 'started',
         battleId: battleId,
         startedAt: now,

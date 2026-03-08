@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp, arrayUnion, setDoc } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  if (getApps().length === 0) {
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
+      initializeApp();
+    } else {
+      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey
+        })
+      });
+    }
+  }
+  return admin.firestore();
+}
 
 export async function POST(request) {
   try {
@@ -14,10 +33,11 @@ export async function POST(request) {
       );
     }
 
-    const roomRef = doc(db, 'teamRooms', roomId);
-    const roomDoc = await getDoc(roomRef);
+    const db = getAdminDb();
+    const roomRef = db.collection('teamRooms').doc(roomId);
+    const roomDoc = await roomRef.get();
 
-    if (!roomDoc.exists()) {
+    if (!roomDoc.exists) {
       return NextResponse.json({ success: false, message: 'Room not found' });
     }
 
@@ -50,10 +70,10 @@ export async function POST(request) {
         joined: true,
         joinedAt: new Date().toISOString(),
       };
-      await updateDoc(roomRef, {
+      await roomRef.update({
         teamA: teamA,
-        players: arrayUnion(userId),
-        lastActivityAt: serverTimestamp(),
+        players: admin.firestore.FieldValue.arrayUnion(userId),
+        lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } else if (teamBSlots.length > 0) {
       const slotIndex = teamB.findIndex(p => !p.userId);
@@ -64,10 +84,10 @@ export async function POST(request) {
         joined: true,
         joinedAt: new Date().toISOString(),
       };
-      await updateDoc(roomRef, {
+      await roomRef.update({
         teamB: teamB,
-        players: arrayUnion(userId),
-        lastActivityAt: serverTimestamp(),
+        players: admin.firestore.FieldValue.arrayUnion(userId),
+        lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } else {
       return NextResponse.json({ success: false, message: 'Room is full' });
@@ -77,7 +97,7 @@ export async function POST(request) {
     const fullTeamB = teamB.filter(p => p.userId).length >= teamSize;
 
     if (fullTeamA && fullTeamB) {
-      await updateDoc(roomRef, { status: 'ready' });
+      await roomRef.update({ status: 'ready' });
     }
 
     return NextResponse.json({ success: true, message: 'Joined room successfully' });
