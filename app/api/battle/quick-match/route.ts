@@ -1,70 +1,10 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-    console.log('Firebase Admin init:', { 
-      projectId: projectId ? 'set' : 'MISSING',
-      clientEmail: clientEmail ? 'set' : 'MISSING',
-      privateKey: privateKey ? `set (${privateKey.length} chars)` : 'MISSING'
-    });
-
-    // If no private key provided, try using Application Default Credentials
-    // This works on Vercel when service account is attached
-    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
-      console.log('Using Application Default Credentials');
-      initializeApp();
-    } else {
-      // Handle different key formats - convert literal \n to actual newlines
-      privateKey = privateKey
-        .replace(/\\n/g, '\n')
-        .replace(/\\\\n/g, '\n')
-        .replace(/"\s*"/g, '')
-        .trim();
-
-      initializeApp({
-        credential: cert({ projectId, clientEmail, privateKey })
-      });
-    }
-  }
-  return admin.firestore();
-}
-
-// Helper function to generate scrambles
-function generateScramble(event = '333', roundCount = 5) {
-  const scrambles = [];
-  for (let i = 0; i < roundCount; i++) {
-    const chars = 'RURURFRFRFURURF';
-    let scramble = '';
-    for (let j = 0; j < 20; j++) {
-      scramble += chars[Math.floor(Math.random() * chars.length)] + ' ';
-    }
-    scrambles.push(scramble.trim());
-  }
-  return {
-    scrambleId: `scramble_${Date.now()}`,
-    scrambles: scrambles,
-    event: event
-  };
-}
+import { db } from '@/lib/firebase';
+import { collection, doc, getDoc, setDoc, updateDoc, serverTimestamp, query, where, limit } from 'firebase/firestore';
 
 export async function POST(request) {
   try {
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        { success: false, message: 'Invalid request body' },
-        { status: 400 }
-      );
-    }
-    
+    const body = await request.json();
     const { userId, username, photoURL } = body;
 
     if (!userId) {
@@ -74,13 +14,17 @@ export async function POST(request) {
       );
     }
 
-    const queueRef = getAdminDb().collection('matchmakingQueue');
+    const queueRef = collection(db, 'matchmakingQueue');
     const oneMinuteAgo = Date.now() - 60000;
     
-    const snapshot = await queueRef
-      .where('joinedAt', '>', admin.firestore.Timestamp.fromMillis(oneMinuteAgo))
-      .limit(10)
-      .get();
+    const q = query(
+      queueRef,
+      where('joinedAt', '>', new Date(oneMinuteAgo)),
+      limit(10)
+    );
+    
+    const { getDocs } = await import('firebase/firestore');
+    const snapshot = await getDocs(q);
 
     let opponent = null;
     snapshot.forEach((doc) => {
@@ -91,10 +35,10 @@ export async function POST(request) {
     });
 
     if (opponent) {
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = serverTimestamp();
       const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      await getAdminDb().collection('matches').doc(matchId).set({
+      await setDoc(doc(db, 'matches', matchId), {
         matchId: matchId,
         createdAt: now,
         player1: userId,
@@ -108,21 +52,17 @@ export async function POST(request) {
         player2Joined: false,
       });
 
-      try {
-        await getAdminDb().collection('matchmakingQueue').doc(userId).update({
-          matched: true,
-          matchId: matchId,
-          matchedAt: now,
-        });
-      } catch {}
+      await updateDoc(doc(db, 'matchmakingQueue', userId), {
+        matched: true,
+        matchId: matchId,
+        matchedAt: now,
+      }).catch(() => {});
 
-      try {
-        await getAdminDb().collection('matchmakingQueue').doc(opponent.userId).update({
-          matched: true,
-          matchId: matchId,
-          matchedAt: now,
-        });
-      } catch {}
+      await updateDoc(doc(db, 'matchmakingQueue', opponent.userId), {
+        matched: true,
+        matchId: matchId,
+        matchedAt: now,
+      }).catch(() => {});
 
       return NextResponse.json({
         success: true,
@@ -131,8 +71,8 @@ export async function POST(request) {
       });
     }
 
-    const existingEntry = await getAdminDb().collection('matchmakingQueue').doc(userId).get();
-    if (existingEntry.exists) {
+    const existingEntry = await getDoc(doc(db, 'matchmakingQueue', userId));
+    if (existingEntry.exists()) {
       return NextResponse.json({
         success: true,
         status: 'waiting',
@@ -140,13 +80,13 @@ export async function POST(request) {
       });
     }
 
-    await getAdminDb().collection('matchmakingQueue').doc(userId).set({
+    await setDoc(doc(db, 'matchmakingQueue', userId), {
       userId,
       username: username || 'Player',
       photoURL: photoURL || null,
       event: '333',
       format: 'ao5',
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+      joinedAt: serverTimestamp(),
     });
 
     return NextResponse.json({

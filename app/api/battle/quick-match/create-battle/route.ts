@@ -1,25 +1,6 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-
-function getAdminDb() {
-  if (getApps().length === 0) {
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
-      initializeApp();
-    } else {
-      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-      initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey
-        })
-      });
-    }
-  }
-  return admin.firestore();
-}
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 function generateScramble(event = '333', roundCount = 5) {
   const scrambles = [];
@@ -50,11 +31,10 @@ export async function POST(request) {
       );
     }
 
-    const db = getAdminDb();
-    const matchRef = db.collection('matches').doc(matchId);
-    const matchDoc = await matchRef.get();
+    const matchRef = doc(db, 'matches', matchId);
+    const matchDoc = await getDoc(matchRef);
     
-    if (!matchDoc.exists) {
+    if (!matchDoc.exists()) {
       return NextResponse.json(
         { success: false, message: 'Match not found' },
         { status: 404 }
@@ -64,8 +44,8 @@ export async function POST(request) {
     const matchData = matchDoc.data();
     const player1 = matchData.player1;
     const player2 = matchData.player2;
-    const player1Name = matchData.player1Name || matchData.player1Username || 'Player 1';
-    const player2Name = matchData.player2Name || matchData.player2Username || 'Player 2';
+    const player1Name = matchData.player1Name || 'Player 1';
+    const player2Name = matchData.player2Name || 'Player 2';
 
     if (!player1 || !player2) {
       return NextResponse.json(
@@ -81,17 +61,8 @@ export async function POST(request) {
       });
     }
 
-    let scrambleData;
-    try {
-      scrambleData = generateScramble('333', 5);
-    } catch (scrambleError) {
-      return NextResponse.json(
-        { success: false, message: 'Failed to generate scrambles' },
-        { status: 500 }
-      );
-    }
-
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const scrambleData = generateScramble('333', 5);
+    const now = serverTimestamp();
     
     const battleData = {
       battleId: '',
@@ -105,8 +76,8 @@ export async function POST(request) {
       createdBy: player1,
       player1: player1,
       player2: player2,
-      player1Name: player1Name || 'Player 1',
-      player2Name: player2Name || 'Player 2',
+      player1Name: player1Name,
+      player2Name: player2Name,
       status: 'waiting',
       winner: null,
       visibility: 'private',
@@ -129,19 +100,14 @@ export async function POST(request) {
       players: [player1, player2],
     };
 
-    const battleRef = db.collection('battles').doc(matchId + '_battle');
+    const battleRef = doc(db, 'battles', matchId + '_battle');
     const battleId = battleRef.id;
-    await battleRef.set({ ...battleData, battleId });
+    await setDoc(battleRef, { ...battleData, battleId });
 
-    try {
-      await matchRef.update({
-        battleCreated: true,
-        battleId: battleId,
-        completedAt: now,
-      });
-    } catch (updateErr) {
-      console.log('Match update skipped:', updateErr.message);
-    }
+    await updateDoc(matchRef, {
+      battleCreated: true,
+      battleId: battleId,
+    });
 
     return NextResponse.json({
       success: true,

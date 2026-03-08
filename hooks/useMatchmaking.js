@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { MATCHMAKING_TIMEOUT_MS } from '@/lib/battleUtils';
+
+const MATCHMAKING_TIMEOUT_MS = 60000; // 1 minute
 
 export function useMatchmaking(user) {
   const [status, setStatus] = useState('idle');
@@ -36,10 +37,27 @@ export function useMatchmaking(user) {
     setError(null);
   }, [user?.uid]);
 
+  const createBattleFromMatch = async (matchId) => {
+    try {
+      const response = await fetch('/api/battle/quick-match/create-battle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        return data.battleId;
+      }
+      throw new Error(data.message);
+    } catch (err) {
+      console.error('Error creating battle:', err);
+      throw err;
+    }
+  };
+
   const startMatchmaking = useCallback(async () => {
     if (!user?.uid) return;
 
-    // Clear any previous state before starting new match
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -49,12 +67,10 @@ export function useMatchmaking(user) {
       unsubscribeRef.current = null;
     }
     
-    // Reset all state
     setBattleId(null);
     setStatus('idle');
     setError(null);
-
-    // Small delay to ensure state is reset
+    
     await new Promise(resolve => setTimeout(resolve, 100));
     
     setStatus('searching');
@@ -80,34 +96,36 @@ export function useMatchmaking(user) {
       if (data.status === 'waiting') {
         setStatus('waiting');
 
-        // Listen to matches collection for this user
         const matchesRef = collection(db, 'matches');
         const q = query(matchesRef);
-        
-        // Only process matches created in the last 5 minutes
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
-        unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-          snapshot.docChanges().forEach((change) => {
+        unsubscribeRef.current = onSnapshot(q, async (snapshot) => {
+          for (const change of snapshot.docChanges()) {
             if (change.type === 'added' || change.type === 'modified') {
               const matchData = change.doc.data();
               const matchCreatedAt = matchData.createdAt?.toDate?.()?.getTime() || 
                                     matchData.createdAt?._seconds * 1000 || 0;
               
-              // Only process recent matches (within last 5 minutes)
               if (matchCreatedAt < fiveMinutesAgo) {
-                return;
+                continue;
               }
               
-              // Check if this match involves this user and hasn't been acknowledged
               if (matchData.matchId && 
                   !matchData.battleCreated &&
                   (matchData.player1 === user.uid || matchData.player2 === user.uid)) {
-                setBattleId(matchData.matchId);
-                setStatus('matched');
+                
+                try {
+                  const battleId = await createBattleFromMatch(matchData.matchId);
+                  setBattleId(battleId);
+                  setStatus('matched');
+                } catch (err) {
+                  setError('Failed to create battle');
+                  setStatus('idle');
+                }
               }
             }
-          });
+          }
         }, (err) => {
           console.error('Match listener error:', err);
         });
@@ -120,8 +138,14 @@ export function useMatchmaking(user) {
           }
         }, MATCHMAKING_TIMEOUT_MS);
       } else if (data.matchId) {
-        setBattleId(data.matchId);
-        setStatus('matched');
+        try {
+          const battleId = await createBattleFromMatch(data.matchId);
+          setBattleId(battleId);
+          setStatus('matched');
+        } catch (err) {
+          setError('Failed to create battle');
+          setStatus('idle');
+        }
       }
     } catch (err) {
       console.error('Matchmaking error:', err);

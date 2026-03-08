@@ -1,24 +1,6 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
-
-function getAdminDb() {
-  if (getApps().length === 0) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (!privateKey || privateKey === 'YOUR_PRIVATE_KEY') {
-      initializeApp();
-    } else {
-      privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-      initializeApp({
-        credential: cert({ projectId, clientEmail, privateKey })
-      });
-    }
-  }
-  return admin.firestore();
-}
+import { doc, deleteDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export async function DELETE(request) {
   try {
@@ -32,8 +14,7 @@ export async function DELETE(request) {
       );
     }
 
-    const db = getAdminDb();
-    await db.collection('matchmakingQueue').doc(userId).delete();
+    await deleteDoc(doc(db, 'matchmakingQueue', userId));
 
     return NextResponse.json({
       success: true,
