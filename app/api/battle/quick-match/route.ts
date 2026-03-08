@@ -1,51 +1,28 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import admin from 'firebase-admin';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
-function getAdminDb() {
-  try {
-    if (getApps().length === 0) {
-      const projectId = process.env.FIREBASE_PROJECT_ID;
-      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-      // Check if we have valid credentials
-      if (projectId && projectId !== 'YOUR_PROJECT_ID' && 
-          clientEmail && clientEmail !== 'YOUR_CLIENT_EMAIL' &&
-          privateKey && privateKey !== 'YOUR_PRIVATE_KEY') {
-        
-        // Fix the private key format - replace literal \n with actual newlines
-        const formattedKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
-        
-        initializeApp({
-          credential: cert({
-            projectId: projectId,
-            clientEmail: clientEmail,
-            privateKey: formattedKey
-          })
-        });
-        console.log('Firebase Admin initialized with credentials');
-      } else {
-        // Try without credentials (for emulator or ADC)
-        initializeApp();
-        console.log('Firebase Admin initialized without credentials (using ADC or emulator)');
-      }
-    }
-    return admin.firestore();
-  } catch (error) {
-    console.error('Firebase Admin initialization error:', error);
-    throw error;
+function getAdminServices() {
+  if (getApps().length === 0) {
+    initializeApp();
   }
+  return {
+    auth: getAuth(),
+    db: getFirestore()
+  };
 }
 
 export async function POST(request) {
-  let db;
+  let db, auth;
   try {
-    db = getAdminDb();
+    const services = getAdminServices();
+    db = services.db;
+    auth = services.auth;
   } catch (error) {
     console.error('Failed to initialize Firebase Admin:', error);
     return NextResponse.json(
-      { success: false, message: 'Server configuration error. Please contact administrator.' },
+      { success: false, message: 'Server configuration error: ' + error.message },
       { status: 500 }
     );
   }
@@ -67,7 +44,7 @@ export async function POST(request) {
     const oneMinuteAgo = Date.now() - 60000;
     
     const snapshot = await queueRef
-      .where('joinedAt', '>', admin.firestore.Timestamp.fromMillis(oneMinuteAgo))
+      .where('joinedAt', '>', new Date(oneMinuteAgo))
       .limit(10)
       .get();
 
@@ -84,7 +61,7 @@ export async function POST(request) {
 
     if (opponent) {
       console.log('Found opponent:', opponent);
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = new Date();
       const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       await db.collection('matches').doc(matchId).set({
@@ -139,7 +116,7 @@ export async function POST(request) {
       photoURL: photoURL || null,
       event: '333',
       format: 'ao5',
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+      joinedAt: new Date(),
     });
 
     console.log('Added to queue:', userId);
