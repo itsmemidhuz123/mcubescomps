@@ -64,7 +64,7 @@ export default function TimerPage() {
   const currentSession = getSession(currentEvent);
   const solves = currentSession.solves || [];
 
-  const currentEventObj = WCA_EVENTS.find(e => e.id === currentEvent) || WCA_EVENTS[0];
+  const currentEventObj = WCA_EVENTS.find(ev => ev.id === currentEvent) || WCA_EVENTS[0];
 
   const formatTime = useCallback((ms) => {
     if (ms === 0 && timerState === TIMER_STATES.IDLE) return '0.00';

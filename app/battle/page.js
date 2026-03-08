@@ -247,26 +247,11 @@ export default function BattlePage() {
   };
 
   const createBattle = async () => {
-    if (!user) {
-      alert('Please sign in to create a battle');
-      return;
-    }
-
-    if (!selectedEvent) {
-      alert('Please select an event');
-      return;
-    }
-
-    if (!selectedFormat) {
-      alert('Please select a format');
-      return;
-    }
-    
-    if (creating) return;
+    if (!user) return;
     
     setCreating(true);
     try {
-      const response = await fetch('/api/battle/create', {
+       const response = await fetch('/api/battle/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -284,16 +269,10 @@ export default function BattlePage() {
         }),
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        alert('Failed to create battle: Invalid server response');
-        return;
-      }
+      const data = await response.json();
 
       if (data.success) {
+        // For team battles (teamSize > 1), redirect to team room
         if (data.roomId) {
           router.push(`/battle/${data.roomId}`);
         } else {
@@ -304,7 +283,7 @@ export default function BattlePage() {
       }
     } catch (error) {
       console.error('Create battle error:', error);
-      alert(error.message || 'Failed to create battle. Please try again.');
+      alert('Failed to create battle');
     } finally {
       setCreating(false);
     }
@@ -638,8 +617,8 @@ export default function BattlePage() {
                      })
                       .map((battle) => {
                         const isTeamRoom = battle.isTeamRoom;
-                        const event = battle.event ? BATTLE_EVENTS.find(e => e.id === battle.event) : BATTLE_EVENTS[0];
-                        const eventIcon = event?.icon || '⚔️';
+                        const battleEvent = battle.event ? BATTLE_EVENTS.find(ev => ev.id === battle.event) : BATTLE_EVENTS[0];
+                        const eventIcon = battleEvent?.icon || '⚔️';
                         
                         // Calculate player count for team rooms
                         const playersJoined = isTeamRoom ? (battle.playersJoined?.length || 0) : 0;
@@ -661,7 +640,7 @@ export default function BattlePage() {
                              </div>
                              <div className="flex flex-wrap items-center gap-2 mt-1">
                                <span className="text-xs text-zinc-400">
-                                 {eventIcon} {event?.name || '3x3'}
+                                 {eventIcon} {battleEvent?.name || '3x3'}
                                </span>
                                {battle.format && (
                                  <span className="text-xs text-zinc-500">

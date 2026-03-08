@@ -277,6 +277,20 @@ function BattleContent() {
   const safeInspectionTimeLeft = typeof inspectionTimeLeft === 'number' ? inspectionTimeLeft : 15000;
   const safePenalty = penalty || 'none';
 
+  // Battle participant/team derivation - must be defined before any useEffect that uses it
+  const derivationIsPlayer1 = battle?.player1 === user?.uid;
+  const derivationIsPlayer2 = battle?.player2 === user?.uid;
+  const derivationTeamA = (battle && battle.teamA) ? battle.teamA : [];
+  const derivationTeamB = (battle && battle.teamB) ? battle.teamB : [];
+  let derivationIsTeamPlayer = false;
+  try {
+    derivationIsTeamPlayer = (Array.isArray(derivationTeamA) && derivationTeamA.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid)) || 
+                   (Array.isArray(derivationTeamB) && derivationTeamB.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid));
+  } catch (e) {
+    derivationIsTeamPlayer = false;
+  }
+  const derivationIsTeamBattle = (battle && battle.battleType === 'teamBattle') || (battle && battle.teamSize && battle.teamSize > 1);
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/auth/login?redirect=/battle/' + battleId);
@@ -415,7 +429,7 @@ function BattleContent() {
         playDefeat();
       }
     }
-  }, [battle?.status, battle?.winner, user, playVictory, playDefeat, isTeamBattle]);
+  }, [battle?.status, battle?.winner, user, playVictory, playDefeat, derivationIsTeamBattle]);
 
   useEffect(() => {
     if (battle && user) {
@@ -690,27 +704,19 @@ function BattleContent() {
     }
   };
 
-  const isPlayer1 = battle?.player1 === user?.uid;
-  const isPlayer2 = battle?.player2 === user?.uid;
+  // Using earlier derived values
+  const isPlayer1 = derivationIsPlayer1;
+  const isPlayer2 = derivationIsPlayer2;
   
   // Check team battle participants
-  // Ensure battle is loaded before accessing team data
-  const teamA = (battle && battle.teamA) ? battle.teamA : [];
-  const teamB = (battle && battle.teamB) ? battle.teamB : [];
-  
-  // Handle both old format (strings) and new format (objects with userId) - with defensive checks
-  let isTeamPlayer = false;
-  try {
-    isTeamPlayer = (Array.isArray(teamA) && teamA.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid)) || 
-                   (Array.isArray(teamB) && teamB.some(p => p && (typeof p === 'object' ? p.userId : p) === user?.uid));
-  } catch (e) {
-    console.error('Error checking team membership:', e);
-    isTeamPlayer = false;
-  }
-  const isTeamBattle = (battle && battle.battleType === 'teamBattle') || (battle && battle.teamSize && battle.teamSize > 1);
+  // Using earlier derived values
+  const teamA = derivationTeamA;
+  const teamB = derivationTeamB;
+  const isTeamPlayer = derivationIsTeamPlayer;
+  const isTeamBattle = derivationIsTeamBattle;
   
   const isCreator = battle?.createdBy === user?.uid;
-  const isParticipant = isTeamBattle ? isTeamPlayer : (isPlayer1 || isPlayer2);
+  const isParticipant = isTeamBattle ? isTeamPlayer : (derivationIsPlayer1 || derivationIsPlayer2);
   const isSpectator = watchMode || (!isParticipant && battle?.allowSpectators === true);
 
   const spectatorCount = battle?.spectators?.length || 0;
