@@ -1,6 +1,39 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import admin from 'firebase-admin';
+
+function getAdminDb() {
+  try {
+    if (getApps().length === 0) {
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+      if (projectId && projectId !== 'YOUR_PROJECT_ID' && 
+          clientEmail && clientEmail !== 'YOUR_CLIENT_EMAIL' &&
+          privateKey && privateKey !== 'YOUR_PRIVATE_KEY') {
+        
+        const formattedKey = privateKey.replace(/\\n/g, '\n').replace(/\\\\n/g, '\n');
+        
+        initializeApp({
+          credential: cert({
+            projectId: projectId,
+            clientEmail: clientEmail,
+            privateKey: formattedKey
+          })
+        });
+        console.log('Firebase Admin initialized with credentials');
+      } else {
+        initializeApp();
+        console.log('Firebase Admin initialized without credentials');
+      }
+    }
+    return admin.firestore();
+  } catch (error) {
+    console.error('Firebase Admin initialization error:', error);
+    throw error;
+  }
+}
 
 function generateScramble(event = '333', roundCount = 5) {
   const scrambles = [];
@@ -20,6 +53,17 @@ function generateScramble(event = '333', roundCount = 5) {
 }
 
 export async function POST(request) {
+  let db;
+  try {
+    db = getAdminDb();
+  } catch (error) {
+    console.error('Failed to initialize Firebase Admin:', error);
+    return NextResponse.json(
+      { success: false, message: 'Server configuration error. Please contact administrator.' },
+      { status: 500 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { matchId } = body;
@@ -31,10 +75,10 @@ export async function POST(request) {
       );
     }
 
-    const matchRef = doc(db, 'matches', matchId);
-    const matchDoc = await getDoc(matchRef);
+    const matchRef = db.collection('matches').doc(matchId);
+    const matchDoc = await matchRef.get();
     
-    if (!matchDoc.exists()) {
+    if (!matchDoc.exists) {
       return NextResponse.json(
         { success: false, message: 'Match not found' },
         { status: 404 }
@@ -62,7 +106,7 @@ export async function POST(request) {
     }
 
     const scrambleData = generateScramble('333', 5);
-    const now = serverTimestamp();
+    const now = admin.firestore.FieldValue.serverTimestamp();
     
     const battleData = {
       battleId: '',
@@ -100,11 +144,11 @@ export async function POST(request) {
       players: [player1, player2],
     };
 
-    const battleRef = doc(db, 'battles', matchId + '_battle');
+    const battleRef = db.collection('battles').doc(matchId + '_battle');
     const battleId = battleRef.id;
-    await setDoc(battleRef, { ...battleData, battleId });
+    await battleRef.set({ ...battleData, battleId });
 
-    await updateDoc(matchRef, {
+    await matchRef.update({
       battleCreated: true,
       battleId: battleId,
     });
