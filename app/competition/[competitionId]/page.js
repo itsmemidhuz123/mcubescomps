@@ -1108,6 +1108,15 @@ function CompetitionDetail() {
                     </CardContent>
                 </Card>
 
+                {/* Competition Description Card */}
+                {competition.description && (
+                    <Card className="mb-6">
+                        <CardContent className="pt-6">
+                            <p className="text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">{competition.description}</p>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Event Rules & Time Limits Card */}
                 {competition.events && competition.events.length > 0 && (
                     <Card className="mb-6">
@@ -1162,6 +1171,54 @@ function CompetitionDetail() {
                                     );
                                 })}
                             </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* ID Verification Card */}
+                {competition.verificationMandatory && (
+                    <Card className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200 text-lg">
+                                <ShieldAlert className="h-5 w-5" />
+                                ID Verification Required
+                            </CardTitle>
+                            <CardDescription className="text-amber-700 dark:text-amber-300">
+                                {user ? (
+                                    userProfile?.verificationStatus === 'VERIFIED' ? (
+                                        <span className="flex items-center gap-2">
+                                            <CheckCircle className="h-4 w-4" />
+                                            You are verified and can compete in all rounds
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            Verification is required starting from Round {competition.verificationRequiredFromRound || 1}. 
+                                            Please complete verification to participate.
+                                        </span>
+                                    )
+                                ) : (
+                                    <span>
+                                        Verification is required starting from Round {competition.verificationRequiredFromRound || 1}. 
+                                        Sign in to verify your identity.
+                                    </span>
+                                )}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {user && userProfile?.verificationStatus !== 'VERIFIED' && (
+                                <Button asChild variant="outline" className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50">
+                                    <Link href="/profile">
+                                        <ShieldAlert className="h-4 w-4 mr-2" />
+                                        Go to Profile to Verify
+                                    </Link>
+                                </Button>
+                            )}
+                            {user && userProfile?.verificationStatus === 'VERIFIED' && (
+                                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Verified Competitor
+                                </Badge>
+                            )}
                         </CardContent>
                     </Card>
                 )}

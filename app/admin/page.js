@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -85,6 +86,7 @@ export default function AdminPanel() {
     const [editingComp, setEditingComp] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
+        description: '',
         startDate: '',
         endDate: '',
         registrationStartDate: '',
@@ -213,7 +215,7 @@ export default function AdminPanel() {
             const totalRevenue = paymentsData
                 .filter(p => p.status === 'SUCCESS')
                 .reduce((sum, p) => {
-                    const amount = parseFloat(p.amount) || 0;
+                    const amount = parseFloat(p.finalAmount || p.amount) || 0;
                     return sum + (p.currency === 'USD' ? amount * 90 : amount);
                 }, 0);
 
@@ -505,6 +507,7 @@ export default function AdminPanel() {
     const resetForm = () => {
         setFormData({
             name: '',
+            description: '',
             startDate: '',
             endDate: '',
             registrationStartDate: '',
@@ -532,6 +535,7 @@ export default function AdminPanel() {
         setEditingComp(comp);
         setFormData({
             name: comp.name || '',
+            description: comp.description || '',
             startDate: comp.startDate || '',
             endDate: comp.endDate || '',
             registrationStartDate: comp.registrationStartDate || '',
@@ -573,6 +577,7 @@ export default function AdminPanel() {
         try {
             const compData = {
                 name: formData.name,
+                description: formData.description,
                 startDate: formData.startDate,
                 endDate: formData.endDate,
                 registrationStartDate: formData.registrationStartDate,
@@ -1075,6 +1080,16 @@ export default function AdminPanel() {
                                     <div className="space-y-2 col-span-2">
                                         <Label>Competition Name</Label>
                                         <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                                    </div>
+
+                                    <div className="space-y-2 col-span-2">
+                                        <Label>Description</Label>
+                                        <Textarea 
+                                            value={formData.description} 
+                                            onChange={e => setFormData({ ...formData, description: e.target.value })} 
+                                            placeholder="Enter competition description (optional)"
+                                            rows={3}
+                                        />
                                     </div>
 
                                     <div className="space-y-4 border p-4 rounded-md bg-blue-50/50">
@@ -2548,7 +2563,7 @@ export default function AdminPanel() {
                                                         <div className="text-green-600 font-bold">₹{p.finalAmount}</div>
                                                     </div>
                                                 ) : (
-                                                    <span>{p.currency} {p.amount}</span>
+                                                    <span>                                                {p.currency} {p.finalAmount || p.amount}</span>
                                                 )}
                                             </TableCell>
                                             <TableCell>
