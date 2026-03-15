@@ -78,16 +78,6 @@ export async function POST(request) {
     );
   }
 
-  const apiKey = request.headers.get('x-api-key');
-  const isLocalhost = origin && (origin.includes('localhost') || origin.includes('127.0.0.1'));
-  
-  if (API_KEY && !isLocalhost && apiKey !== API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 403 }
-    );
-  }
-
   try {
     const body = await request.json();
     const { event = '333', count = 5 } = body;
