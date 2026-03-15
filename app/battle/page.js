@@ -161,8 +161,16 @@ export default function BattlePage() {
           
         } catch (err) {
           console.log('Transaction failed (lost race):', err.message);
-          // Don't do anything - just wait for the opponent to create the battle
-          // The onSnapshot will detect matched: true and redirect us
+          
+          // Clear stale data to allow retry
+          try {
+            await updateDoc(doc(db, 'matchmakingQueue', user.uid), {
+              matchInProgress: false,
+              opponentId: null
+            });
+          } catch (cleanupError) {
+            console.log('Failed to cleanup stale data:', cleanupError);
+          }
         }
       }
     });
