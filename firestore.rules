@@ -1,0 +1,394 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // -------------------------------------------------------------------------
+    // HELPER FUNCTIONS
+    // -------------------------------------------------------------------------
+    
+    // Check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Get user data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check role level (new system using roleLevel) - with fallback for legacy
+    function hasRoleLevel(minLevel) {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               (getUserData().roleLevel >= minLevel) ||
+               (minLevel <= 3 && (getUserData().role == 'ADMIN' || getUserData().role == 'admin')) ||
+               (minLevel <= 2 && getUserData().role == 'MODERATOR')
+             );
+    }
+    
+    // Check if user is SUPER_ADMIN (level 4)
+    function isSuperAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               getUserData().role == 'SUPER_ADMIN' || 
+               getUserData().roleLevel >= 4
+             );
+    }
+    
+    // Check if user is ADMIN or higher (level 3+) - with legacy support
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               getUserData().roleLevel >= 3 ||
+               getUserData().role == 'ADMIN' || 
+               getUserData().role == 'admin'
+             );
+    }
+    
+    // Check if user is MODERATOR or higher (level 2+) - with legacy support
+    function isModerator() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               getUserData().roleLevel >= 2 ||
+               getUserData().role == 'MODERATOR' ||
+               getUserData().role == 'ADMIN' ||
+               getUserData().role == 'admin'
+             );
+    }
+    
+    // Check if user is SUPPORT or higher (level 1+)
+    function isSupport() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               getUserData().roleLevel >= 1 ||
+               getUserData().role == 'SUPPORT' ||
+               getUserData().role == 'MODERATOR' ||
+               getUserData().role == 'ADMIN' ||
+               getUserData().role == 'admin'
+             );
+    }
+    
+    // Check if user owns the document being accessed
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Check specific permission - with fallback for legacy users
+    function hasPermission(permission) {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (
+               getUserData().permissions[permission] == true ||
+               (getUserData().role == 'ADMIN' || getUserData().role == 'admin') ||
+               getUserData().roleLevel >= 3
+             );
+    }
+
+    // -------------------------------------------------------------------------
+    // COLLECTION RULES
+    // -------------------------------------------------------------------------
+    
+    // Users collection
+    match /users/{userId} {
+      // Allow public read for profiles/leaderboards
+      allow read: if true;
+      
+      // Creation: User can create their own profile
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      // Update: User can update own profile, Admin can update any
+      // But only SUPER_ADMIN can update role, roleLevel, permissions
+      allow update: if isSignedIn() && (
+        isOwner(userId) || 
+        (isAdmin() && 
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'roleLevel', 'permissions'])
+        ) ||
+        isSuperAdmin()
+      );
+      
+      // Delete: Only SUPER_ADMIN
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Competitions collection
+    match /competitions/{competitionId} {
+      // Public read
+      allow read: if true;
+      
+      // Create: ADMIN+ with permission
+      allow create: if isAdmin() && hasPermission('canCreateCompetition');
+      
+      // Update: ADMIN+ or isSuperAdmin
+      allow update: if isAdmin() || isSuperAdmin();
+      
+      // Delete: ADMIN+ only
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+    
+    // Results collection
+    match /results/{resultId} {
+      // Public read
+      allow read: if true;
+      
+      // Create: User can create result if it belongs to them
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      
+      // Update/Delete: Owner, Moderator, or Admin
+      allow update, delete: if isSignedIn() && 
+                           (resource.data.userId == request.auth.uid || isModerator());
+    }
+    
+    // Registrations collection
+    match /registrations/{registrationId} {
+      // Public read (for participant counts)
+      allow read: if true;
+      
+      // Create: User can register themselves
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      
+      // Update: Owner or Admin
+      allow update: if isSignedIn() && 
+                   (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Delete: Only Admin
+      allow delete: if isAdmin();
+    }
+
+    // Solves collection
+    match /solves/{solveId} {
+      // Public read
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isModerator() || isAdmin();
+    }
+
+    // Scramble reveal tracking
+    match /scrambleReveals/{revealId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isModerator());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isModerator() || (
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId
+        )
+      );
+      allow delete: if isModerator();
+    }
+    
+    // Payments collection
+    match /payments/{paymentId} {
+      // Read: Owner can see own payments, Admin and Support can see ALL
+      allow read: if isSignedIn() && 
+                 (resource.data.userId == request.auth.uid || isSupport());
+      
+      // Create: Authenticated users (for checkout)
+      allow create: if isSignedIn();
+      
+      // Update: Admin only (for status updates/refunds)
+      allow update: if isAdmin();
+      
+      // Delete: No one (Immutable)
+      allow delete: if false;
+    }
+    
+    // Anti-cheat logs
+    match /antiCheatLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+    
+    // Audit logs (Admin actions)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+    
+    match /coupons/{couponId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    
+    match /couponUsages/{usageId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+    
+    // Tournament Participants
+    match /tournamentParticipants/{participantId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    
+    // Round Results
+    match /roundResults/{resultId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isModerator();
+    }
+    
+    // Tournament advancement logs
+    match /tournamentLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+    
+    // Video Submissions
+    match /videoSubmissions/{submissionId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isModerator();
+    }
+    
+    // Timer Sessions (per-user timing data)
+    // Old flat structure (for backward compatibility during migration)
+    match /users/{userId}/timerSessions/{sessionId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Timer Sessions - Keep flat structure (no nesting)
+    // Path: users/{userId}/timerSessions/{sessionId}
+    
+    // User Settings - Allow users to read/write their own settings
+    match /users/{userId}/settings/{documentId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Timer Solves - Cloud Sync (OLD flat structure - for backward compatibility)
+    match /timerSolves/{userId}/solves/{solveId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // NEW: Timer Solves - Cloud Sync (nested by event and session)
+    match /timerSolves/{userId}/{eventId}/{sessionId}/solves/{solveId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Matchmaking Queue - Users can read all and update any entry (for matchmaking)
+    match /matchmakingQueue/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Quick Match - Matches collection for real-time matchmaking
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+    }
+    
+    // Battles collection - Private battles (link-only access)
+    match /battles/{battleId} {
+      // Allow reading waiting battles (for open battles list)
+      // Allow reading public battles or battles where user is participant/creator/spectator
+      allow read: if (
+        isSignedIn() && (
+          resource == null ||
+          resource.data.status == 'waiting' ||
+          resource.data.status == 'expired' ||
+          resource.data.status == 'cancelled' ||
+          resource.data.status == 'completed' ||
+          resource.data.visibility == 'public' || 
+          resource.data.player1 == request.auth.uid ||
+          resource.data.player2 == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.allowSpectators == true ||
+          isAdmin()
+        )
+      );
+      
+      // Only signed in users can create battles
+      allow create: if isSignedIn();
+      
+      // Only participants, creator, or admin can update
+      allow update: if isSignedIn() && (
+        resource.data.player1 == request.auth.uid ||
+        resource.data.player2 == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+      
+      // Only admins can delete battles
+      allow delete: if isSignedIn() && isAdmin();
+    }
+    
+    // Battle solves subcollection - Allow all authenticated users to read/write for testing
+    match /battles/{battleId}/solves/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+    
+    // Battle Reports - Authenticated users can create, admins can read/write
+    match /battleReports/{reportId} {
+      allow read: if isSignedIn() && hasRoleLevel(2);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && hasRoleLevel(2);
+    }
+    
+    // Team Rooms - Waiting rooms for team battles
+    match /teamRooms/{roomId} {
+      // Allow reading waiting team rooms (for open battles list)
+      // Allow reading rooms where user is participant/creator
+      allow read: if (
+        isSignedIn() && (
+          resource == null ||
+          resource.data.status == 'waiting' ||
+          resource.data.status == 'cancelled' ||
+          resource.data.status == 'started' ||
+          resource.data.visibility == 'public' ||
+          resource.data.createdBy == request.auth.uid ||
+          (resource.data.players != null && resource.data.players.hasAll([request.auth.uid])) ||
+          isAdmin()
+        )
+      );
+      
+      // Allow server-side writes without auth (for Next.js API routes)
+      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['battleName', 'teamSize', 'event']);
+      allow update: if !isSignedIn();
+      
+      // Only signed in users can create team rooms
+      allow create: if isSignedIn();
+      
+      // Only creator or participants can update
+      allow update: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        (resource.data.players != null && resource.data.players.hasAll([request.auth.uid])) ||
+        isAdmin()
+      );
+      
+      // Only creator or admin can delete
+      allow delete: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+    }
+    
+    // Banned Users - Admins can manage
+    match /bannedUsers/{banId} {
+      allow read: if isSignedIn() && hasRoleLevel(2);
+      allow create, update, delete: if isSignedIn() && hasRoleLevel(2);
+    }
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
