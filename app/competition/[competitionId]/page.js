@@ -61,10 +61,10 @@ function CompetitionDetail() {
     }, [params.competitionId]);
 
     useEffect(() => {
-        if (params.competitionId && user) {
+        if (params.competitionId && user && competition) {
             checkRegistration();
         }
-    }, [params.competitionId, user]);
+    }, [params.competitionId, user, competition]);
 
     useEffect(() => {
         calculatePrice();
@@ -155,7 +155,9 @@ function CompetitionDetail() {
                 setSelectedEvents(regData.events || []);
 
                 // Fetch event statuses for tournament mode
+                console.warn(`[QUALIFICATION DEBUG] Checking tournament mode: competition.mode=${competition?.mode}, CompetitionMode.TOURNAMENT=${CompetitionMode.TOURNAMENT}, isMatch=${competition?.mode === CompetitionMode.TOURNAMENT}`);
                 if (competition?.mode === CompetitionMode.TOURNAMENT) {
+                    console.warn(`[QUALIFICATION DEBUG] Calling fetchEventStatuses for events:`, regData.events);
                     await fetchEventStatuses(regData.events || []);
                 }
             }
@@ -165,28 +167,260 @@ function CompetitionDetail() {
     }
 
     async function fetchEventStatuses(events) {
-        if (!events || events.length === 0 || !competition) return;
+        console.warn(`[QUALIFICATION DEBUG] fetchEventStatuses STARTED with events:`, events);
+        if (!events || events.length === 0 || !competition) {
+            console.warn(`[QUALIFICATION DEBUG] fetchEventStatuses early return - events:`, events, 'competition:', competition ? 'exists' : 'null');
+            return;
+        }
 
         const statuses = {};
 
         for (const eventId of events) {
             try {
-                // Check for per-event current round, fallback to shared
-                const currentRoundNum = competition.eventCurrentRound?.[eventId] || competition.currentRound || 1;
-                const currentRound = getCurrentRound(competition, eventId);
+                // Get the competition's current round (might be 2 if admin advanced)
+                const competitionCurrentRound = competition.eventCurrentRound?.[eventId] || competition.currentRound || 1;
                 
+                // Check current round results first to determine actual current round for this user
                 const roundResultsQuery = query(
                     collection(db, 'roundResults'),
                     where('competitionId', '==', params.competitionId),
                     where('eventId', '==', eventId),
-                    where('roundNumber', '==', currentRoundNum)
+                    where('roundNumber', '==', competitionCurrentRound)
                 );
                 const snapshot = await getDocs(roundResultsQuery);
                 const leaderboard = snapshot.docs.map(doc => doc.data());
+                
+                // Check if user has results in current competition round
+                const hasResultsInCurrentRound = leaderboard.some(r => r.userId === user?.uid);
+                
+                // If user has no results in current competition round, check previous rounds
+                let userCurrentRound = competitionCurrentRound;
+                if (!hasResultsInCurrentRound && competitionCurrentRound > 1) {
+                    // Check all previous rounds to find where user last participated
+                    for (let r = competitionCurrentRound - 1; r >= 1; r--) {
+                        const prevQuery = query(
+                            collection(db, 'roundResults'),
+                            where('competitionId', '==', params.competitionId),
+                            where('eventId', '==', eventId),
+                            where('roundNumber', '==', r)
+                        );
+                        const prevSnap = await getDocs(prevQuery);
+                        const prevLeaderboard = prevSnap.docs.map(doc => doc.data());
+                        if (prevLeaderboard.some(p => p.userId === user?.uid)) {
+                            userCurrentRound = r + 1; // User completed round r, next is r+1
+                            break;
+                        }
+                        if (r === 1 && !prevLeaderboard.some(p => p.userId === user?.uid)) {
+                            // User hasn't participated in any round yet
+                            userCurrentRound = 1;
+                        }
+                    }
+                } else if (!hasResultsInCurrentRound && competitionCurrentRound === 1) {
+                    // User hasn't started at all
+                    userCurrentRound = 1;
+                }
+                
+                const currentRoundNum = userCurrentRound;
+                const currentRound = getCurrentRound(competition, eventId);
+                const nextRound = getNextRound(competition, eventId);
+
+                // Also check previous round results (in case user qualified from previous round)
+                let previousLeaderboard = [];
+                let qualifiedFromPreviousRound = false;
+                if (currentRoundNum > 1) {
+                    const prevRoundQuery = query(
+                        collection(db, 'roundResults'),
+                        where('competitionId', '==', params.competitionId),
+                        where('eventId', '==', eventId),
+                        where('roundNumber', '==', currentRoundNum - 1)
+                    );
+                    const prevSnapshot = await getDocs(prevRoundQuery);
+                    previousLeaderboard = prevSnapshot.docs.map(doc => doc.data());
+                    
+                    // Check if user was qualified in previous round
+                    const prevUserPosition = user ? getUserPosition(user.uid, previousLeaderboard) : -1;
+                    const prevRound = getCurrentRound(competition, eventId);
+                    const prevAdvancementCount = prevRound?.qualifyValue || 50;
+                    qualifiedFromPreviousRound = isQualified(prevUserPosition, prevAdvancementCount);
+                    
+                    console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: Previous round ${currentRoundNum - 1} - userPosition=${prevUserPosition}, qualifiedFromPreviousRound=${qualifiedFromPreviousRound}`);
+                }
 
                 const userPosition = user ? getUserPosition(user.uid, leaderboard) : -1;
                 const advancementCount = currentRound?.qualifyValue || 50;
-                const qualified = isQualified(userPosition, advancementCount);
+                const qualifiedFromResults = isQualified(userPosition, advancementCount) || qualifiedFromPreviousRound;
+
+                // Check for manual qualification from tournamentParticipants (admin qualified)
+                let qualifiedFromParticipant = false;
+                let participantData = null;
+                if (user) {
+                    const participantId = `${user.uid}_${params.competitionId}`;
+                    console.warn(`[QUALIFICATION DEBUG] Checking participant: ${participantId}`);
+                    const participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+                    if (participantDoc.exists()) {
+                        participantData = participantDoc.data();
+                        // DEBUG: Log participant data
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: participantData:`, JSON.stringify({
+                            currentRound: participantData.currentRound,
+                            qualified: participantData.qualified,
+                            eliminated: participantData.eliminated
+                        }));
+                        
+                        // User is qualified if:
+                        // 1. qualified flag explicitly true, OR
+                        // 2. participant.currentRound > competition.currentRound (awaiting round advance), OR
+                        // 3. participant.currentRound >= competition.currentRound and not eliminated
+                        qualifiedFromParticipant = 
+                            participantData.qualified === true || 
+                            (participantData.currentRound > currentRoundNum && !participantData.eliminated) ||
+                            (participantData.currentRound >= currentRoundNum && currentRoundNum < (competition.rounds?.length || 1) && !participantData.eliminated);
+                        
+                        // DEBUG: Log qualification decision
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: currentRoundNum=${currentRoundNum}, qualifiedFromParticipant=${qualifiedFromParticipant}, condition1=${participantData.qualified === true}, condition2=${participantData.currentRound > currentRoundNum}, condition3=${participantData.currentRound >= currentRoundNum && currentRoundNum < (competition.rounds?.length || 1)}`);
+                    } else {
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: No tournamentParticipants document found for user ${user.uid}`);
+                    }
+                } else {
+                    console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: No user logged in`);
+                }
+
+                const qualified = qualifiedFromResults || qualifiedFromParticipant;
+                
+                // DEBUG: Log overall qualification decision
+                console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: qualifiedFromResults=${qualifiedFromResults}, qualifiedFromParticipant=${qualifiedFromParticipant}, qualified=${qualified}`);
+
+                // Determine next round info
+                let qualifiedToRound = null;
+                
+                // Get total rounds for this event
+                const eventRounds = competition.eventRounds?.[eventId] || competition.rounds || [];
+                const totalRounds = eventRounds.length;
+                
+                // Determine target round - use participant's current round if available
+                const participantRoundNum = participantData?.currentRound || currentRoundNum;
+                
+                // Determine target round based on user's participation:
+                // - If user completed previous round (has results in participantRoundNum - 1), target = participantRoundNum
+                // - If user hasn't completed any round yet, target = 1
+                // - If user completed participantRoundNum, target = participantRoundNum + 1 (if exists)
+                
+                // Check if user has results in previous round (using previousLeaderboard)
+                const hasResultsInPrevRound = previousLeaderboard.length > 0 && user && previousLeaderboard.some(r => r.userId === user.uid);
+                const userCompletedPreviousRound = hasResultsInPrevRound;
+                const userCompletedCurrentRound = leaderboard.some(r => r.userId === user?.uid);
+                
+                let targetRoundNum;
+                if (userCompletedPreviousRound && !userCompletedCurrentRound) {
+                    // User completed previous round, waiting for current round to start
+                    targetRoundNum = participantRoundNum;
+                } else if (userCompletedCurrentRound) {
+                    // User completed current round, look for next round
+                    if (participantRoundNum >= totalRounds) {
+                        // Already in final round - no next round
+                        targetRoundNum = participantRoundNum;
+                    } else {
+                        targetRoundNum = participantRoundNum + 1;
+                    }
+                } else {
+                    // User hasn't started any round yet
+                    targetRoundNum = 1;
+                }
+                
+                // Cap at totalRounds
+                if (targetRoundNum > totalRounds) {
+                    targetRoundNum = totalRounds;
+                }
+                
+                // Get the specific round's info for the target round
+                const targetRoundInfo = eventRounds.find(r => r.roundNumber === targetRoundNum) || nextRound;
+                const targetRoundScheduledDate = targetRoundInfo?.scheduledDate || targetRoundInfo?.startTime || null;
+                const targetRoundStartTime = targetRoundScheduledDate ? new Date(targetRoundScheduledDate).getTime() : null;
+                const now = Date.now();
+                const canStartTargetRound = targetRoundStartTime 
+                    ? now >= targetRoundStartTime && now < (targetRoundStartTime + 24 * 60 * 60 * 1000) 
+                    : false;
+                
+                // Check if the 24-hour window has fully passed
+                const hasWindowPassed = targetRoundStartTime ? now >= (targetRoundStartTime + 24 * 60 * 60 * 1000) : false;
+                
+                // DEBUG: Log the date values
+                console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: targetRoundInfo:`, targetRoundInfo ? { roundNumber: targetRoundInfo.roundNumber, scheduledDate: targetRoundInfo.scheduledDate } : null);
+                console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: participantRoundNum=${participantRoundNum}, targetRoundNum=${targetRoundNum}, targetRoundScheduledDate=${targetRoundScheduledDate}, canStartTargetRound=${canStartTargetRound}`);
+                
+                // Check if admin has processed qualification for the TARGET round
+                // User must be qualified to target round AND target round date must have passed
+                const adminQualifiedToTargetRound = participantData && participantData.currentRound >= targetRoundNum;
+                
+                // Check if THE USER specifically has results in previous round for this event
+                const hasResultsInPreviousRound = previousLeaderboard.some(r => r.userId === user?.uid);
+                
+                // Check if user has started ANY round (at least Round 1)
+                const hasStartedAnyRound = hasResultsInPreviousRound || leaderboard.some(r => r.userId === user?.uid);
+                
+                // DEBUG: Log round info
+                console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: targetRoundNum=${targetRoundNum}, participantRoundNum=${participantRoundNum}, totalRounds=${totalRounds}, adminQualifiedToTargetRound=${adminQualifiedToTargetRound}, hasResultsInPreviousRound=${hasResultsInPreviousRound}, hasStartedAnyRound=${hasStartedAnyRound}`);
+                
+                // Determine qualification status based on results
+                // If user has completed current round and there's a next round, show next round info
+                const hasNextRound = targetRoundNum <= totalRounds;
+                
+                if (hasNextRound && targetRoundInfo) {
+                    // User has completed current round - show next round status
+                    const targetRound = targetRoundNum;
+                    const isFinal = targetRound >= totalRounds;
+                    
+                    // Determine if user can continue:
+                    // 1. New user (no admin qualification needed): allow if within 24-hour window
+                    // 2. Existing user (has admin qualification): require both admin qualification AND within 24-hour window
+                    const canContinue = (!adminQualifiedToTargetRound && !hasStartedAnyRound) 
+                        ? canStartTargetRound 
+                        : adminQualifiedToTargetRound && canStartTargetRound;
+                    
+                    if (canContinue) {
+                        // Show continue button
+                        const buttonLabel = !hasStartedAnyRound 
+                            ? 'Start Competition' 
+                            : (isFinal ? 'Continue to Final Round' : `Continue to Round ${targetRound}`);
+                        qualifiedToRound = {
+                            roundNumber: targetRoundNum,
+                            isFinal,
+                            label: buttonLabel,
+                            status: 'active',
+                            scheduledDate: targetRoundScheduledDate
+                        };
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: SET qualifiedToRound (active):`, qualifiedToRound);
+                    } else if (hasWindowPassed) {
+                        // Show ended status - 24-hour window has passed
+                        const statusLabel = isFinal ? 'Final Round - Ended' : `Round ${targetRound} - Ended`;
+                        
+                        qualifiedToRound = {
+                            roundNumber: targetRound,
+                            isFinal,
+                            label: statusLabel,
+                            status: 'ended',
+                            scheduledDate: targetRoundScheduledDate
+                        };
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: SET qualifiedToRound (ended):`, qualifiedToRound);
+                    } else {
+                        // Show scheduled/pending status - waiting for date or admin qualification
+                        const statusLabel = adminQualifiedToTargetRound 
+                            ? (isFinal ? 'Final Round' : `Round ${targetRound}`)
+                            : (isFinal ? 'Final Round - Pending' : `Round ${targetRound} - Pending`);
+                        const statusType = adminQualifiedToTargetRound ? 'scheduled' : 'pending_qualification';
+                        
+                        qualifiedToRound = {
+                            roundNumber: targetRound,
+                            isFinal,
+                            label: statusLabel,
+                            status: statusType,
+                            scheduledDate: targetRoundScheduledDate
+                        };
+                        console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: SET qualifiedToRound (${statusType}):`, qualifiedToRound);
+                    }
+                } else {
+                    // No next round or no target info - don't show qualifiedToRound
+                    console.warn(`[QUALIFICATION DEBUG] Event ${eventId}: No next round or no target info`);
+                }
 
                 const roundStatus = currentRound ? getRoundStatus(currentRound, competition) : 'unknown';
 
@@ -194,8 +428,14 @@ function CompetitionDetail() {
                     roundStatus,
                     userPosition,
                     qualified,
+                    qualifiedToRound,
+                    qualifiedFromResults,
+                    qualifiedFromParticipant,
+                    hasResultsInCurrentRound,
+                    hasResultsInPreviousRound,
                     leaderboardLength: leaderboard.length,
-                    currentRoundNum
+                    currentRoundNum,
+                    participantData
                 };
             } catch (error) {
                 console.error(`Failed to fetch status for event ${eventId}:`, error);
@@ -203,8 +443,12 @@ function CompetitionDetail() {
                     roundStatus: 'unknown',
                     userPosition: -1,
                     qualified: false,
+                    qualifiedToRound: null,
+                    qualifiedFromResults: false,
+                    qualifiedFromParticipant: false,
                     leaderboardLength: 0,
-                    currentRoundNum: 1
+                    currentRoundNum: 1,
+                    participantData: null
                 };
             }
         }
@@ -1448,111 +1692,366 @@ function CompetitionDetail() {
                                 
                                 {(registration.events?.length > 1) ? (
                                     <>
-                                        <p className="text-zinc-700 dark:text-zinc-300 text-center">
-                                            Select an event to continue:
-                                        </p>
-                                        
-                                        {/* Event Cards - Single Selection */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {(registration.events || []).map(eventId => {
-                                                const status = eventStatuses[eventId] || {};
-                                                const roundStatus = status.roundStatus;
-                                                const userPosition = status.userPosition;
-                                                const qualified = status.qualified;
-                                                const isSelected = selectedEvent === eventId;
-                                                
-                                                let statusBadge = null;
-                                                let cardClass = 'border-zinc-200 dark:border-zinc-700';
-                                                
-                                                // Check if event is completed/ended
-                                                const isEventEnded = roundStatus === 'completed' || 
-                                                                    roundStatus === 'verification' || 
-                                                                    roundStatus === 'advancing' ||
-                                                                    roundStatus === 'eliminated';
-                                                
-                                                if (isSelected) {
-                                                    cardClass = 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500';
-                                                } else if (roundStatus === 'live') {
-                                                    statusBadge = <Badge className="bg-green-600">In Progress</Badge>;
-                                                    cardClass = 'border-green-500 bg-green-50 dark:bg-green-900/20 hover:border-green-400 cursor-pointer';
-                                                } else if (roundStatus === 'completed' || roundStatus === 'verification' || roundStatus === 'advancing') {
-                                                    if (qualified) {
-                                                        statusBadge = <Badge className="bg-yellow-600">Qualified ✓</Badge>;
-                                                        cardClass = 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 hover:border-yellow-400 cursor-pointer';
-                                                    } else if (userPosition > 0) {
-                                                        statusBadge = <Badge className="bg-red-600">Eliminated</Badge>;
-                                                        cardClass = 'border-red-500 bg-red-50 dark:bg-red-900/20 hover:border-red-400 cursor-pointer';
-                                                    } else {
-                                                        statusBadge = <Badge className="bg-gray-600">Completed</Badge>;
-                                                        cardClass = 'border-gray-400 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-300 cursor-pointer';
-                                                    }
-                                                } else if (roundStatus === 'waiting' || roundStatus === 'upcoming') {
-                                                    statusBadge = <Badge className="bg-blue-600">Not Started</Badge>;
-                                                    cardClass = 'border-blue-300 hover:border-blue-400 cursor-pointer';
-                                                } else if (compStatus.canCompete) {
-                                                    statusBadge = <Badge className="bg-blue-600">Ready</Badge>;
-                                                    cardClass = 'border-blue-500 hover:border-blue-400 cursor-pointer';
-                                                }
-                                                
+                                        {/* Check if any events are qualified to next round */}
+                                        {(() => {
+                                            const qualifiedEvents = (registration.events || []).filter(eventId => {
+                                                const status = eventStatuses[eventId];
+                                                const hasQualified = !!(status?.qualifiedToRound && Object.keys(status.qualifiedToRound).length > 0);
+                                                console.warn(`[UI DEBUG] Event ${eventId}: qualifiedToRound=`, status?.qualifiedToRound, ', hasQualified=', hasQualified);
+                                                return hasQualified;
+                                            });
+                                            
+                                            console.warn(`[UI DEBUG] qualifiedEvents count: ${qualifiedEvents.length}, events:`, qualifiedEvents);
+                                            
+                                            // If there are qualified events, show continue buttons directly
+                                            if (qualifiedEvents.length > 0) {
                                                 return (
-                                                    <div
-                                                        key={eventId}
-                                                        onClick={() => setSelectedEvent(eventId)}
-                                                        className={`p-4 rounded-lg border-2 transition-all ${cardClass}`}
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-3">
-                                                                <EventIcon eventId={eventId} size={24} />
-                                                                <div>
-                                                                    <p className="font-semibold text-zinc-900 dark:text-white">
-                                                                        {getEventName(eventId)}
-                                                                    </p>
-                                                                    {competition.rounds && competition.rounds.length > 0 && (
-                                                                        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                                                                            Round {status.currentRoundNum || 1}
+                                                    <div className="space-y-4">
+                                                        <p className="text-zinc-700 dark:text-zinc-300 text-center font-medium">
+                                                            You are qualified to the next round!
+                                                        </p>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {qualifiedEvents.map(eventId => {
+                                                                const status = eventStatuses[eventId];
+                                                                const roundInfo = status.qualifiedToRound;
+                                                                console.warn(`[UI QUALIFIED CARD] Event ${eventId}: roundInfo=`, roundInfo);
+                                                                const isActive = roundInfo?.status === 'active';
+                                                                const isEnded = roundInfo?.status === 'ended';
+                                                                const scheduledDate = roundInfo?.scheduledDate ? new Date(roundInfo.scheduledDate).toLocaleString() : null;
+                                                                console.warn(`[UI QUALIFIED CARD] Event ${eventId}: isActive=${isActive}, isEnded=${isEnded}, scheduledDate=${scheduledDate}`);
+                                                                
+                                                                return (
+                                                                    <div
+                                                                        key={eventId}
+                                                                        className={`p-4 rounded-lg border-2 ${isActive ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'border-gray-300 bg-gray-50 dark:bg-gray-800/50'}`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <EventIcon eventId={eventId} size={24} />
+                                                                                <div>
+                                                                                    <p className="font-semibold text-zinc-900 dark:text-white">
+                                                                                        {getEventName(eventId)}
+                                                                                    </p>
+                                                                                    <p className={`text-sm font-medium ${isActive ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                                                        {roundInfo.label}
+                                                                                        {!isActive && scheduledDate && ` - Starts ${scheduledDate}`}
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            {isActive ? (
+                                                                                <Badge className="bg-yellow-600 text-white">Qualified ✓</Badge>
+                                                                            ) : isEnded ? (
+                                                                                <Badge className="bg-red-500 text-white">Ended</Badge>
+                                                                            ) : (
+                                                                                <Badge className="bg-gray-500 text-white">Scheduled</Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        {isActive ? (
+                                                                            <Button
+                                                                                onClick={() => router.push(`/compete/${params.competitionId}/${eventId}`)}
+                                                                                className="w-full mt-4 bg-yellow-600 hover:bg-yellow-700"
+                                                                            >
+                                                                                <Play className="h-5 w-5 mr-2" />
+                                                                                Continue
+                                                                            </Button>
+                                                                        ) : (
+                                                                            <Button
+                                                                                disabled
+                                                                                className="w-full mt-4 bg-gray-400 cursor-not-allowed"
+                                                                            >
+                                                                                {isEnded ? (
+                                                                                    <Lock className="h-5 w-5 mr-2" />
+                                                                                ) : (
+                                                                                    <Lock className="h-5 w-5 mr-2" />
+                                                                                )}
+                                                                                {isEnded ? 'Ended' : (scheduledDate ? `Starts ${new Date(scheduledDate).toLocaleDateString()}` : 'Awaiting')}
+                                                                            </Button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        
+                                                        {/* Show non-qualified events below */}
+                                                        {(() => {
+                                                            const nonQualifiedEvents = (registration.events || []).filter(eventId => {
+                                                                const status = eventStatuses[eventId];
+                                                                return !status?.qualifiedToRound;
+                                                            });
+                                                            
+                                                            if (nonQualifiedEvents.length > 0) {
+                                                                return (
+                                                                    <>
+                                                                        <p className="text-zinc-700 dark:text-zinc-300 text-center mt-6">
+                                                                            Other events:
+                                                                         </p>
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            {nonQualifiedEvents.map(eventId => {
+                                                                                const status = eventStatuses[eventId] || {};
+                                                                                const roundStatus = status.roundStatus;
+                                                                                const userPosition = status.userPosition;
+                                                                                const qualified = status.qualified;
+                                                                                const qualifiedToRound = status.qualifiedToRound;
+                                                                                const hasResults = status.hasResultsInCurrentRound;
+                                                                                const isSelected = selectedEvent === eventId;
+                                                                                
+                                                                                let statusBadge = null;
+                                                                                let cardClass = 'border-zinc-200 dark:border-zinc-700';
+                                                                                
+                                                                                const isEventEnded = roundStatus === 'completed' || 
+                                                                                                    roundStatus === 'verification' || 
+                                                                                                    roundStatus === 'advancing' ||
+                                                                                                    roundStatus === 'eliminated';
+                                                                                
+                                                                                if (isSelected) {
+                                                                                    cardClass = 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500';
+                                                                                } else if (roundStatus === 'live') {
+                                                                                    statusBadge = <Badge className="bg-green-600">In Progress</Badge>;
+                                                                                    cardClass = 'border-green-500 bg-green-50 dark:bg-green-900/20 hover:border-green-400 cursor-pointer';
+                                                                                } else if (roundStatus === 'completed' || roundStatus === 'verification' || roundStatus === 'advancing') {
+                                                                                    // Check qualifiedToRound instead of just qualified
+                                                                                    if (qualifiedToRound) {
+                                                                                        statusBadge = <Badge className="bg-yellow-600">Qualified ✓</Badge>;
+                                                                                        cardClass = 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 hover:border-yellow-400 cursor-pointer';
+                                                                                    } else if (userPosition > 0) {
+                                                                                        statusBadge = <Badge className="bg-red-600">Eliminated</Badge>;
+                                                                                        cardClass = 'border-red-500 bg-red-50 dark:bg-red-900/20 hover:border-red-400 cursor-pointer';
+                                                                                    } else {
+                                                                                        statusBadge = <Badge className="bg-gray-600">Completed</Badge>;
+                                                                                        cardClass = 'border-gray-400 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-300 cursor-pointer';
+                                                                                    }
+                                                                                } else if (roundStatus === 'waiting' || roundStatus === 'upcoming') {
+                                                                                    statusBadge = <Badge className="bg-blue-600">Not Started</Badge>;
+                                                                                    cardClass = 'border-blue-300 hover:border-blue-400 cursor-pointer';
+                                                                                } else if (!hasResults && compStatus.canCompete) {
+                                                                                    // User hasn't started this event yet
+                                                                                    statusBadge = <Badge className="bg-blue-600">Ready</Badge>;
+                                                                                    cardClass = 'border-blue-500 hover:border-blue-400 cursor-pointer';
+                                                                                } else if (hasResults && qualifiedToRound) {
+                                                                                    // User has results but round not started yet
+                                                                                    const scheduledDate = qualifiedToRound.scheduledDate;
+                                                                                    statusBadge = <Badge className="bg-yellow-600">Qualified ✓</Badge>;
+                                                                                    cardClass = 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 cursor-pointer';
+                                                                                } else if (compStatus.canCompete) {
+                                                                                    statusBadge = <Badge className="bg-blue-600">Ready</Badge>;
+                                                                                    cardClass = 'border-blue-500 hover:border-blue-400 cursor-pointer';
+                                                                                }
+                                                                                
+                                                                                return (
+                                                                                    <div
+                                                                                        key={eventId}
+                                                                                        onClick={() => {
+                                                                                            console.warn(`[CARD CLICK] Event ${eventId} clicked, selectedEvent was=`, selectedEvent);
+                                                                                            setSelectedEvent(eventId);
+                                                                                        }}
+                                                                                        className={`p-4 rounded-lg border-2 transition-all ${cardClass}`}
+                                                                                    >
+                                                                                        <div className="flex items-center justify-between">
+                                                                                            <div className="flex items-center gap-3">
+                                                                                                <EventIcon eventId={eventId} size={24} />
+                                                                                                <div>
+                                                                                                    <p className="font-semibold text-zinc-900 dark:text-white">
+                                                                                                        {getEventName(eventId)}
+                                                                                                    </p>
+                                                                                                    {competition.rounds && competition.rounds.length > 0 && (
+                                                                                                        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                                                                                                            Round {status.currentRoundNum || 1}
+                                                                                                        </p>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            {statusBadge}
+                                                                                        </div>
+                                                                                        {userPosition > 0 && (
+                                                                                            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">
+                                                                                                Current Rank: #{userPosition}
+                                                                                            </p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })()}
+                                                    </div>
+                                                );
+                                            }
+                                            
+                                            return null;
+                                        })()}
+                                        
+                                        {/* Default: Show event selection if no qualified events */}
+                                        {(() => {
+                                            const hasQualifiedEvents = (registration.events || []).some(eventId => {
+                                                const status = eventStatuses[eventId];
+                                                return status?.qualifiedToRound;
+                                            });
+                                            
+                                            if (hasQualifiedEvents) return null;
+                                            
+                                            return (
+                                                <>
+                                                    <p className="text-zinc-700 dark:text-zinc-300 text-center">
+                                                        Select an event to continue:
+                                                    </p>
+                                                    
+                                                    {/* Event Cards - Single Selection */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {(registration.events || []).map(eventId => {
+                                                            const status = eventStatuses[eventId] || {};
+                                                            const roundStatus = status.roundStatus;
+                                                            const userPosition = status.userPosition;
+                                                            const qualified = status.qualified;
+                                                            const isSelected = selectedEvent === eventId;
+                                                            
+                                                            let statusBadge = null;
+                                                            let cardClass = 'border-zinc-200 dark:border-zinc-700';
+                                                            
+                                                            // Check if event is completed/ended
+                                                            const isEventEnded = roundStatus === 'completed' || 
+                                                                                roundStatus === 'verification' || 
+                                                                                roundStatus === 'advancing' ||
+                                                                                roundStatus === 'eliminated';
+                                                            
+                                                            if (isSelected) {
+                                                                cardClass = 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500';
+                                                            } else if (roundStatus === 'live') {
+                                                                statusBadge = <Badge className="bg-green-600">In Progress</Badge>;
+                                                                cardClass = 'border-green-500 bg-green-50 dark:bg-green-900/20 hover:border-green-400 cursor-pointer';
+                                                            } else if (roundStatus === 'completed' || roundStatus === 'verification' || roundStatus === 'advancing') {
+                                                                if (qualified) {
+                                                                    statusBadge = <Badge className="bg-yellow-600">Qualified ✓</Badge>;
+                                                                    cardClass = 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 hover:border-yellow-400 cursor-pointer';
+                                                                } else if (userPosition > 0) {
+                                                                    statusBadge = <Badge className="bg-red-600">Eliminated</Badge>;
+                                                                    cardClass = 'border-red-500 bg-red-50 dark:bg-red-900/20 hover:border-red-400 cursor-pointer';
+                                                                } else {
+                                                                    statusBadge = <Badge className="bg-gray-600">Completed</Badge>;
+                                                                    cardClass = 'border-gray-400 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-300 cursor-pointer';
+                                                                }
+                                                            } else if (roundStatus === 'waiting' || roundStatus === 'upcoming') {
+                                                                statusBadge = <Badge className="bg-blue-600">Not Started</Badge>;
+                                                                cardClass = 'border-blue-300 hover:border-blue-400 cursor-pointer';
+                                                            } else if (compStatus.canCompete) {
+                                                                statusBadge = <Badge className="bg-blue-600">Ready</Badge>;
+                                                                cardClass = 'border-blue-500 hover:border-blue-400 cursor-pointer';
+                                                            }
+                                                            
+                                                            return (
+                                                                <div
+                                                                    key={eventId}
+                                                                    onClick={() => {
+                                                                        console.warn(`[CARD CLICK - QUALIFIED] Event ${eventId} clicked, selectedEvent was=`, selectedEvent);
+                                                                        setSelectedEvent(eventId);
+                                                                    }}
+                                                                    className={`p-4 rounded-lg border-2 transition-all ${cardClass}`}
+                                                                >
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <EventIcon eventId={eventId} size={24} />
+                                                                            <div>
+                                                                                <p className="font-semibold text-zinc-900 dark:text-white">
+                                                                                    {getEventName(eventId)}
+                                                                                </p>
+                                                                                {competition.rounds && competition.rounds.length > 0 && (
+                                                                                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                                                                                        Round {
+                                                                                            status.hasResultsInCurrentRound || status.hasResultsInPreviousRound 
+                                                                                                ? status.currentRoundNum 
+                                                                                                : 1
+                                                                                        }
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        {statusBadge}
+                                                                    </div>
+                                                                    {userPosition > 0 && (
+                                                                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">
+                                                                            Current Rank: #{userPosition}
                                                                         </p>
                                                                     )}
                                                                 </div>
-                                                            </div>
-                                                            {statusBadge}
-                                                        </div>
-                                                        {userPosition > 0 && (
-                                                            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">
-                                                                Current Rank: #{userPosition}
-                                                            </p>
-                                                        )}
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
 
-                                        {/* Action Button */}
-                                        {selectedEvent && (
-                                            <div className="text-center pt-4">
-                                                {compStatus.canCompete ? (
-                                                    <Button
-                                                        onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
-                                                        className="bg-blue-600 hover:bg-blue-700 py-6 px-8 text-lg"
-                                                    >
-                                                        <Play className="h-5 w-5 mr-2" />
-                                                        Start Competition
-                                                    </Button>
-                                                ) : compStatus.status === 'upcoming' ? (
-                                                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg inline-flex items-center gap-2">
-                                                        <Lock className="h-5 w-5" />
-                                                        <span>{compStatus.message}</span>
-                                                    </div>
-                                                ) : (
-                                                    <Button
-                                                        onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
-                                                        className="bg-gray-600 hover:bg-gray-700 py-6 px-8 text-lg"
-                                                    >
-                                                        <Eye className="h-5 w-5 mr-2" />
-                                                        View Details
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        )}
+                                                    {/* Action Button - Debug */}
+                                                    {selectedEvent ? console.warn(`[BUTTON CONTAINER] selectedEvent=`, selectedEvent, 'events length=', registration.events?.length) : null}
+                                                    {selectedEvent && (
+                                                        <div className="text-center pt-4">
+                                                            {(() => {
+                                                                console.warn(`[ACTION BUTTON SECTION] Rendering! selectedEvent=`, selectedEvent);
+                                                                const status = eventStatuses[selectedEvent] || {};
+                                                                const hasStarted = status.hasResultsInCurrentRound || status.hasResultsInPreviousRound;
+                                                                const qualifiedToRound = status.qualifiedToRound;
+                                                                
+                                                                console.warn(`[ACTION BUTTON] selectedEvent=${selectedEvent}, hasStarted=${hasStarted}, qualifiedToRound=${qualifiedToRound ? 'exists' : 'null'}, compStatus.canCompete=${compStatus.canCompete}`);
+                                                                
+                                                                // If qualified to next round and active, show Continue
+                                                                if (qualifiedToRound && qualifiedToRound.status === 'active') {
+                                                                    return (
+                                                                        <Button
+                                                                            onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
+                                                                            className="bg-yellow-600 hover:bg-yellow-700 py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Play className="h-5 w-5 mr-2" />
+                                                                            Continue
+                                                                        </Button>
+                                                                    );
+                                                                }
+                                                                
+                                                                // If user hasn't started this event, always allow starting
+                                                                if (!hasStarted && compStatus.canCompete) {
+                                                                    return (
+                                                                        <Button
+                                                                            onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
+                                                                            className="bg-blue-600 hover:bg-blue-700 py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Play className="h-5 w-5 mr-2" />
+                                                                            Start Competition
+                                                                        </Button>
+                                                                    );
+                                                                }
+                                                                
+                                                                // Default - use compStatus
+                                                                if (compStatus.canCompete) {
+                                                                    return (
+                                                                        <Button
+                                                                            onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
+                                                                            className="bg-blue-600 hover:bg-blue-700 py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Play className="h-5 w-5 mr-2" />
+                                                                            Start Competition
+                                                                        </Button>
+                                                                    );
+                                                                } else if (compStatus.status === 'upcoming') {
+                                                                    return (
+                                                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg inline-flex items-center gap-2">
+                                                                            <Lock className="h-5 w-5" />
+                                                                            <span>{compStatus.message}</span>
+                                                                        </div>
+                                                                    );
+                                                                } else {
+                                                                    return (
+                                                                        <Button
+                                                                            onClick={() => router.push(`/compete/${params.competitionId}/${selectedEvent}`)}
+                                                                            className="bg-gray-600 hover:bg-gray-700 py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Eye className="h-5 w-5 mr-2" />
+                                                                            View Details
+                                                                        </Button>
+                                                                    );
+                                                                }
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                     </>
                                 ) : (
                                     <>
@@ -1577,6 +2076,87 @@ function CompetitionDetail() {
                                                     const isEventEnded = roundStatus === 'completed' || 
                                                                         roundStatus === 'verification' || 
                                                                         roundStatus === 'advancing';
+                                                    const qualifiedToRound = status.qualifiedToRound;
+                                                    const hasResults = status.hasResultsInCurrentRound;
+                                                    
+                                                    // If qualified to next round, show appropriate button
+                                                    if (qualifiedToRound) {
+                                                        const isActive = qualifiedToRound.status === 'active';
+                                                        const isEnded = qualifiedToRound.status === 'ended';
+                                                        const scheduledDate = qualifiedToRound.scheduledDate;
+                                                        
+                                                        if (isActive) {
+                                                            return (
+                                                                <div className="space-y-3">
+                                                                    <div className="inline-flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300 px-4 py-2 rounded-lg">
+                                                                        <Badge className="bg-yellow-600 text-white mr-2">Qualified ✓</Badge>
+                                                                        <span className="font-medium">{qualifiedToRound.label}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <Button
+                                                                            onClick={() => router.push(`/compete/${params.competitionId}/${eventId}`)}
+                                                                            className="bg-yellow-600 hover:bg-yellow-700 py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Play className="h-5 w-5 mr-2" />
+                                                                            Continue
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        } else if (isEnded) {
+                                                            // Round has ended - 24-hour window passed
+                                                            return (
+                                                                <div className="space-y-3">
+                                                                    <div className="inline-flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-2 rounded-lg">
+                                                                        <Badge className="bg-red-500 text-white mr-2">Ended</Badge>
+                                                                        <span className="font-medium">{qualifiedToRound.label}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <Button
+                                                                            disabled
+                                                                            className="bg-gray-400 cursor-not-allowed py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Lock className="h-5 w-5 mr-2" />
+                                                                            Ended
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        } else {
+                                                            // Round scheduled but not started
+                                                            return (
+                                                                <div className="space-y-3">
+                                                                    <div className="inline-flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg">
+                                                                        <Badge className="bg-gray-500 text-white mr-2">Scheduled</Badge>
+                                                                        <span className="font-medium">{qualifiedToRound.label}</span>
+                                                                        {scheduledDate && <span className="text-sm">- Starts {new Date(scheduledDate).toLocaleString()}</span>}
+                                                                    </div>
+                                                                    <div>
+                                                                        <Button
+                                                                            disabled
+                                                                            className="bg-gray-400 cursor-not-allowed py-6 px-8 text-lg"
+                                                                        >
+                                                                            <Lock className="h-5 w-5 mr-2" />
+                                                                            {scheduledDate ? `Starts ${new Date(scheduledDate).toLocaleDateString()}` : 'Awaiting'}
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                    }
+                                                    
+                                                    // If user hasn't started this event yet, show Start Competition
+                                                    if (!hasResults && compStatus.canCompete) {
+                                                        return (
+                                                            <Button
+                                                                onClick={() => router.push(`/compete/${params.competitionId}/${eventId}`)}
+                                                                className="bg-blue-600 hover:bg-blue-700 py-6 px-8 text-lg"
+                                                            >
+                                                                <Play className="h-5 w-5 mr-2" />
+                                                                Start Competition
+                                                            </Button>
+                                                        );
+                                                    }
                                                     
                                                     if (compStatus.canCompete) {
                                                         return (

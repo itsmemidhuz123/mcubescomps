@@ -252,32 +252,45 @@ service cloud.firestore {
     }
     
     // Timer Sessions (per-user timing data)
+    // Old flat structure (for backward compatibility during migration)
     match /users/{userId}/timerSessions/{sessionId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
     
-    // Timer Solves - Cloud Sync
+    // Timer Sessions - Keep flat structure (no nesting)
+    // Path: users/{userId}/timerSessions/{sessionId}
+    
+    // User Settings - Allow users to read/write their own settings
+    match /users/{userId}/settings/{documentId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Timer Solves - Cloud Sync (OLD flat structure - for backward compatibility)
     match /timerSolves/{userId}/solves/{solveId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
     
-    // Matchmaking Queue - Users can read all and manage their own entry
+    // NEW: Timer Solves - Cloud Sync (nested by event and session)
+    match /timerSolves/{userId}/{eventId}/{sessionId}/solves/{solveId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Matchmaking Queue - Users can read all and update any entry (for matchmaking)
     match /matchmakingQueue/{uid} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == uid;
-      // Allow server-side writes without auth (for Next.js API routes)
-      allow create, update: if !isSignedIn() && request.resource.data.keys().hasAll(['userId', 'username', 'event']);
+      allow write: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
     
     // Quick Match - Matches collection for real-time matchmaking
     match /matches/{matchId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
-      // Allow server-side writes without auth (for Next.js API routes)
-      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['matchId', 'player1', 'player2']);
-      allow update: if !isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
     }
     
     // Battles collection - Private battles (link-only access)
@@ -300,11 +313,7 @@ service cloud.firestore {
         )
       );
       
-      // Allow server-side writes without auth (for Next.js API routes)
-      allow create: if !isSignedIn() && request.resource.data.keys().hasAll(['battleId', 'player1', 'event']);
-      allow update: if !isSignedIn();
-      
-      // Only signed in users can create battles (when authenticated)
+      // Only signed in users can create battles
       allow create: if isSignedIn();
       
       // Only participants, creator, or admin can update
@@ -319,17 +328,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isAdmin();
     }
     
-    // Battle solves subcollection - Only participants can write (spectators can read, admin can read all)
+    // Battle solves subcollection - Allow all authenticated users to read/write for testing
     match /battles/{battleId}/solves/{uid} {
-      allow read: if isSignedIn() && (
-        get(/databases/$(database)/documents/battles/$(battleId)).data.player1 == request.auth.uid ||
-        get(/databases/$(database)/documents/battles/$(battleId)).data.player2 == request.auth.uid ||
-        get(/databases/$(database)/documents/battles/$(battleId)).data.createdBy == request.auth.uid ||
-        get(/databases/$(database)/documents/battles/$(battleId)).data.allowSpectators == true ||
-        isAdmin()
-      );
-      allow write: if isSignedIn() && request.auth.uid == uid;
-      allow delete: if isSignedIn() && isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+      allow delete: if isSignedIn();
     }
     
     // Battle Reports - Authenticated users can create, admins can read/write

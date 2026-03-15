@@ -59,6 +59,27 @@ function formatTime(ms) {
     return `${seconds}.${centiseconds.toString().padStart(2, '0')}s`;
 }
 
+function parseDate(dateValue) {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) return dateValue;
+    if (typeof dateValue.toDate === 'function') return dateValue.toDate();
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDate(date) {
+    if (!date) return '-';
+    const day = date.getDate();
+    const month = date.toLocaleString('en-GB', { month: 'short' });
+    const year = date.getFullYear();
+    const time = date.toLocaleTimeString('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+    });
+    return `${day} ${month} ${year}, ${time}`;
+}
+
 export default function ResultsManagementPage() {
     const { user, isAdmin, isModerator, hasPermission, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -85,6 +106,8 @@ export default function ResultsManagementPage() {
     const [manualFlag, setManualFlag] = useState('');
 
     const [verificationQueue, setVerificationQueue] = useState([]);
+    const [videoRoundFilter, setVideoRoundFilter] = useState('all');
+    const [videoSubmissionsMap, setVideoSubmissionsMap] = useState({});
     const [simulationData, setSimulationData] = useState(null);
 
     useEffect(() => {
@@ -105,6 +128,12 @@ export default function ResultsManagementPage() {
             fetchResults(competition, selectedRound, selectedEvent);
         }
     }, [selectedRound, selectedEvent, competition, user, isAdmin]);
+
+    useEffect(() => {
+        if (user && isAdmin && params.competitionId) {
+            fetchVerificationQueue(videoRoundFilter);
+        }
+    }, [videoRoundFilter, user, isAdmin, params.competitionId]);
 
     async function fetchCompetitionData() {
         setLoading(true);
@@ -165,8 +194,8 @@ export default function ResultsManagementPage() {
                 if ((d.roundNumber === undefined || d.roundNumber === null)) {
                     return currentRoundNum === 1;
                 }
-                // Exact match for current round
-                return d.roundNumber === currentRoundNum;
+                // Exact match for current round (handle type mismatch)
+                return Number(d.roundNumber) === currentRoundNum;
             });
 
             console.log('Results after filtering:', resultsData.length);
@@ -196,6 +225,19 @@ export default function ResultsManagementPage() {
 
             setUsers(usersCache);
             setResults(resultsData);
+
+            // Fetch video submissions for this round and event
+            const videoSnapshot = await getDocs(collection(db, 'videoSubmissions'));
+            const videoMap = {};
+            videoSnapshot.docs.forEach(docSnap => {
+                const vid = docSnap.data();
+                if (vid.competitionId === params.competitionId) {
+                    const key = `${vid.userId}_${Number(vid.roundNumber) || 1}_${vid.eventId}`;
+                    videoMap[key] = { id: docSnap.id, ...vid };
+                }
+            });
+            setVideoSubmissionsMap(videoMap);
+            
             console.log('Results set:', resultsData.length);
         } catch (error) {
             console.error('Error fetching results:', error);
@@ -203,17 +245,25 @@ export default function ResultsManagementPage() {
         }
     }
 
-    async function fetchVerificationQueue() {
+    async function fetchVerificationQueue(roundFilter = 'all') {
         // Fetch all and filter client-side
         const snapshot = await getDocs(collection(db, 'videoSubmissions'));
-        const allSubmissions = snapshot.docs
+        let allSubmissions = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(d => d.competitionId === params.competitionId)
-            .sort((a, b) => {
-                const aTime = a.submittedAt?.toDate?.() || new Date(a.submittedAt || 0);
-                const bTime = b.submittedAt?.toDate?.() || new Date(b.submittedAt || 0);
-                return bTime - aTime;
-            });
+            .filter(d => d.competitionId === params.competitionId);
+        
+        // Apply round filter if specified
+        if (roundFilter !== 'all') {
+            const roundNum = parseInt(roundFilter);
+            allSubmissions = allSubmissions.filter(d => Number(d.roundNumber) === roundNum);
+        }
+        
+        // Sort by submission date
+        allSubmissions.sort((a, b) => {
+            const aTime = parseDate(a.videoSubmittedAt || a.createdAt) || new Date(0);
+            const bTime = parseDate(b.videoSubmittedAt || b.createdAt) || new Date(0);
+            return bTime - aTime;
+        });
         setVerificationQueue(allSubmissions);
     }
 
@@ -963,6 +1013,7 @@ export default function ResultsManagementPage() {
                                             <TableHead>Average</TableHead>
                                             <TableHead>Best</TableHead>
                                             <TableHead>Score</TableHead>
+                                            <TableHead>Video</TableHead>
                                             <TableHead>Flag</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Actions</TableHead>
@@ -993,6 +1044,44 @@ export default function ResultsManagementPage() {
                                                             {result.suspicionScore || result.anomalyScore}
                                                         </Badge>
                                                     )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {(() => {
+                                                        const key = `${result.userId}_${Number(result.roundNumber) || 1}_${result.eventId}`;
+                                                        const video = videoSubmissionsMap[key];
+                                                        if (!video) return <span className="text-gray-400">-</span>;
+                                                        const status = video.verificationStatus;
+                                                        if (status === 'approved') {
+                                                            return (
+                                                                <Badge className="bg-green-100 text-green-700">
+                                                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                                                    Verified
+                                                                </Badge>
+                                                            );
+                                                        }
+                                                        if (status === 'rejected') {
+                                                            return (
+                                                                <Badge variant="destructive">
+                                                                    <XCircle className="h-3 w-3 mr-1" />
+                                                                    Rejected
+                                                                </Badge>
+                                                            );
+                                                        }
+                                                        if (status === 'reupload_requested') {
+                                                            return (
+                                                                <Badge variant="outline" className="text-orange-600">
+                                                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                                                    Reupload
+                                                                </Badge>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <Badge variant="outline" className="text-yellow-600">
+                                                                <Clock className="h-3 w-3 mr-1" />
+                                                                Pending
+                                                            </Badge>
+                                                        );
+                                                    })()}
                                                 </TableCell>
                                                 <TableCell>
                                                     {result.flagged || result.autoFlag || result.manualFlag ? (
@@ -1045,6 +1134,27 @@ export default function ResultsManagementPage() {
                                     Video Submission Verification
                                 </CardTitle>
                                 <CardDescription>Review users who submitted video evidence</CardDescription>
+                                <div className="flex items-center gap-4 mt-4">
+                                    <div className="flex items-center gap-2">
+                                        <Label htmlFor="videoRoundFilter" className="text-sm">Filter by Round:</Label>
+                                        <Select value={videoRoundFilter} onValueChange={setVideoRoundFilter}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="All Rounds" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Rounds</SelectItem>
+                                                {competition?.rounds?.map(round => (
+                                                    <SelectItem key={round.roundNumber} value={String(round.roundNumber)}>
+                                                        {round.isFinal ? 'Final' : `Round ${round.roundNumber}`}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <span className="text-sm text-gray-500">
+                                        {verificationQueue.length} submission{verificationQueue.length !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 {verificationQueue.length === 0 ? (
@@ -1081,7 +1191,10 @@ export default function ResultsManagementPage() {
                                                         </a>
                                                     </TableCell>
                                                     <TableCell>
-                                                        {new Date(sub.submittedAt?.toDate?.() || sub.submittedAt).toLocaleString()}
+                                                        {(() => {
+                                                            const date = parseDate(sub.videoSubmittedAt || sub.createdAt);
+                                                            return formatDate(date);
+                                                        })()}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge variant={sub.verificationStatus === 'approved' ? 'default' : sub.verificationStatus === 'rejected' ? 'destructive' : 'outline'}>

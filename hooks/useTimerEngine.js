@@ -96,6 +96,10 @@ export function useTimerEngine(settings = {}) {
       case TIMER_STATES.ARMED:
         startInspection();
         break;
+      case TIMER_STATES.INSPECTION:
+        clearInterval(inspectionIntervalRef.current);
+        startTimer();
+        break;
       case TIMER_STATES.RUNNING:
         stop();
         break;

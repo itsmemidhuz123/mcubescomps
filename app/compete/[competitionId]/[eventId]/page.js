@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, collection, addDoc, query, where, getDocs, setDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -116,18 +116,18 @@ function TimerPage() {
         initializeCompetition();
     }, [user, params.competitionId, params.eventId]);
 
-    async function fetchLeaderboard(compData, eventId) {
+    async function fetchLeaderboard(compData, eventId, participantData) {
         try {
             if (compData.mode !== CompetitionMode.TOURNAMENT) {
                 return;
             }
 
-            const currentRound = compData.currentRound || 1;
+            const leaderboardRound = participantData?.currentRound || compData.currentRound || 1;
             const roundResultsQuery = query(
                 collection(db, 'roundResults'),
                 where('competitionId', '==', params.competitionId),
                 where('eventId', '==', eventId),
-                where('roundNumber', '==', currentRound)
+                where('roundNumber', '==', leaderboardRound)
             );
             const snapshot = await getDocs(roundResultsQuery);
             const results = snapshot.docs.map(doc => doc.data());
@@ -235,36 +235,64 @@ function TimerPage() {
                 return;
             }
 
-            // Check verification requirement
-            const currentRound = compData.currentRound || 1;
-            const requiresVerification = compData.verificationMandatory &&
-                currentRound >= (compData.verificationRequiredFromRound || 1);
-
-            if (requiresVerification) {
-                const userProfileQuery = query(collection(db, 'users'), where('uid', '==', user.uid));
-                const userProfileSnapshot = await getDocs(userProfileQuery);
-                const isVerified = !userProfileSnapshot.empty && userProfileSnapshot.docs[0].data().verificationStatus === 'VERIFIED';
-
-                if (!isVerified) {
-                    alert(`ID Verification Required\n\nYou must complete verification before starting Round ${currentRound}.\n\nContinue verification from your profile.`);
-                    router.push(`/competition/${params.competitionId}`);
-                    return;
-                }
-            }
-
             // Tournament mode checks
+            let participantData = null;
             if (compData.mode === CompetitionMode.TOURNAMENT) {
                 const participantId = `${user.uid}_${params.competitionId}`;
-                const participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+                let participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
 
                 if (!participantDoc.exists()) {
-                    alert('Tournament participant record not found. Please re-register.');
-                    router.push(`/competition/${params.competitionId}`);
-                    return;
+                    // Check if user has a registration - if so, create tournamentParticipants
+                    const regQuery = query(
+                        collection(db, 'registrations'),
+                        where('userId', '==', user.uid),
+                        where('competitionId', '==', params.competitionId)
+                    );
+                    const regSnapshot = await getDocs(regQuery);
+                    
+                    if (!regSnapshot.empty) {
+                        // User has registration - create tournamentParticipants document
+                        const regData = regSnapshot.docs[0].data();
+                        await setDoc(doc(db, 'tournamentParticipants', participantId), {
+                            competitionId: params.competitionId,
+                            userId: user.uid,
+                            userEmail: user.email,
+                            userName: regData.userName || 'Unknown',
+                            wcaStyleId: regData.wcaStyleId || 'N/A',
+                            currentRound: 1,
+                            qualified: false,
+                            eliminated: false,
+                            registeredEvents: regData.events || [],
+                            createdAt: new Date().toISOString()
+                        });
+                        // Re-fetch the document
+                        participantDoc = await getDoc(doc(db, 'tournamentParticipants', participantId));
+                    } else {
+                        alert('Tournament participant record not found. Please register first.');
+                        router.push(`/competition/${params.competitionId}`);
+                        return;
+                    }
                 }
 
-                const participantData = participantDoc.data();
+                participantData = participantDoc.data();
                 setTournamentParticipant({ id: participantDoc.id, ...participantData });
+
+                // Check verification requirement using participant's current round
+                const verificationRound = participantData.currentRound || 1;
+                const requiresVerification = compData.verificationMandatory &&
+                    verificationRound >= (compData.verificationRequiredFromRound || 1);
+
+                if (requiresVerification) {
+                    const userProfileQuery = query(collection(db, 'users'), where('uid', '==', user.uid));
+                    const userProfileSnapshot = await getDocs(userProfileQuery);
+                    const isVerified = !userProfileSnapshot.empty && userProfileSnapshot.docs[0].data().verificationStatus === 'VERIFIED';
+
+                    if (!isVerified) {
+                        alert(`ID Verification Required\n\nYou must complete verification before starting Round ${verificationRound}.\n\nContinue verification from your profile.`);
+                        router.push(`/competition/${params.competitionId}`);
+                        return;
+                    }
+                }
 
                 // Check if eliminated
                 if (participantData.eliminated) {
@@ -276,7 +304,10 @@ function TimerPage() {
                 }
 
                 // Check current round eligibility
-                const currentRound = compData.currentRound || 1;
+                const currentRound = compData.mode === CompetitionMode.TOURNAMENT 
+                    ? participantData.currentRound 
+                    : compData.currentRound || 1;
+                console.log('[ROUND DEBUG] currentRound determined as:', currentRound, 'participantData.currentRound:', participantData?.currentRound, 'compData.currentRound:', compData.currentRound);
                 const round = compData.rounds?.find(r => r.roundNumber === currentRound);
 
                 if (participantData.currentRound < currentRound) {
@@ -289,7 +320,36 @@ function TimerPage() {
 
                 // Check round status
                 if (round) {
-                    const roundStatus = getRoundStatus(round, compData);
+                    let roundStatus;
+                    
+                    // In tournament mode, check based on user's qualified round and 24-hour window
+                    if (compData.mode === CompetitionMode.TOURNAMENT && participantData) {
+                        const userQualifiedRound = participantData.currentRound || 1;
+                        const roundScheduledDate = round.scheduledDate ? new Date(round.scheduledDate).getTime() : null;
+                        const now = Date.now();
+                        
+                        // Check if user is qualified for this round
+                        if (userQualifiedRound < round.roundNumber) {
+                            roundStatus = 'locked';
+                        } else if (roundScheduledDate) {
+                            // Check 24-hour window from scheduled date
+                            const windowEnd = roundScheduledDate + (24 * 60 * 60 * 1000);
+                            if (now < roundScheduledDate) {
+                                roundStatus = 'waiting';
+                            } else if (now >= windowEnd) {
+                                roundStatus = 'completed'; // Window passed
+                            } else {
+                                roundStatus = 'live'; // Within 24-hour window
+                            }
+                        } else {
+                            // No scheduled date - allow access if qualified
+                            roundStatus = userQualifiedRound >= round.roundNumber ? 'live' : 'locked';
+                        }
+                    } else {
+                        roundStatus = getRoundStatus(round, compData);
+                    }
+
+                    console.log('[ROUND STATUS DEBUG] Round', round.roundNumber, 'status:', roundStatus, 'scheduledDate:', round.scheduledDate);
 
                     if (roundStatus === 'waiting') {
                         setRoundLocked(true);
@@ -315,10 +375,10 @@ function TimerPage() {
                 }
             }
 
-            await loadSolvesAndCheckDNF(compData, config);
+            await loadSolvesAndCheckDNF(compData, config, participantData);
 
             // Fetch leaderboard for round status
-            await fetchLeaderboard(compData, params.eventId);
+            await fetchLeaderboard(compData, params.eventId, participantData);
 
         } catch (error) {
             console.error('Failed to initialize:', error);
@@ -328,13 +388,31 @@ function TimerPage() {
         }
     }
 
-    async function loadSolvesAndCheckDNF(compData, config) {
-        const solvesQuery = query(
-            collection(db, 'solves'),
-            where('userId', '==', user.uid),
-            where('competitionId', '==', params.competitionId),
-            where('eventId', '==', params.eventId)
-        );
+    async function loadSolvesAndCheckDNF(compData, config, participantData) {
+        // Determine which round to load solves for
+        const scrambleRound = compData.mode === CompetitionMode.TOURNAMENT && participantData
+            ? participantData.currentRound
+            : compData.currentRound || 1;
+        
+        // Build query - in tournament mode, filter by round
+        let solvesQuery;
+        if (compData.mode === CompetitionMode.TOURNAMENT && participantData) {
+            solvesQuery = query(
+                collection(db, 'solves'),
+                where('userId', '==', user.uid),
+                where('competitionId', '==', params.competitionId),
+                where('eventId', '==', params.eventId),
+                where('round', '==', scrambleRound)
+            );
+        } else {
+            solvesQuery = query(
+                collection(db, 'solves'),
+                where('userId', '==', user.uid),
+                where('competitionId', '==', params.competitionId),
+                where('eventId', '==', params.eventId)
+            );
+        }
+        
         const solvesSnapshot = await getDocs(solvesQuery);
         const solves = solvesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         solves.sort((a, b) => a.attemptNumber - b.attemptNumber);
@@ -387,7 +465,9 @@ function TimerPage() {
                 if (data.revealed && !data.submitted) {
                     await saveSolve(0, 'DNF', true, 'PAGE_REFRESH');
                     alert('Your previous attempt was marked as DNF because you refreshed after revealing the scramble.');
-                    await loadSolvesAndCheckDNF(compData, config);
+                    // Delete reveal document to prevent infinite loop
+                    await deleteDoc(doc(db, 'scrambleReveals', revealKey));
+                    await loadSolvesAndCheckDNF(compData, config, participantData);
                     return;
                 }
             }
@@ -395,32 +475,38 @@ function TimerPage() {
             console.error('Error checking reveal:', e);
         }
 
-        // Load scramble
-        const currentRound = compData.currentRound || 1;
+        // Load scramble - reuse scrambleRound from earlier in this function
+        console.log('[SCRAMBLE DEBUG] Loading scrambles for round:', scrambleRound, 'participantData:', participantData?.currentRound, 'compData.currentRound:', compData.currentRound);
         let scramblesData;
 
         // Tournament mode: scrambles are organized by round
         if (compData.mode === CompetitionMode.TOURNAMENT) {
-            scramblesData = compData?.scrambles?.[params.eventId]?.[currentRound];
+            scramblesData = compData?.scrambles?.[params.eventId]?.[scrambleRound];
         } else {
             // Standard mode: flat scramble structure
             scramblesData = compData?.scrambles?.[params.eventId];
         }
 
-        console.log('Scrambles data for', params.eventId, 'Round', currentRound, ':', scramblesData);
+        console.log('Scrambles data for', params.eventId, 'Round', scrambleRound, ':', scramblesData);
 
         if (scramblesData) {
             let scramblesArray = [];
             if (Array.isArray(scramblesData)) {
                 scramblesArray = scramblesData;
+            } else if (typeof scramblesData === 'string') {
+                // Handle legacy format where scramble was stored as a single string
+                scramblesArray = [scramblesData];
             } else if (typeof scramblesData === 'object') {
                 scramblesArray = Object.entries(scramblesData)
                     .sort(([a], [b]) => parseInt(a) - parseInt(b))
                     .map(([, v]) => v);
             }
             console.log('Parsed scrambles array:', scramblesArray, 'Next attempt:', nextAttempt);
+            console.log('[SCRAMBLE DEBUG] Setting scramble:', scramblesArray[nextAttempt - 1], 'for attempt', nextAttempt);
             if (scramblesArray.length >= nextAttempt && scramblesArray[nextAttempt - 1]) {
                 setCurrentScramble(scramblesArray[nextAttempt - 1]);
+            } else {
+                console.log('[SCRAMBLE ERROR] No scramble found! Array length:', scramblesArray.length, 'Attempt:', nextAttempt);
             }
         }
     }
@@ -608,6 +694,11 @@ function TimerPage() {
             const isFlagged = antiCheatReport.flagged || isRefreshDNF;
             const flagLevel = antiCheatReport.anomalyScore > 50 ? 'high' : antiCheatReport.anomalyScore > 20 ? 'medium' : antiCheatReport.anomalyScore > 0 ? 'low' : 'none';
 
+            // Determine current round for this solve (in tournament mode)
+            const currentRound = competition?.mode === CompetitionMode.TOURNAMENT && tournamentParticipant
+                ? tournamentParticipant.currentRound
+                : competition?.currentRound || 1;
+
             // Save solve to Firestore with anti-cheat data
             await addDoc(collection(db, 'solves'), {
                 userId: user.uid,
@@ -620,6 +711,7 @@ function TimerPage() {
                 deviceInfo: deviceInfo || {},
                 competitionId: params.competitionId,
                 eventId: params.eventId,
+                round: currentRound,
                 attemptNumber: currentAttempt,
                 time: appliedPenalty === 'DNF' ? null : Math.round(time),
                 finalTime: finalTime === Infinity ? null : finalTime,
@@ -684,12 +776,13 @@ function TimerPage() {
                         deviceInfo: deviceInfo || {},
                         competitionId: params.competitionId,
                         eventId: params.eventId,
+                        round: currentRound,
                         attemptNumber: currentAttempt + i,
                         time: null,
                         finalTime: null,
                         penalty: 'DNF',
                         reason: 'CUT_OFF_EXCEEDED',
-                        scramble: getScrambleForAttempt(currentAttempt + i),
+                        scramble: getScrambleForAttempt(currentAttempt + i, tournamentParticipant),
                         isRefreshDNF: false,
                         flagged: false,
                         flagReason: '',
@@ -729,7 +822,7 @@ function TimerPage() {
                     setPenalty('none');
                     setAntiCheatWarning('');
 
-                    const nextScramble = getScrambleForAttempt(nextAttempt);
+                    const nextScramble = getScrambleForAttempt(nextAttempt, tournamentParticipant);
                     if (nextScramble) {
                         setCurrentScramble(nextScramble);
                     }
@@ -822,13 +915,13 @@ function TimerPage() {
 
             // For tournament mode, also save to roundResults
             if (competition?.mode === CompetitionMode.TOURNAMENT) {
-                const currentRound = competition.currentRound || 1;
-                const round = competition.rounds?.find(r => r.roundNumber === currentRound);
+                const resultRound = tournamentParticipant?.currentRound || competition.currentRound || 1;
+                const round = competition.rounds?.find(r => r.roundNumber === resultRound);
                 const requireVerification = round?.requireVerification !== false;
 
                 const roundResultData = {
                     ...resultData,
-                    roundNumber: currentRound,
+                    roundNumber: resultRound,
                     verified: false,
                     flagged: anyFlagged,
                     videoUrl: null
@@ -844,9 +937,11 @@ function TimerPage() {
     // Check video requirement from competition settings
     useEffect(() => {
         if (competition) {
-            const currentRound = competition.currentRound || 1;
+            const videoRound = competition?.mode === CompetitionMode.TOURNAMENT && tournamentParticipant
+                ? tournamentParticipant.currentRound
+                : competition.currentRound || 1;
             const videoRequiredFromRound = competition.videoRequiredFromRound || 1;
-            const isVideoRequired = competition.videoRequired === true && currentRound >= videoRequiredFromRound;
+            const isVideoRequired = competition.videoRequired === true && videoRound >= videoRequiredFromRound;
             setVideoRequired(isVideoRequired);
 
             // Set 24 hour deadline
@@ -854,7 +949,7 @@ function TimerPage() {
             deadline.setHours(deadline.getHours() + 24);
             setSubmissionDeadline(deadline);
         }
-    }, [competition]);
+    }, [competition, tournamentParticipant]);
 
     // Submit video URL
     async function handleVideoSubmit() {
@@ -869,6 +964,10 @@ function TimerPage() {
 
         setSubmittingVideo(true);
         try {
+            const videoRound = competition?.mode === CompetitionMode.TOURNAMENT 
+                ? tournamentParticipant?.currentRound || 1 
+                : competition?.currentRound || 1;
+            
             await addDoc(collection(db, 'videoSubmissions'), {
                 userId: user.uid,
                 userEmail: user.email,
@@ -876,7 +975,7 @@ function TimerPage() {
                 competitionId: params.competitionId,
                 competitionName: competition?.name || '',
                 eventId: params.eventId,
-                roundNumber: competition?.currentRound || 1,
+                roundNumber: videoRound,
                 videoUrl: videoUrl.trim(),
                 videoSubmitted: true,
                 videoSubmittedAt: new Date().toISOString(),
@@ -905,14 +1004,16 @@ function TimerPage() {
     };
 
     // Helper to get scramble for a specific attempt (supports tournament rounds)
-    const getScrambleForAttempt = (attemptNumber) => {
+    const getScrambleForAttempt = (attemptNumber, participantData) => {
         if (!competition || !params.eventId) return '';
 
-        const currentRound = competition.currentRound || 1;
+        const scrambleRound = competition?.mode === CompetitionMode.TOURNAMENT && participantData
+            ? participantData.currentRound
+            : competition.currentRound || 1;
         let scramblesData;
 
         if (competition.mode === CompetitionMode.TOURNAMENT) {
-            scramblesData = competition?.scrambles?.[params.eventId]?.[currentRound];
+            scramblesData = competition?.scrambles?.[params.eventId]?.[scrambleRound];
         } else {
             scramblesData = competition?.scrambles?.[params.eventId];
         }
@@ -971,9 +1072,9 @@ function TimerPage() {
                                     <div className="mt-3 flex items-center justify-center gap-2">
                                         <Badge className="bg-indigo-600 text-white">
                                             <Layers className="h-3 w-3 mr-1" />
-                                            Tournament - Round {competition.currentRound || 1}
+                                            Tournament - Round {tournamentParticipant?.currentRound || competition.currentRound || 1}
                                         </Badge>
-                                        {competition.rounds?.find(r => r.roundNumber === (competition.currentRound || 1))?.isFinal && (
+                                        {competition.rounds?.find(r => r.roundNumber === (tournamentParticipant?.currentRound || competition.currentRound || 1))?.isFinal && (
                                             <Badge className="bg-yellow-600 text-white">Final Round</Badge>
                                         )}
                                     </div>
@@ -1420,7 +1521,7 @@ function TimerPage() {
                                     currentEvent={params.eventId}
                                     onSelect={handleEventSelect}
                                     competitionMode={competition?.mode}
-                                    currentRound={competition?.currentRound}
+                                    currentRound={tournamentParticipant?.currentRound || competition?.currentRound}
                                 />
                             ) : (
                                 <>

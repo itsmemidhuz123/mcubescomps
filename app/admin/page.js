@@ -194,8 +194,12 @@ export default function AdminPanel() {
             // Fetch Banned Users
             try {
                 const bansRes = await fetch('/api/admin/ban?active=true');
-                const bansData = await bansRes.json();
-                if (bansData.bans) setBannedUsers(bansData.bans);
+                if (!bansRes.ok) {
+                    console.error('Failed to fetch bans: HTTP', bansRes.status, bansRes.statusText);
+                } else {
+                    const bansData = await bansRes.json();
+                    if (bansData.bans) setBannedUsers(bansData.bans);
+                }
             } catch (e) {
                 console.error('Failed to fetch bans:', e);
             }
@@ -1443,13 +1447,15 @@ export default function AdminPanel() {
 
                                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                             <div className="space-y-2">
-                                                                <Label className="text-xs text-gray-500">Scheduled Date (Optional)</Label>
+                                                                <Label className="text-xs text-gray-500">Scheduled Date (Optional) <span className="text-xs text-gray-400">(IST, GMT+5:30)</span></Label>
                                                                 <Input
                                                                     type="datetime-local"
-                                                                    value={round.scheduledDate ? new Date(round.scheduledDate).toISOString().slice(0, 16) : ''}
+                                                                    value={round.scheduledDate ? new Date(new Date(round.scheduledDate).getTime() + (5.5 * 60 * 60 * 1000)).toISOString().slice(0, 16) : ''}
                                                                     onChange={(e) => {
                                                                         const newRounds = [...formData.rounds];
-                                                                        newRounds[index].scheduledDate = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                                        newRounds[index].scheduledDate = e.target.value 
+                                                                            ? new Date(new Date(e.target.value).getTime() - (5.5 * 60 * 60 * 1000)).toISOString()
+                                                                            : null;
                                                                         setFormData({ ...formData, rounds: newRounds });
                                                                     }}
                                                                 />
