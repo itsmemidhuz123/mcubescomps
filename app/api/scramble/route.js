@@ -68,13 +68,33 @@ export async function GET(request) {
   }
 }
 
+export async function OPTIONS(request) {
+  const origin = request.headers.get('origin');
+  
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': origin || 'https://mcubesarena.com',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+
 export async function POST(request) {
   const origin = request.headers.get('origin');
   
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': origin || 'https://mcubesarena.com',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
+  };
+
   if (origin && !ALLOWED_ORIGINS.includes(origin)) {
     return NextResponse.json(
       { error: 'Origin not allowed' },
-      { status: 403 }
+      { status: 403, headers: corsHeaders }
     );
   }
 
@@ -85,7 +105,7 @@ export async function POST(request) {
     if (!ALLOWED_EVENTS[event]) {
       return NextResponse.json(
         { error: 'Invalid event type. Allowed: ' + Object.keys(ALLOWED_EVENTS).join(', ') },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -103,12 +123,12 @@ export async function POST(request) {
       event,
       count: scrambles.length,
       scrambles,
-    });
+    }, { headers: corsHeaders });
   } catch (error) {
     console.error('Scramble generation error:', error);
     return NextResponse.json(
       { error: 'Scramble generation failed' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
